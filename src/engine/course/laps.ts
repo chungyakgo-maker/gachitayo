@@ -4,7 +4,7 @@ import { config } from '../config';
 import type { CourseGeometry } from './geometry';
 import { GateDetector, type GateCrossing } from './gates';
 import { STracker } from './sTracker';
-import { lapProgress } from '../live/liveEngine';
+import { LapProgress } from '../live/liveEngine';
 
 export interface FrameTrack {
   n: number;
@@ -60,17 +60,18 @@ export function splitLaps(input: {
   const crossings: GateCrossing[] = [];
 
   let lastStart: number | null = null;
-  const L = geom.centerline?.length ?? null;
+  const progress = new LapProgress(geom.centerline?.length ?? null);
   for (let k = 0; k < n; k++) {
     for (const c of det.push(track.t[k]!, track.x[k]!, track.y[k]!)) {
       crossings.push(c);
       if (c.gate === 'start') {
         st.resetAtStart();
+        progress.reset();
         lastStart = c.t;
       }
     }
     const r = st.update(track.x[k]!, track.y[k]!, track.v[k]!, track.t[k]!);
-    const s = lapProgress(r.s, L, lastStart === null ? null : track.t[k]! - lastStart);
+    const s = progress.map(r.s, lastStart === null ? null : track.t[k]! - lastStart);
     frameS[k] = s ?? Number.NaN;
     offCourse[k] = r.onCourse ? 0 : 1;
   }

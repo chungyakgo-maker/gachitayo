@@ -15,22 +15,25 @@ export function courseFromTrack(
     gateAtS?: number;
     /** 편도의 도착선을 끝점보다 이만큼 앞에 둔다 (실제 주행은 도착선을 지나서 멈춘다) */
     finishInsetM?: number;
+    /** 편도의 출발선을 시작점보다 이만큼 뒤에 둔다 (정차 위치가 출발선 위면 출발 순간이 애매) */
+    startInsetM?: number;
   } = {},
 ): Course {
   const pts: Array<[number, number]> = [];
-  const L = track.closed ? track.length : track.length - (opts.finishInsetM ?? 5);
+  const a0 = track.closed ? 0 : (opts.startInsetM ?? 0);
+  const L = track.closed ? track.length : track.length - (opts.finishInsetM ?? 5) - a0;
   const n = Math.round(L);
   const s0 = track.closed ? (opts.gateAtS ?? 0) : 0;
   for (let i = 0; i <= n; i++) {
     const p = track.closed
       ? track.pointAt((s0 + (i / n) * track.length) % track.length)
-      : track.pointAt((i / n) * L);
+      : track.pointAt(a0 + (i / n) * L);
     const ll = fromLocal(ORIGIN, p.x, p.y);
     pts.push([ll.lat, ll.lon]);
   }
   if (track.closed) pts[n] = pts[0]!;
-  const s = track.pointAt(s0);
-  const e = track.pointAt(L);
+  const s = track.pointAt(track.closed ? s0 : a0);
+  const e = track.pointAt(a0 + L);
   const start = gateFromPoint(s.x, s.y, s.psi, ORIGIN, opts.widthM ?? 30);
   return {
     id: opts.id ?? 'c1',
