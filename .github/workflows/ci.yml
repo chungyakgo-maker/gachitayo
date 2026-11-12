@@ -183,3 +183,13 @@ jobs:
           other=$(check -H 'Origin: https://example.com' "$API_URL/api/me")
           echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 다른 주소: $other (403)"
           [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
+          # 선 지도 (사양서 8.9): 지도 데이터가 올라가 있으면 정보·서울 타일·글자 조각을 확인한다
+          info=$(check -H "Origin: $origin" "$API_URL/map/info")
+          if [ "$info" = 200 ]; then
+            tile=$(curl -s -o tile.mvt -w '%{http_code}' --max-time 20 -H "Origin: $origin" "$API_URL/map/tiles/14/13970/6344.mvt")
+            font=$(check -H "Origin: $origin" "$API_URL/map/fonts/Noto%20Sans%20Medium/0-255.pbf")
+            echo "선 지도: 정보 $info · 서울 타일 $tile ($(stat -c %s tile.mvt 2>/dev/null || echo 0) 바이트) · 글자 조각 $font"
+            [ "$tile" = 200 ] && [ "$font" = 200 ] || { echo "::error::선 지도 응답이 이상합니다"; exit 1; }
+          else
+            echo "::notice::선 지도 데이터가 아직 없습니다 ($info). 지도 데이터 작업(map-data.yml)이 끝나면 앱이 선 지도를 씁니다."
+          fi
