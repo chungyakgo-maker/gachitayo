@@ -78,6 +78,45 @@ describe('주행 중 계산 묶음 (사양서 5.3)', () => {
   });
 });
 
+describe('고스트 위치 (사양서 7.11, 10.1)', () => {
+  it('고스트는 비교 랩이 같은 랩 경과 시간에 실제로 있던 곳에 있다 (가상 데이터 정답과 비교)', async () => {
+    const { truthAt } = await import('../../generators');
+    const { fromLocal, toLocal } = await import('../../../src/engine/geo');
+    // 비교 랩이 될 첫 주행: 정답(truth1)을 안다. 가상 GPS 지연이 0이라 세션 시계 ms = 정답 시각 × 1000
+    const truth1 = simulateDrive(oval, base);
+    const s1 = synthesizeSensors(truth1, { ...defaultSensorOpts, seed: 91 });
+    const r1 = processDrive({ gps: s1.gps, motion: s1.motion, events: [{ t: 0, type: 'start' }], course: null });
+    const course = r1.course!;
+    const ref = r1.bestLap!;
+    const k = 0.97;
+    const truth2 = simulateDrive(oval, scaled(k));
+    const s2 = synthesizeSensors(truth2, { ...defaultSensorOpts, seed: 94 });
+    const p = new LivePipeline({ course, ref: { trace: ref.trace, lapTimeMs: ref.lapTimeMs, sectorTimesMs: ref.sectorTimesMs } });
+    const snaps = replay(p, s2.gps, s2.motion, truth2.t.at(-1)! * 1000);
+    const posErr: number[] = [];
+    const sErr: number[] = [];
+    for (const x of snaps) {
+      const st = x.state;
+      if (!x.ghost || !st || st.lapElapsedMs === null || st.lapNo === 0 || st.lapElapsedMs >= ref.lapTimeMs) continue;
+      const tr = truthAt(truth1, (ref.startT + st.lapElapsedMs) / 1000);
+      const ll = fromLocal(s1.origin, tr.x, tr.y);
+      const want = toLocal(course.origin, ll.lat, ll.lon);
+      posErr.push(Math.hypot(x.ghost.x - want.x, x.ghost.y - want.y));
+      // 코스 거리: 정답 위치에서 랩 시작 위치까지 정답 거리 차이 (오벌 한 바퀴 안)
+      const tr0 = truthAt(truth1, ref.startT / 1000);
+      let ds = tr.s - tr0.s;
+      if (ds < 0) ds += oval.length;
+      sErr.push(x.ghost.s - ds);
+    }
+    const rms = (a: number[]) => Math.sqrt(a.reduce((m, e) => m + e * e, 0) / a.length);
+    expect(posErr.length).toBeGreaterThan(500);
+    // 측정값(2026-11-12): 위치 RMS 2.5 m·최대 4.5 m, 코스 거리 RMS 1.7 m
+    expect(rms(posErr)).toBeLessThan(4);
+    expect(Math.max(...posErr)).toBeLessThan(8);
+    expect(rms(sErr)).toBeLessThan(3);
+  });
+});
+
 describe('GPS가 속도·진행 방향 값을 주지 않는 기기 (일부 안드로이드, PC 브라우저)', () => {
   for (const [name, useMotion] of [
     ['모션 없음', false],
