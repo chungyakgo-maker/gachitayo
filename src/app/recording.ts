@@ -22,7 +22,8 @@ import { createSessionRepo, type SessionRepo } from '../storage/sessionRepo';
 import type { DeviceInfo, SessionRecord } from '../types/session';
 import { LiveStatsTracker, type LiveStatsSnapshot } from '../ui/recording/liveStats';
 
-export type RecordingPhase = 'idle' | 'starting' | 'recording' | 'stopping';
+/** stopFailed: 마지막 저장이 실패해 아직 끝내지 못함 (다시 저장을 누를 수 있음) */
+export type RecordingPhase = 'idle' | 'starting' | 'recording' | 'stopping' | 'stopFailed';
 
 export interface RecordingState {
   /** 앱 시작 점검(중단된 기록 찾기 등)이 끝났는지 */
@@ -114,6 +115,32 @@ async function requestPersist(): Promise<boolean | null> {
   }
 }
 
+// ── 다른 창과의 충돌 방지 (Web Locks) ─────────────────────
+// 안드로이드에서는 크롬 탭과 설치한 앱이 같은 저장소를 쓴다. 한 창이 기록 중인 세션을
+// 다른 창이 '중단됨'으로 보고 이어서 쓰지 않도록, 기록하는 동안 세션 이름으로 잠금을 잡는다.
+
+const lockName = (sessionId: string) => `gachitayo-rec:${sessionId}`;
+
+function holdSessionLock(sessionId: string): () => void {
+  if (!navigator.locks?.request) return () => {};
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  void navigator.locks.request(lockName(sessionId), () => held).catch(() => undefined);
+  return release;
+}
+
+async function isLiveElsewhere(sessionId: string): Promise<boolean> {
+  if (!navigator.locks?.query) return false;
+  try {
+    const snapshot = await navigator.locks.query();
+    return (snapshot.held ?? []).some((l) => l.name === lockName(sessionId));
+  } catch {
+    return false;
+  }
+}
+
 async function refreshSessions(): Promise<void> {
   set({ sessions: await getRepo().list() });
 }
@@ -127,7 +154,7 @@ export function initRecording(): Promise<void> {
   initPromise ??= (async () => {
     try {
       const r = getRepo();
-      const interrupted = await recoverInterrupted(r);
+      const interrupted = await recoverInterrupted(r, isLiveElsewhere);
       const [locationPermission, device, sessions, persisted] = await Promise.all([
         queryLocationPermission(),
         getDeviceInfo(),
@@ -174,18 +201,21 @@ function recorderDeps(): RecorderDeps {
 
 function begin(recorder: Recorder, motionPermission: MotionPermission): void {
   const stats = new LiveStatsTracker();
+  const releaseLock = holdSessionLock(recorder.sessionId);
 
-  const stopGps = startGps(
-    recorder.clock,
-    (s) => {
-      recorder.addGps(s);
-      stats.addGps(s);
-      if (state.locationPermission !== 'granted' || state.gpsError) {
-        set({ locationPermission: 'granted', gpsError: null });
-      }
-    },
-    (e) => set({ gpsError: e, ...(e === 'denied' ? { locationPermission: 'denied' as const } : {}) }),
-  );
+  const runGps = () =>
+    startGps(
+      recorder.clock,
+      (s) => {
+        recorder.addGps(s);
+        stats.addGps(s);
+        if (state.locationPermission !== 'granted' || state.gpsError) {
+          set({ locationPermission: 'granted', gpsError: null });
+        }
+      },
+      (e) => set({ gpsError: e, ...(e === 'denied' ? { locationPermission: 'denied' as const } : {}) }),
+    );
+  let stopGps = runGps();
 
   const motionAllowed = motionPermission === 'granted' || motionPermission === 'not-needed';
   const stopMotion = motionAllowed
@@ -195,12 +225,19 @@ function begin(recorder: Recorder, motionPermission: MotionPermission): void {
       })
     : () => {};
 
-  void getWakeLock().acquire();
-
   // 화면이 가려지면(앱 전환, 화면 꺼짐, 전화) 바로 저장한다. 강제 종료돼도 잃는 데이터가 적다.
   const onVisibility = () => {
-    if (document.visibilityState === 'hidden') void recorder.pause();
-    else recorder.unpause();
+    if (document.visibilityState === 'hidden') {
+      void recorder.pause();
+      return;
+    }
+    recorder.unpause();
+    // 백그라운드에 다녀온 뒤 위치 수신이 멈춰 있으면 다시 시작한다
+    const since = stats.snapshot(recorder.clock.now()).secondsSinceGps;
+    if (since === null || since > GPS_STALE_S) {
+      stopGps();
+      stopGps = runGps();
+    }
   };
   const onPageHide = () => void recorder.flush();
   document.addEventListener('visibilitychange', onVisibility);
@@ -211,6 +248,7 @@ function begin(recorder: Recorder, motionPermission: MotionPermission): void {
     recorder,
     stats,
     teardown: () => {
+      releaseLock();
       stopGps();
       stopMotion();
       clearInterval(ticker);
@@ -218,22 +256,21 @@ function begin(recorder: Recorder, motionPermission: MotionPermission): void {
       window.removeEventListener('pagehide', onPageHide);
     },
   };
-  set({
-    phase: 'recording',
-    sessionId: recorder.sessionId,
-    motionPermission,
-    elapsedMs: 0,
-    chunksSaved: 0,
-    saveError: null,
-    stats: stats.snapshot(0),
-  });
+  set({ phase: 'recording', sessionId: recorder.sessionId, motionPermission, gpsError: null });
+  emitActive();
   void refreshSessions();
 }
+
+/** 화면 복귀 때 마지막 위치 수신이 이보다 오래됐으면 위치 수신을 다시 시작한다 (초) */
+const GPS_STALE_S = 5;
 
 /** "기록 시작" 버튼에서 부른다. 아이폰 모션 권한 요청이 탭 처리 안에서 바로 일어나야 한다. */
 export function startRecording(): void {
   if (state.phase !== 'idle') return;
-  const motionPromise = requestMotionPermission(); // await 전에 호출
+  // 아이폰은 탭 처리 안에서 바로 요청해야 허용 창·화면 꺼짐 방지가 동작한다 (await 전에 호출)
+  const motionPromise = requestMotionPermission();
+  const wakeLockManager = getWakeLock();
+  void wakeLockManager.acquire();
   set({ phase: 'starting', error: null, gpsError: null });
   void (async () => {
     try {
@@ -248,6 +285,7 @@ export function startRecording(): void {
       });
       begin(recorder, motionPermission);
     } catch (e) {
+      void wakeLockManager.release();
       set({ phase: 'idle', error: `기록을 시작할 수 없습니다: ${message(e)}` });
     }
   })();
@@ -257,6 +295,8 @@ export function startRecording(): void {
 export function resumeInterrupted(sessionId: string): void {
   if (state.phase !== 'idle') return;
   const motionPromise = requestMotionPermission(); // await 전에 호출
+  const wakeLockManager = getWakeLock();
+  void wakeLockManager.acquire();
   set({
     phase: 'starting',
     error: null,
@@ -269,6 +309,7 @@ export function resumeInterrupted(sessionId: string): void {
       const recorder = await Recorder.resume(recorderDeps(), sessionId);
       begin(recorder, motionPermission);
     } catch (e) {
+      void wakeLockManager.release();
       set({ phase: 'idle', error: `이어서 기록할 수 없습니다: ${message(e)}` });
     }
   })();
@@ -285,24 +326,32 @@ export async function finishInterruptedSession(sessionId: string): Promise<void>
   await refreshSessions();
 }
 
-/** "기록 종료" 버튼 */
+/**
+ * "기록 종료" 버튼. 마지막 저장이 실패하면 기록을 끝내지 않고 stopFailed로 남는다.
+ * 저장하지 못한 샘플은 메모리에 남아 있으므로, 공간을 확보한 뒤 다시 누르면 저장된다.
+ */
 export async function stopRecording(): Promise<void> {
-  if (!active || state.phase !== 'recording') return;
+  if (!active || (state.phase !== 'recording' && state.phase !== 'stopFailed')) return;
   const a = active;
-  active = null;
-  set({ phase: 'stopping' });
-  a.teardown();
+  if (state.phase === 'recording') a.teardown();
+  set({ phase: 'stopping', error: null });
   try {
     await a.recorder.stop();
   } catch (e) {
-    set({ error: `기록을 끝내는 중 오류: ${message(e)}` });
+    set({
+      phase: 'stopFailed',
+      saveError: a.recorder.stats.lastError,
+      error: `${message(e)}. 저장하지 못한 기록은 아직 앱에 남아 있습니다. 폰 저장 공간을 확보한 뒤 "다시 저장"을 눌러 주세요. 앱을 닫으면 사라집니다.`,
+    });
+    return;
   }
+  active = null;
   await getWakeLock().release();
   set({
     phase: 'idle',
     sessionId: null,
     chunksSaved: a.recorder.stats.chunksSaved,
-    saveError: a.recorder.stats.lastError,
+    saveError: null,
   });
   await refreshSessions();
 }

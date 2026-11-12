@@ -66,7 +66,8 @@ export function createWakeLockManager(
   }
 
   visibility.onChange(() => {
-    if (wanted && visibility.isVisible() && state !== 'active') void request();
+    // 해제 알림이 늦게 올 수 있으므로 상태 대신 잠금 자체가 살아 있는지 본다
+    if (wanted && visibility.isVisible() && (!sentinel || sentinel.released)) void request();
   });
 
   return {

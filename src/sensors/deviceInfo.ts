@@ -51,7 +51,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
     ...parseUserAgent(userAgent),
     userAgent,
     standalone:
-      window.matchMedia('(display-mode: standalone)').matches ||
+      window.matchMedia?.('(display-mode: standalone)').matches === true ||
       (navigator as Navigator & { standalone?: boolean }).standalone === true,
   };
   // 안드로이드 크롬은 UA의 OS 버전을 10으로 고정해서 보낸다. 실제 버전과 모델은 Client Hints로 얻는다.

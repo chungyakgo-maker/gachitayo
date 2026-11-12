@@ -1,3 +1,4 @@
+import { useRecording } from '../../app/recording';
 import { buildInfo } from '../buildInfo';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { formatKst } from '../format';
@@ -6,9 +7,11 @@ import { usePwaUpdate } from '../pwa/usePwaUpdate';
 export function HomeScreen() {
   // 새 버전 안내는 홈 화면에서만 보여준다 (주행 화면에서는 적용하지 않음).
   const { needRefresh, update } = usePwaUpdate();
+  // 기록 중에는 숨긴다: 업데이트하면 앱이 새로고침되어 기록이 끊긴다
+  const { phase } = useRecording();
   return (
     <main className="home">
-      <UpdateBanner visible={needRefresh} onUpdate={update} />
+      <UpdateBanner visible={needRefresh && phase === 'idle'} onUpdate={update} />
       <h1 className="home-title">같이타요</h1>
       <p className="home-sub">주행 기록기 · 1단계 개발 중</p>
       <a className="dev-link" href="#/dev/recorder">

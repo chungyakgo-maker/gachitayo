@@ -57,7 +57,9 @@ function locationHelp(): string {
 }
 
 function motionHelp(): string {
-  return '모션 권한이 없어 GPS만 기록합니다(G값 없음). 앱을 완전히 닫았다가 다시 열고 "기록 시작"을 누르면 다시 물어봅니다.';
+  return isIos()
+    ? '모션 권한이 없어 GPS만 기록합니다(G값 없음). 앱을 완전히 닫았다가 다시 열고 "기록 시작"을 누르면 다시 물어봅니다.'
+    : '모션 권한이 없어 GPS만 기록합니다(G값 없음). 크롬 메뉴 → 설정 → 사이트 설정 → 모션 센서에서 이 사이트를 "허용"으로 바꾼 뒤 다시 시작해 주세요.';
 }
 
 function wakeHelp(): string {
@@ -88,6 +90,12 @@ function StatusCard({ s }: { s: RecordingState }) {
       {s.motionPermission === 'denied' && <p className="help">{motionHelp()}</p>}
       <Row label="화면 꺼짐 방지" value={WAKE_LABEL[s.wakeLock]} />
       {(s.wakeLock === 'failed' || s.wakeLock === 'unsupported') && <p className="help">{wakeHelp()}</p>}
+      {s.wakeLock === 'active' && isIos() && (
+        <p className="muted">
+          아이폰은 iOS 버전에 따라 "켜짐"이어도 화면이 꺼질 수 있습니다. 기록 중에 화면이 꺼지면 설정 →
+          디스플레이 및 밝기 → 자동 잠금을 "안 함"으로 바꿔 주세요.
+        </p>
+      )}
       <Row label="저장소 영구 보관" value={yesNo(s.persisted, '허용됨', '허용 안 됨')} />
       <Row
         label="기기"
@@ -125,6 +133,13 @@ function LiveCard({ s }: { s: RecordingState }) {
       />
       <Row label="GPS 방향" value={yesNo(st.headingAvailable, '값 있음', '값 없음')} />
       <Row label="모션" value={`${st.motionHz.toFixed(0)} Hz · ${st.motionCount}개`} />
+      {st.motionCount === 0 &&
+        s.elapsedMs > 3000 &&
+        (s.motionPermission === 'granted' || s.motionPermission === 'not-needed') && (
+          <p className="help warn">
+            모션 값이 오지 않습니다. 이 기기나 브라우저가 모션 센서를 지원하지 않을 수 있습니다.
+          </p>
+        )}
       <Row label="회전 속도" value={yesNo(st.rotationAvailable, '값 있음', '값 없음 (자이로 없음)')} />
       <Row label="저장" value={`${s.chunksSaved}개 덩어리`} />
       {s.saveError && <p className="help warn">저장 오류: {s.saveError}</p>}
@@ -197,6 +212,7 @@ function SessionList({ sessions, activeId }: { sessions: SessionRecord[]; active
 export function RecorderTestScreen() {
   const s = useRecording();
   const recording = s.phase === 'recording';
+  const active = recording || s.phase === 'stopping' || s.phase === 'stopFailed';
   return (
     <main className="screen">
       <header className="screen-header">
@@ -210,14 +226,14 @@ export function RecorderTestScreen() {
       </p>
       {s.error && <p className="help warn">{s.error}</p>}
 
-      {recording || s.phase === 'stopping' ? (
+      {active ? (
         <button
           type="button"
           className="big-btn big-btn-stop"
           disabled={s.phase === 'stopping'}
           onClick={() => void stopRecording()}
         >
-          {s.phase === 'stopping' ? '저장 중…' : '기록 종료'}
+          {s.phase === 'stopping' ? '저장 중…' : s.phase === 'stopFailed' ? '다시 저장' : '기록 종료'}
         </button>
       ) : (
         <button
@@ -230,7 +246,7 @@ export function RecorderTestScreen() {
         </button>
       )}
 
-      {recording && <LiveCard s={s} />}
+      {active && <LiveCard s={s} />}
       <StatusCard s={s} />
 
       <section className="card">

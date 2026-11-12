@@ -2,7 +2,7 @@
 // 화면이 가려지면 바로 저장해서, 앱이 강제 종료돼도 잃는 데이터를 최소로 한다.
 import type { SessionClock } from '../normalize/sessionClock';
 import type { GpsSample, RawMotionSample, SessionEvent, SessionEventType } from '../types/samples';
-import type { DeviceInfo } from '../types/session';
+import type { ChunkRecord, DeviceInfo, SessionRecord } from '../types/session';
 import type { SessionRepo } from './sessionRepo';
 
 /** 덩어리 저장 주기 (사양서 6.4) */
@@ -12,6 +12,8 @@ export interface RecorderDeps {
   repo: SessionRepo;
   /** 세션 시작 시각(epoch ms)으로 세션 시계를 만든다 */
   makeClock: (startedAtEpochMs: number) => SessionClock;
+  /** 벽시계 epoch ms (기본: Date.now). 시작·멈춤·이어서·종료 이벤트에 함께 남긴다 */
+  epochNow?: () => number;
   /** ms마다 fn을 부르고, 멈추는 함수를 돌려준다 (기본: setInterval) */
   every?: (ms: number, fn: () => void) => () => void;
   /** 저장 상태가 바뀌면 부른다 (화면 갱신용) */
@@ -31,6 +33,17 @@ interface Buffer {
 
 const emptyBuffer = (): Buffer => ({ gps: [], rawMotion: [], events: [] });
 
+/** 덩어리들에서 가장 늦은 샘플·이벤트 시각 (세션 시계 ms) */
+function lastTime(chunks: ChunkRecord[]): number {
+  let t = 0;
+  for (const c of chunks) {
+    for (const g of c.gps) t = Math.max(t, g.tRecv);
+    for (const m of c.rawMotion) t = Math.max(t, m.t);
+    for (const e of c.events) t = Math.max(t, e.t);
+  }
+  return t;
+}
+
 const defaultEvery = (ms: number, fn: () => void) => {
   const id = setInterval(fn, ms);
   return () => clearInterval(id);
@@ -41,6 +54,8 @@ export class Recorder {
   private buffer: Buffer = emptyBuffer();
   private chain: Promise<void> = Promise.resolve();
   private stopTimer: () => void;
+  /** stop()을 처음 부른 시점의 세션 시계 ms (다시 시도해도 바뀌지 않음) */
+  private stopAt: number | null = null;
 
   private constructor(
     private readonly deps: RecorderDeps,
@@ -69,7 +84,7 @@ export class Recorder {
       summary: null,
     });
     const rec = new Recorder(deps, init.id, init.startedAt, deps.makeClock(init.startedAt), 0);
-    rec.addEvent('start');
+    rec.markEvent('start');
     return rec;
   }
 
@@ -77,10 +92,15 @@ export class Recorder {
   static async resume(deps: RecorderDeps, sessionId: string): Promise<Recorder> {
     const session = await deps.repo.get(sessionId);
     if (!session) throw new Error(`세션 없음: ${sessionId}`);
-    const seq = await deps.repo.nextSeq(sessionId);
+    const chunks = await deps.repo.chunks(sessionId);
+    const seq = chunks.length > 0 ? chunks[chunks.length - 1]!.seq + 1 : 0;
+    // 벽시계가 뒤로 가 있어도(시간 동기화 등) 세션 시계가 마지막 샘플보다 작아지지 않게 한다 (사양서 6.1 단조 증가)
+    const base = deps.makeClock(session.startedAt);
+    const lag = Math.max(0, lastTime(chunks) - base.now());
+    const clock: SessionClock = lag > 0 ? { now: () => base.now() + lag } : base;
     await deps.repo.update(sessionId, { status: 'recording' });
-    const rec = new Recorder(deps, sessionId, session.startedAt, deps.makeClock(session.startedAt), seq);
-    rec.addEvent('resume', { afterInterruption: true });
+    const rec = new Recorder(deps, sessionId, session.startedAt, clock, seq);
+    rec.markEvent('resume', { afterInterruption: true });
     return rec;
   }
 
@@ -98,9 +118,15 @@ export class Recorder {
     this.buffer.events.push(e);
   }
 
+  /** 시작·멈춤·이어서·종료 이벤트: 나중에 실제 시각과 맞춰 볼 수 있게 벽시계 시각을 함께 남긴다. */
+  private markEvent(type: SessionEventType, payload: Record<string, unknown> = {}): void {
+    this.addEvent(type, { ...payload, epochMs: (this.deps.epochNow ?? Date.now)() });
+  }
+
   /** 버퍼를 덩어리 하나로 저장한다. 실패하면 버퍼를 되돌려 다음 저장 때 다시 시도한다. */
   flush(): Promise<void> {
-    this.chain = this.chain.then(() => this.saveBuffer());
+    // 어떤 오류가 나도 저장 사슬이 끊기지 않게 한다 (끊기면 이후 저장이 모두 건너뛰어진다)
+    this.chain = this.chain.then(() => this.saveBuffer()).catch(() => undefined);
     return this.chain;
   }
 
@@ -111,23 +137,32 @@ export class Recorder {
 
   /** 화면이 가려질 때: pause 이벤트를 남기고 바로 저장한다. */
   pause(): Promise<void> {
-    this.addEvent('pause');
+    this.markEvent('pause');
     return this.flush();
   }
 
   /** 화면이 다시 보일 때 */
   unpause(): void {
-    this.addEvent('resume');
+    this.markEvent('resume');
   }
 
-  /** 기록을 끝낸다. */
+  /**
+   * 기록을 끝낸다. 마지막 저장이 실패하면 오류를 내고 세션을 끝내지 않는다.
+   * 버퍼는 그대로 남아 있으므로, 공간을 확보한 뒤 다시 부르면 된다.
+   */
   async stop(): Promise<void> {
-    this.addEvent('stop');
-    this.stopTimer();
+    if (this.stopAt === null) {
+      this.stopAt = this.clock.now();
+      this.markEvent('stop');
+      this.stopTimer();
+    }
     await this.flush();
+    if (this.stats.lastError) {
+      throw new Error(`마지막 저장 실패: ${this.stats.lastError}`);
+    }
     await this.deps.repo.update(this.sessionId, {
       status: 'finished',
-      endedAt: this.startedAt + this.clock.now(),
+      endedAt: this.startedAt + this.stopAt,
     });
     this.deps.onChange?.();
   }
@@ -163,9 +198,17 @@ export class Recorder {
  * 앱 시작 때 부른다. 이 페이지에서는 아직 기록을 시작하지 않았으므로,
  * '기록 중'으로 남은 세션은 이전 실행이 중단된 것이다.
  */
-export async function recoverInterrupted(repo: SessionRepo) {
+export async function recoverInterrupted(
+  repo: SessionRepo,
+  /** 다른 창에서 지금 기록 중인 세션인지 (그런 세션은 건드리지 않는다) */
+  isLive: (sessionId: string) => Promise<boolean> = async () => false,
+) {
   const sessions = await repo.list();
-  const found = sessions.filter((s) => s.status === 'recording' || s.status === 'interrupted');
+  const candidates = sessions.filter((s) => s.status === 'recording' || s.status === 'interrupted');
+  const found: SessionRecord[] = [];
+  for (const s of candidates) {
+    if (!(await isLive(s.id))) found.push(s);
+  }
   for (const s of found) {
     if (s.status === 'recording') await repo.update(s.id, { status: 'interrupted' });
   }
@@ -177,12 +220,7 @@ export async function finishInterrupted(repo: SessionRepo, sessionId: string): P
   const session = await repo.get(sessionId);
   if (!session) return;
   const chunks = await repo.chunks(sessionId);
-  let lastT = 0;
-  for (const c of chunks) {
-    for (const g of c.gps) lastT = Math.max(lastT, g.tRecv);
-    for (const m of c.rawMotion) lastT = Math.max(lastT, m.t);
-    for (const e of c.events) lastT = Math.max(lastT, e.t);
-  }
+  const lastT = lastTime(chunks);
   await repo.putChunk({
     sessionId,
     seq: await repo.nextSeq(sessionId),

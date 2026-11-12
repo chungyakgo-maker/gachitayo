@@ -94,4 +94,22 @@ describe('createWakeLockManager', () => {
     expect(api.request).toHaveBeenCalledTimes(1);
     expect(m.getState()).toBe('off');
   });
+
+  it('해제 알림보다 "다시 보임"이 먼저 와도, 이미 풀린 잠금이면 다시 요청한다', async () => {
+    const sentinels: Array<ReturnType<typeof fakeSentinel>> = [];
+    const api: WakeLockApiLike = {
+      request: vi.fn(async () => {
+        const s = fakeSentinel();
+        sentinels.push(s);
+        return s;
+      }),
+    };
+    const vis = fakeVisibility();
+    const m = createWakeLockManager(api, vis);
+    await m.acquire();
+    sentinels[0]!.released = true; // 시스템이 풀었지만 release 알림은 아직
+    vis.set(true);
+    await flush();
+    expect(api.request).toHaveBeenCalledTimes(2);
+  });
 });
