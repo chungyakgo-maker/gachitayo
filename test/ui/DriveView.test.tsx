@@ -127,10 +127,12 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByRole('img', { name: /\(최대 3g\)$/ })).toBeInTheDocument();
   });
 
-  it('보정 전 추정 G: 대시보드 G 제목이 "G 추정", G미터에 최대값(기본 2g)', () => {
-    render(<DriveView {...props({ mode: 'dashboard', snap: snap(state({ gx: 0, gy: 0, gEstimated: true })) })} />);
-    expect(screen.getByText('G 추정')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /^G미터: .*\(최대 2g\)$/ })).toBeInTheDocument();
+  it('대시보드 G 칸: 글자 없이 G미터만 (사용자 요청), 임시 G는 속 빈 점, 최대값 기본 2g', () => {
+    const r = render(<DriveView {...props({ mode: 'dashboard', snap: snap(state({ gx: 0, gy: 0, gEstimated: true })) })} />);
+    const tile = r.container.querySelector('.dash-tile.g-tile')!;
+    expect(tile.textContent).toBe('2g');
+    expect(screen.getByRole('img', { name: /^G미터\(추정\): .*\(최대 2g\)$/ })).toBeInTheDocument();
+    expect(tile.querySelector('.g-dot.estimated')).not.toBeNull();
   });
 
   it('느리면 느림 색, 고른 값은 설정을 따른다', () => {

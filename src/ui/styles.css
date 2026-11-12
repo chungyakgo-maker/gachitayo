@@ -2029,3 +2029,16 @@ html.app-h .modal-backdrop {
   white-space: nowrap;
 }
 .map-compass:active .dial { transform: scale(0.94); }
+
+/* 대시보드 G 칸: 글자 없이 G미터가 칸을 꽉 채운다 (사용자 요청) */
+.dash-tile.g-tile {
+  padding: 6px;
+  align-items: center;
+  justify-content: center;
+}
+.dash-tile.g-tile .g-meter {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}

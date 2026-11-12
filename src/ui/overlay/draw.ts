@@ -122,7 +122,10 @@ export function drawValueTile(ctx: Ctx, w: number, h: number, v: ValueTile, th: 
   setSpacing(ctx, 0);
 }
 
-/** G미터: 원 안에서 움직이는 점. 바깥 원 1 g, 안쪽 원 0.5 g. 위가 제동, 왼쪽이 좌 (사양서 8.4) */
+/**
+ * G미터: 원 안에서 움직이는 점 (사양서 8.4). 바깥 원 = 최대값(설정), 위가 제동, 왼쪽이 좌.
+ * 글자 없이 원만 크게 (사용자 요청). 바깥 원 값만 작게. 보정 전 임시 G면 점을 속 빈 원으로.
+ */
 export function drawGMeter(
   ctx: Ctx,
   cx: number,
@@ -131,10 +134,11 @@ export function drawGMeter(
   gx: number | null,
   gy: number | null,
   th: OverlayTheme,
-  opts: { max?: number; trail?: ReadonlyArray<readonly [number, number]> } = {},
+  opts: { max?: number; trail?: ReadonlyArray<readonly [number, number]>; estimated?: boolean } = {},
 ): void {
-  const big = size >= 100;
-  const R = size * (big ? 52 / 124 : 28 / 64);
+  const dotR = Math.max(5, size * 0.055);
+  const R = size / 2 - dotR - 1.5;
+  if (R <= 4) return;
   const max = opts.max ?? G_MAX_DEFAULT;
   const rings = gRings(max);
   ctx.setLineDash([]);
@@ -155,24 +159,18 @@ export function drawGMeter(
   ctx.moveTo(cx - R, cy);
   ctx.lineTo(cx + R, cy);
   ctx.stroke();
-  // 바깥 원 값 (오른쪽 위)
+  // 바깥 원 값 (원 안 오른쪽 위, 작게)
   ctx.textBaseline = 'middle';
-  setFont(ctx, 400, big ? 9 : 8, th.mono);
-  text(ctx, `${max}g`, cx + R * 0.74, cy - R * 0.74 - (big ? 6 : 4), '#5E656D', 'left');
-  if (big) {
-    ctx.textBaseline = 'top';
-    setFont(ctx, 400, 9, th.sans);
-    text(ctx, '제동', cx, cy - size / 2 + 2, '#8A9199', 'center');
-    ctx.textBaseline = 'middle';
-    text(ctx, '좌', cx - size / 2 + 2, cy, '#8A9199');
-  }
+  setFont(ctx, 400, Math.max(8, Math.round(size * 0.07)), th.mono);
+  text(ctx, `${max}g`, cx + R * 0.6, cy - R * 0.78, '#5E656D', 'left');
   // 최근 궤적: 다듬은 곡선, 오래된 것부터 옅게
   const curves = gTrailCurves(opts.trail, max);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  const trailW = Math.max(2, size * 0.025);
   curves.forEach((c, i) => {
     ctx.strokeStyle = `rgba(170, 202, 230, ${trailAlpha(i, curves.length).toFixed(3)})`;
-    ctx.lineWidth = big ? 3 : 2;
+    ctx.lineWidth = trailW;
     ctx.beginPath();
     ctx.moveTo(cx + c.from[0] * R, cy + c.from[1] * R);
     ctx.bezierCurveTo(cx + c.c1[0] * R, cy + c.c1[1] * R, cx + c.c2[0] * R, cy + c.c2[1] * R, cx + c.to[0] * R, cy + c.to[1] * R);
@@ -180,36 +178,27 @@ export function drawGMeter(
   });
   if (gx !== null && gy !== null) {
     const [ux, uy] = gToUnit(gx, gy, max);
-    ctx.fillStyle = th.fg;
     ctx.beginPath();
-    ctx.arc(cx + ux * R, cy + uy * R, big ? 7 : 5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(cx + ux * R, cy + uy * R, opts.estimated ? dotR - 1 : dotR, 0, Math.PI * 2);
+    if (opts.estimated) {
+      ctx.strokeStyle = th.fg;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = th.fg;
+      ctx.fill();
+    }
   }
 }
 
-/** G 칸: 왼쪽 G미터(64), 오른쪽 "G / 좌 0.80 / 제동 0.00" */
+/** G 칸: 칸 안을 꽉 채운 G미터 (글자 없음, 사용자 요청) */
 export function drawGTile(ctx: Ctx, w: number, h: number, f: OverlayFrame, th: OverlayTheme, opts: { panel?: boolean } = {}): void {
   if (opts.panel) drawPanel(ctx, w, h, th, 'none', 16);
-  const size = 64;
-  drawGMeter(ctx, 12 + size / 2, h / 2, size, f.gx, f.gy, th, { max: f.gMax, trail: f.gTrail });
-  const l = gLabel(f.gx, f.gy);
-  const x0 = 12 + size + 10;
-  const lines = 15 + 2 + 18 + 2 + 18;
-  const top = (h - lines) / 2;
-  ctx.textBaseline = 'middle';
-  setFont(ctx, 400, 12, th.sans);
-  text(ctx, f.gEstimated ? 'G 추정' : 'G', x0, top + 7.5, th.fgDim);
-  const row = (y: number, word: string, val: string) => {
-    setFont(ctx, 400, 13, th.sans);
-    const x = text(ctx, `${word} `, x0, y, th.fg2);
-    setFont(ctx, 400, 13, th.mono);
-    text(ctx, val, x, y, th.fg);
-  };
-  row(top + 28, l.lat, l.latV);
-  row(top + 49, l.long, l.longV);
+  const size = Math.min(w, h) - 6;
+  drawGMeter(ctx, w / 2, h / 2, size, f.gx, f.gy, th, { max: f.gMax, trail: f.gTrail, estimated: f.gEstimated });
 }
 
-export const gMeterLabel = (f: Pick<OverlayFrame, 'gx' | 'gy'>) => {
+export const gMeterLabel = (f: Pick<OverlayFrame, 'gx' | 'gy' | 'gEstimated' | 'gMax'>) => {
   const l = gLabel(f.gx, f.gy);
-  return `G미터: ${l.lat} ${l.latV}g, ${l.long} ${l.longV}g`;
+  return `G미터${f.gEstimated ? '(추정)' : ''}: ${l.lat} ${l.latV}g, ${l.long} ${l.longV}g (최대 ${f.gMax ?? G_MAX_DEFAULT}g)`;
 };

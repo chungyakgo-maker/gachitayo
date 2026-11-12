@@ -126,18 +126,21 @@ describe('오버레이 그리기 (캔버스)', () => {
     expect(texts()[1]!.font).toMatch(/600 40px/);
   });
 
-  it('G 칸: G미터 점과 "좌 0.82 / 제동 0.31", 값이 없으면 점을 그리지 않는다', () => {
+  it('G 칸: 글자 없이 칸을 꽉 채운 G미터 (바깥 원 값만), 값이 없으면 점을 그리지 않는다, 임시 G는 속 빈 점', () => {
     const a = fakeCtx();
     drawGTile(a.ctx, 170, 100, frame(), th);
-    // 바깥 원 값(기본 2g)이 먼저
-    expect(a.texts().map((x) => x.text)).toEqual(['2g', 'G', '좌 ', '0.82', '제동 ', '0.31']);
-    const dots = a.calls.filter((c) => c.op === 'fill');
-    expect(dots.length).toBe(1);
-    expect(gMeterLabel(frame())).toBe('G미터: 좌 0.82g, 제동 0.31g');
+    expect(a.texts().map((x) => x.text)).toEqual(['2g']);
+    expect(a.calls.filter((c) => c.op === 'fill').length).toBe(1);
+    const outer = a.calls.filter((c) => c.op === 'arc')[1]!.args[2] as number;
+    expect(outer).toBeGreaterThan(38); // 높이 100 칸에서 지름 80 넘게
+    expect(gMeterLabel(frame())).toBe('G미터: 좌 0.82g, 제동 0.31g (최대 2g)');
+    expect(gMeterLabel(frame({ gEstimated: true }))).toBe('G미터(추정): 좌 0.82g, 제동 0.31g (최대 2g)');
     const b = fakeCtx();
     drawGTile(b.ctx, 170, 100, frame({ gx: null, gy: null }), th);
     expect(b.calls.filter((c) => c.op === 'fill').length).toBe(0);
-    expect(b.texts().map((x) => x.text)).toContain('—');
+    const e = fakeCtx();
+    drawGTile(e.ctx, 170, 100, frame({ gEstimated: true }), th);
+    expect(e.calls.filter((c) => c.op === 'fill').length).toBe(0);
   });
 
   it('G미터 최대값(사용자 요청): 눈금 원과 점 위치가 최대값을 따르고, 최근 궤적은 곡선으로 옅게→진하게', () => {
@@ -146,13 +149,15 @@ describe('오버레이 그리기 (캔버스)', () => {
       drawGTile(c.ctx, 170, 100, frame({ gx, gy: 0, gMax: max }), th);
       return c.calls.filter((x) => x.op === 'arc').map((x) => x.args[2] as number);
     };
-    // 64 px 미터, 반지름 28: 3g면 원 1·2·3g, 점(1.5g 가속)은 가운데에서 아래로 14 px
+    // 3g면 원 1·2·3g, 점(1.5g 가속)은 가운데에서 아래로 바깥 반지름의 절반
     const three = arcs(3, 1.5);
-    expect(three.slice(0, 3).map((r) => Math.round(r))).toEqual([9, 19, 28]);
+    const R = three[2]!;
+    expect(three[0]).toBeCloseTo(R / 3, 6);
+    expect(three[1]).toBeCloseTo((2 * R) / 3, 6);
     const c3 = fakeCtx();
     drawGTile(c3.ctx, 170, 100, frame({ gx: 1.5, gy: 0, gMax: 3 }), th);
     const dot = c3.calls.filter((x) => x.op === 'arc').at(-1)!;
-    expect((dot.args[1] as number) - 50).toBeCloseTo(14, 6);
+    expect((dot.args[1] as number) - 50).toBeCloseTo(R / 2, 6);
     expect(c3.texts()[0]!.text).toBe('3g');
     // 궤적
     const t = fakeCtx();

@@ -8,7 +8,6 @@ import { GapTracker } from '../../engine/live/gap';
 import { cycleDriveMode, endDrive, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
 import { updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
-import type { LiveState } from '../../engine/live/liveEngine';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
 import { GMeter } from '../components/GMeter';
@@ -20,7 +19,7 @@ import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { IconGps } from '../icons';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
-import { frameFromLive, gLabel, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
+import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
 import { drawMiniMap, followView, mapModel } from '../overlay/minimap';
 import { useSmoothAngle, useSpanM } from '../hooks/useSmoothView';
 import { overlayTheme, type OverlayTheme } from '../overlay/theme';
@@ -229,12 +228,9 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
                 km/h
               </span>
             </div>
-            <div className="dash-tile" style={{ alignItems: 'center', padding: '14px 16px' }}>
-              <span style={{ alignSelf: 'flex-start', fontSize: 13 }} className="dim">
-                {st?.gEstimated ? 'G 추정' : 'G'}
-              </span>
-              <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} size={124} max={settings.gMaxG} trail={frame.gTrail} />
-              <GText st={st} />
+            {/* G: 글자 없이 칸을 꽉 채운 G미터 (사용자 요청) */}
+            <div className="dash-tile g-tile">
+              <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} max={settings.gMaxG} trail={frame.gTrail} estimated={st?.gEstimated ?? false} />
             </div>
           </div>
           <div className="dash-laps full">
@@ -324,15 +320,6 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
         </div>
       </div>
     </div>
-  );
-}
-
-function GText({ st }: { st: LiveState | null }) {
-  const l = gLabel(st?.gx ?? null, st?.gy ?? null);
-  return (
-    <span style={{ fontSize: 12, color: 'var(--fg-2)', whiteSpace: 'nowrap' }}>
-      {l.lat} <span className="mono">{l.latV}</span> · {l.long} <span className="mono">{l.longV}</span>
-    </span>
   );
 }
 
