@@ -1,14 +1,8 @@
 // 기기 정보 (사양서 6.3): OS, 브라우저, user agent를 세션에 기록한다.
 
-export interface DeviceInfo {
-  os: string;
-  browser: string;
-  userAgent: string;
-  /** 홈 화면에 설치한 앱으로 열었는지 */
-  standalone: boolean;
-  /** 기기 모델 (안드로이드 크롬에서만 얻을 수 있음) */
-  model?: string;
-}
+import type { DeviceInfo } from '../types/session';
+
+export type { DeviceInfo };
 
 const UNKNOWN = '알 수 없음';
 
