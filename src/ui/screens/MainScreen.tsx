@@ -24,6 +24,11 @@ export function MainScreen() {
   const sync = useSync();
   const acc = useAccount();
   const busy = drive.phase !== 'idle' || rec.phase !== 'idle';
+  // 주행·기록 중이 아니면 새 버전을 바로 적용한다 (사용자 불편: 업데이트를 눌러야만 새 버전이 들어왔다).
+  // 주행 중에는 그대로 두고, 주행이 끝나 메인으로 돌아오면 적용한다
+  useEffect(() => {
+    if (needRefresh && !busy) update();
+  }, [needRefresh, busy, update]);
   const { fix, permission } = useLocationPreview(!busy);
   useEffect(() => {
     void loadCourses();

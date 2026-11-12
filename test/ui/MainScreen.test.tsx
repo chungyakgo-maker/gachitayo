@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 let phase = 'idle';
+const update = vi.fn();
 vi.mock('../../src/ui/pwa/usePwaUpdate', () => ({
-  usePwaUpdate: () => ({ needRefresh: true, update: () => {} }),
+  usePwaUpdate: () => ({ needRefresh: true, update }),
 }));
 vi.mock('../../src/app/recording', async (orig) => ({
   ...(await orig<typeof import('../../src/app/recording')>()),
@@ -42,5 +43,16 @@ describe('메인 화면 (사양서 8.2, 시안 Main)', () => {
     phase = 'recording';
     render(<MainScreen />);
     expect(screen.queryByText('새 버전이 있습니다')).not.toBeInTheDocument();
+  });
+
+  it('새 버전은 주행·기록 중이 아니면 저절로 적용하고, 기록 중에는 기다린다 (사용자 불편)', () => {
+    update.mockClear();
+    phase = 'recording';
+    const { unmount } = render(<MainScreen />);
+    expect(update).not.toHaveBeenCalled();
+    unmount();
+    phase = 'idle';
+    render(<MainScreen />);
+    expect(update).toHaveBeenCalled();
   });
 });
