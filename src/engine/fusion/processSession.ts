@@ -2,7 +2,7 @@
 // 재샘플링 → 거치 보정(세션 전체) → 축 부호 판별·수정 → EKF(기록) → RTS 스무더.
 import { config } from '../config';
 import type { LatLon } from '../geo';
-import { calibrateSession, platformSigns, type CalEvent, type CalSegment } from '../../normalize/mount';
+import { calibrateSession, platformSigns, toCar, type CalEvent, type CalSegment } from '../../normalize/mount';
 import { resampleMotion, type AxisSigns } from '../../normalize/resample';
 import type { GpsSample, RawMotionSample } from '../../types/samples';
 import { FusionRunner } from './forward';
@@ -24,6 +24,8 @@ export interface SessionProcessResult {
   speedQualityLow: boolean;
   /** 모션을 쓰지 못하고 GPS만으로 처리함 ("정확도 낮음") */
   gpsOnly: boolean;
+  /** track 프레임마다 차 기준 가속도 m/s² (보정·확인 전이거나 모션이 없으면 NaN) */
+  carMotion: { ax: Float64Array; ay: Float64Array };
 }
 
 export function processSession(input: {
@@ -68,9 +70,23 @@ export function processSession(input: {
     if (obs[i]!.t - obs[i - 1]!.t > config.fusion.noGateAfterGapS * 1000) gaps.push([obs[i - 1]!.t, obs[i]!.t]);
   }
 
+  const track = bridgeGpsOnlyGaps(rtsSmooth(history), gaps);
+  const ax = new Float64Array(track.n).fill(Number.NaN);
+  const ay = new Float64Array(track.n).fill(Number.NaN);
+  for (let k = 0; k < track.n; k++) {
+    const t = track.t0 + k * track.dt;
+    const i = Math.round((t - m50.t0) / m50.dt);
+    const cal = segs.find((sg) => t >= sg.tStart && t <= sg.tEnd)?.cal;
+    if (!cal || !cal.signsConfirmed || i < 0 || i >= m50.n || !m50.valid[i]) continue;
+    const c = toCar(cal, [m50.fx[i]!, m50.fy[i]!, m50.fz[i]!], [m50.wx[i]!, m50.wy[i]!, m50.wz[i]!]);
+    ax[k] = c.ax;
+    ay[k] = c.ay;
+  }
+
   return {
     origin,
-    track: bridgeGpsOnlyGaps(rtsSmooth(history), gaps),
+    carMotion: { ax, ay },
+    track,
     filtered: filteredTrack(history),
     calibration,
     axisSigns: { ...signs, confidence },
