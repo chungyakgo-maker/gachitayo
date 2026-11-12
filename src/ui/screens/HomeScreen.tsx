@@ -11,6 +11,9 @@ export function HomeScreen() {
       <UpdateBanner visible={needRefresh} onUpdate={update} />
       <h1 className="home-title">같이타요</h1>
       <p className="home-sub">주행 기록기 · 1단계 개발 중</p>
+      <a className="dev-link" href="#/dev/recorder">
+        개발자: 센서 기록 테스트
+      </a>
       <footer className="build-info">
         버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
       </footer>

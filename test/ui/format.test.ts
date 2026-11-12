@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatKst } from '../../src/ui/format';
+import { formatDuration, formatKst } from '../../src/ui/format';
 
 describe('formatKst', () => {
   it('UTC 시각을 KST(UTC+9)로 표시한다', () => {
@@ -8,5 +8,16 @@ describe('formatKst', () => {
 
   it('KST로 바꾸면서 날짜가 넘어가면 다음 날로 표시한다', () => {
     expect(formatKst(Date.UTC(2026, 11, 31, 15, 0))).toBe('2027-01-01 00:00');
+  });
+});
+
+describe('formatDuration', () => {
+  it('1시간 미만은 분:초', () => {
+    expect(formatDuration(0)).toBe('0:00');
+    expect(formatDuration(65_400)).toBe('1:05');
+  });
+
+  it('1시간 이상은 시:분:초', () => {
+    expect(formatDuration(3_725_000)).toBe('1:02:05');
   });
 });

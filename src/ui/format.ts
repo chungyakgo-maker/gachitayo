@@ -13,3 +13,12 @@ export function formatKst(epochMs: number): string {
     `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`
   );
 }
+
+/** 경과 시간 ms → "m:ss" 또는 "h:mm:ss" (초 미만 버림) */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${m}:${pad2(s)}`;
+}
