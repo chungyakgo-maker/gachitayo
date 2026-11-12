@@ -9,6 +9,8 @@ const ORIGIN = 'https://example.github.io';
 const get = (path: string, init: { method?: string; origin?: string | null } = {}) =>
   handle(new Request(`https://api.example.workers.dev${path}`, { method: init.method ?? 'GET', headers: init.origin === null ? {} : { Origin: init.origin ?? ORIGIN } }), env);
 const put = () => env.MAP.put(MAP_KEY, KOREA_SMALL_PMTILES);
+/** 압축된 채로 온 조각을 풀어 글자로 */
+const unzip = async (r: Response) => new TextDecoder().decode(await new Response(r.body!.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
 
 afterEach(async () => {
   await env.MAP.delete(MAP_KEY);
@@ -31,15 +33,16 @@ describe('선 지도 (Worker)', () => {
     expect(body.center).toEqual([127.8, 36.5, 7]);
   });
 
-  it('타일: 있으면 압축을 푼 내용, 없는 칸·범위 밖은 204, 이상한 주소는 400', async () => {
+  it('타일: 압축된 그대로(gzip) 보낸다, 없는 칸·범위 밖은 204, 이상한 주소는 400', async () => {
     await put();
     const a = await get('/map/tiles/0/0/0.mvt');
     expect(a.status).toBe(200);
     expect(a.headers.get('Content-Type')).toBe('application/x-protobuf');
-    expect(a.headers.get('Cache-Control')).toContain('max-age=86400');
-    expect(new TextDecoder().decode(await a.arrayBuffer())).toBe('tile-0-0-0');
+    expect(a.headers.get('Content-Encoding')).toBe('gzip');
+    expect(a.headers.get('Cache-Control')).toContain('max-age=2592000');
+    expect(await unzip(a)).toBe('tile-0-0-0');
     const b = await get('/map/tiles/14/13965/6355.mvt');
-    expect(new TextDecoder().decode(await b.arrayBuffer())).toBe('tile-14-13965-6355');
+    expect(await unzip(b)).toBe('tile-14-13965-6355');
     expect((await get('/map/tiles/14/13965/6356.mvt')).status).toBe(204);
     expect((await get('/map/tiles/15/0/0.mvt')).status).toBe(204);
     expect((await get('/map/tiles/3/9/0.mvt')).status).toBe(400);
@@ -51,7 +54,7 @@ describe('선 지도 (Worker)', () => {
     expect((await get('/map/tiles/0/0/0.mvt')).status).toBe(200);
     await env.MAP.delete(MAP_KEY);
     await put();
-    expect(new TextDecoder().decode(await (await get('/map/tiles/0/0/0.mvt')).arrayBuffer())).toBe('tile-0-0-0');
+    expect(await unzip(await get('/map/tiles/0/0/0.mvt'))).toBe('tile-0-0-0');
   });
 
   it('글자 조각: 있으면 그대로, 없으면 404, 범위가 이상하면 400', async () => {

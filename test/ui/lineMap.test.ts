@@ -74,7 +74,7 @@ describe('코스 모양 → 선 지도 데이터', () => {
 
 describe('선 지도를 쓸 수 있는지', () => {
   afterEach(() => {
-    resetLineMapProbe();
+    resetLineMapProbe(true);
     vi.unstubAllGlobals();
   });
 
@@ -95,6 +95,27 @@ describe('선 지도를 쓸 수 있는지', () => {
     });
     await lineMapConfig('https://api.example.workers.dev');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    getContext.mockRestore();
+  });
+
+  it('한 번 쓸 수 있었으면 다음에는 서버에 묻기 전에 바로 쓰고(통신이 없어도), 뒤에서 다시 확인해 없어졌으면 다음부터 사진 지도', async () => {
+    vi.stubGlobal('WebGLRenderingContext', function () {});
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({} as never);
+    const api = 'https://api.example.workers.dev';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ maxZoom: 14 }), { status: 200 })));
+    expect((await lineMapConfig(api))?.maxzoom).toBe(14);
+    resetLineMapProbe();
+    // 다음 실행: 서버가 늦거나 안 돼도 바로
+    let answer: (r: Response) => void = () => {};
+    const slow = vi.fn(() => new Promise<Response>((res) => (answer = res)));
+    vi.stubGlobal('fetch', slow);
+    expect((await lineMapConfig(api))?.maxzoom).toBe(14);
+    expect(slow).toHaveBeenCalledTimes(1); // 뒤에서 확인
+    answer(new Response('{}', { status: 404 }));
+    await new Promise((r) => setTimeout(r, 0));
+    resetLineMapProbe();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
+    expect(await lineMapConfig(api)).toBeNull();
     getContext.mockRestore();
   });
 

@@ -8,10 +8,11 @@ compatibility_date = "2026-10-01"
 binding = "SESSION_FILES"
 bucket_name = "gachitayo-sessions"
 
-# 선 지도 (한국 지도 파일 korea.pmtiles + 글자 조각). 사용자 기록과 섞지 않으려고 따로 둔다
+# 선 지도 (한국 지도 파일 korea.pmtiles + 글자 조각). 사용자 기록과 섞지 않으려고 따로 둔다.
+# 한국에서 빨리 읽히게 아시아 지역(apac)에 둔다 (예전 gachitayo-map은 미국에 생겨 느렸다)
 [[r2_buckets]]
 binding = "MAP"
-bucket_name = "gachitayo-map"
+bucket_name = "gachitayo-map-apac"
 
 [[d1_databases]]
 binding = "DB"

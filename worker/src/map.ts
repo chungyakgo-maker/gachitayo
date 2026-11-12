@@ -1,9 +1,9 @@
-// 선 지도 (사양서 8.9, 사용자 요청): R2 gachitayo-map 버킷의 한국 지도 파일(korea.pmtiles, Protomaps 기반 OSM 벡터 타일)에서
+// 선 지도 (사양서 8.9, 사용자 요청): R2 gachitayo-map-apac(아시아) 버킷의 한국 지도 파일(korea.pmtiles, Protomaps 기반 OSM 벡터 타일)에서
 // 앱이 필요한 조각만 꺼내 준다. 글꼴 조각(fonts/…)도 같은 버킷. 지도 데이터는 GitHub Actions(map-data.yml)가 올린다.
 //   GET /map/info                         지도 파일 정보 (확대 범위·영역). 없으면 404 → 앱은 예전 사진 지도로
 //   GET /map/tiles/{z}/{x}/{y}.mvt        벡터 타일 (없는 칸은 204)
 //   GET /map/fonts/{글꼴}/{시작}-{끝}.pbf  지도 글자 조각 (한글은 앱이 폰 글꼴로 그린다)
-import { EtagMismatch, PMTiles, ResolvedValueCache, type RangeResponse, type Source } from 'pmtiles';
+import { Compression, EtagMismatch, findTile, PMTiles, ResolvedValueCache, zxyToTileId, type RangeResponse, type Source } from 'pmtiles';
 import { HttpError, json } from './http';
 
 export const MAP_KEY = 'korea.pmtiles';
@@ -26,10 +26,35 @@ class R2Source implements Source {
 }
 
 // 같은 Worker 안에서 머리·목록을 다시 읽지 않게 (요청 사이에 남는다)
-const CACHE = new ResolvedValueCache(25, undefined);
+const CACHE = new ResolvedValueCache(64, undefined);
 
 function archive(env: Cloudflare.Env): PMTiles {
   return new PMTiles(new R2Source(env.MAP, MAP_KEY), CACHE);
+}
+
+/**
+ * 조각을 압축된 그대로 찾는다 (사용자 요청 "지도 로딩이 느리다": 풀어서 보내면 2~3배 무겁고 Worker도 일을 더 한다).
+ * 목록(디렉터리)만 풀어 읽고, 조각은 R2에서 꺼낸 바이트 그대로.
+ */
+async function rawTile(env: Cloudflare.Env, z: number, x: number, y: number): Promise<{ data: ArrayBuffer; gzip: boolean } | null> {
+  const source = new R2Source(env.MAP, MAP_KEY);
+  const h = await CACHE.getHeader(source);
+  if (z < h.minZoom || z > h.maxZoom) return null;
+  const id = zxyToTileId(z, x, y);
+  let offset = h.rootDirectoryOffset;
+  let length = h.rootDirectoryLength;
+  for (let depth = 0; depth <= 3; depth++) {
+    const dir = await CACHE.getDirectory(source, offset, length, h);
+    const e = findTile(dir, id);
+    if (!e) return null;
+    if (e.runLength > 0) {
+      const r = await source.getBytes(h.tileDataOffset + e.offset, e.length, undefined, h.etag);
+      return { data: r.data, gzip: h.tileCompression === Compression.Gzip };
+    }
+    offset = h.leafDirectoryOffset + e.offset;
+    length = e.length;
+  }
+  return null;
 }
 
 const TILE_RE = /^\/map\/tiles\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})\.mvt$/;
@@ -55,14 +80,14 @@ export async function handleMap(req: Request, env: Cloudflare.Env, path: string,
   if (tile) {
     const [z, x, y] = [Number(tile[1]), Number(tile[2]), Number(tile[3])];
     if (z > 22 || x >= 2 ** z || y >= 2 ** z) throw new HttpError(400, '잘못된 타일');
-    const p = archive(env);
-    const h = await p.getHeader();
-    headers.set('Cache-Control', 'public, max-age=86400');
-    if (z < h.minZoom || z > h.maxZoom) return new Response(null, { status: 204, headers });
-    const r = await p.getZxy(z, x, y);
+    // 폰이 30일 보관 (지도 데이터는 한 달에 한 번 바뀐다)
+    headers.set('Cache-Control', 'public, max-age=2592000');
+    const r = await rawTile(env, z, x, y);
     if (!r) return new Response(null, { status: 204, headers });
     headers.set('Content-Type', 'application/x-protobuf');
-    return new Response(head ? null : r.data, { status: 200, headers });
+    if (r.gzip) headers.set('Content-Encoding', 'gzip');
+    // 이미 압축된 바이트를 그대로 보낸다 (런타임이 다시 압축하지 않게)
+    return new Response(head ? null : r.data, { status: 200, headers, encodeBody: 'manual' });
   }
 
   // 글꼴 이름의 빈칸은 %20으로 온다. 풀어서 맞춰 본다 (/, . 같은 글자는 위 식이 받지 않는다)

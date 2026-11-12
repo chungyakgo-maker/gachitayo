@@ -39,6 +39,18 @@ export default defineConfig({
         // mjs: 선 지도(MapLibre)의 작업 파일
         globPatterns: ['**/*.{js,mjs,css,html,svg,png,webmanifest,woff2}'],
         cleanupOutdatedCaches: true,
+        // 선 지도 조각·글자 조각은 받은 것을 30일 폰에 보관해 다시 볼 때 바로, 통신이 없는 산길에서도 보이게 (사양서 8.9)
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/map/tiles/') || url.pathname.startsWith('/map/fonts/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'gachitayo-line-map',
+              expiration: { maxEntries: 3000, maxAgeSeconds: 30 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [0, 200, 204] },
+            },
+          },
+        ],
       },
     }),
   ],

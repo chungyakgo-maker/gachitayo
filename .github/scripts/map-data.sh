@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 선 지도 데이터 (사양서 8.9): Protomaps의 최신 전 세계 지도 파일(OpenStreetMap 기반)에서 한국 범위만 잘라
-# R2 버킷 gachitayo-map에 korea.pmtiles로 올린다. 지도 글자 조각(Noto Sans, 라틴·숫자·기호 범위)도 함께 올린다.
+# R2 버킷 gachitayo-map-apac(아시아 지역)에 korea.pmtiles로 올린다. 지도 글자 조각(Noto Sans, 라틴·숫자·기호 범위)도 함께 올린다.
 # 한글 지명은 앱이 폰 글꼴로 그리므로 한글 글자 조각은 올리지 않는다.
 # 같이타요 전용 버킷만 만들고 쓴다 (다른 앱의 Cloudflare 자원은 건드리지 않는다).
 set -euo pipefail
@@ -42,12 +42,15 @@ git clone --depth 1 --filter=blob:none --sparse https://github.com/protomaps/bas
 git -C assets sparse-checkout set "fonts/Noto Sans Regular" "fonts/Noto Sans Medium"
 
 cd worker
-if npx wrangler r2 bucket list | grep -q 'gachitayo-map'; then
-  echo "R2 버킷 gachitayo-map 있음"
+# 한국에서 빨리 읽히게 아시아 지역(apac)에 둔다 (예전 gachitayo-map은 미국에 생겨 느렸다)
+BUCKET=gachitayo-map-apac
+if npx wrangler r2 bucket list | grep -q "$BUCKET"; then
+  echo "R2 버킷 $BUCKET 있음"
 else
   # 배포 작업이 같은 때 만들 수도 있어, 만들기가 실패해도 이미 있으면 괜찮다
-  npx wrangler r2 bucket create gachitayo-map || npx wrangler r2 bucket list | grep -q 'gachitayo-map'
+  npx wrangler r2 bucket create "$BUCKET" --location apac || npx wrangler r2 bucket list | grep -q "$BUCKET"
 fi
+npx wrangler r2 bucket info "$BUCKET" || true
 
 uploaded=0
 for fs in "Noto Sans Regular" "Noto Sans Medium"; do
@@ -55,7 +58,7 @@ for fs in "Noto Sans Regular" "Noto Sans Medium"; do
   for r in 0-255 256-511 8192-8447 8448-8703 9472-9727 12288-12543 65280-65535; do
     f="../assets/fonts/$fs/$r.pbf"
     if [ -f "$f" ]; then
-      npx wrangler r2 object put "gachitayo-map/fonts/$fs/$r.pbf" --file "$f" --content-type application/x-protobuf --remote >/dev/null
+      npx wrangler r2 object put "$BUCKET/fonts/$fs/$r.pbf" --file "$f" --content-type application/x-protobuf --remote >/dev/null
       uploaded=$((uploaded + 1))
     fi
   done
@@ -66,6 +69,6 @@ echo "글자 조각 ${uploaded}개 올림"
 # 마지막에 지도 파일 (올리기가 끝나야 바뀐다. 앱은 바뀐 파일을 알아서 다시 읽는다)
 AWS_ACCESS_KEY_ID="$tid" AWS_SECRET_ACCESS_KEY="$secret" AWS_DEFAULT_REGION=auto \
   AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required \
-  aws s3 cp ../korea.pmtiles s3://gachitayo-map/korea.pmtiles \
+  aws s3 cp ../korea.pmtiles "s3://$BUCKET/korea.pmtiles" \
   --endpoint-url "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" --content-type application/octet-stream --only-show-errors
-echo "올림: gachitayo-map/korea.pmtiles ($((size / 1024 / 1024)) MB, 빌드 $BUILD)"
+echo "올림: $BUCKET/korea.pmtiles ($((size / 1024 / 1024)) MB, 빌드 $BUILD)"

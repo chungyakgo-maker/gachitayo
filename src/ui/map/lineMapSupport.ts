@@ -22,26 +22,79 @@ export function hasWebGL(): boolean {
 
 let probe: Promise<LineMapConfig | null> | null = null;
 
-/** 한 번만 서버에 묻는다. 통신이 안 돼서 실패하면 다음에 다시 묻는다 */
+/** 지도를 쓸 수 있었는지 기억 (사용자 요청 "지도 로딩이 느리다": 다음부터 서버에 묻기 전에 바로 띄운다) */
+const MEMORY_KEY = 'gachitayo.lineMap.v1';
+interface Memory {
+  apiUrl: string;
+  maxzoom: number;
+}
+function remembered(apiUrl: string): number | null {
+  try {
+    const m = JSON.parse(localStorage.getItem(MEMORY_KEY) ?? 'null') as Memory | null;
+    return m && m.apiUrl === apiUrl && typeof m.maxzoom === 'number' ? m.maxzoom : null;
+  } catch {
+    return null;
+  }
+}
+function remember(apiUrl: string, maxzoom: number | null): void {
+  try {
+    if (maxzoom === null) localStorage.removeItem(MEMORY_KEY);
+    else localStorage.setItem(MEMORY_KEY, JSON.stringify({ apiUrl, maxzoom } satisfies Memory));
+  } catch {
+    // 저장소를 못 쓰면 매번 묻는다
+  }
+}
+
+/** 서버에 지도 데이터가 있는지 묻는다. 있으면 확대 한도, 없으면(404) null, 통신 실패면 undefined */
+async function ask(apiUrl: string): Promise<number | null | undefined> {
+  try {
+    const r = await fetch(lineMapUrls(apiUrl).info);
+    if (!r.ok) return null;
+    const info = (await r.json()) as { maxZoom?: unknown };
+    return typeof info.maxZoom === 'number' && info.maxZoom >= 6 && info.maxZoom <= 16 ? info.maxZoom : 14;
+  } catch {
+    return undefined;
+  }
+}
+
+const config = (apiUrl: string, maxzoom: number): LineMapConfig => {
+  const urls = lineMapUrls(apiUrl);
+  return { tiles: urls.tiles, glyphs: urls.glyphs, maxzoom };
+};
+
+/**
+ * 한 번만 서버에 묻는다. 전에 쓸 수 있었으면 묻지 않고 바로(통신이 없어도 폰에 보관한 조각으로) 쓰고, 뒤에서 다시 확인해
+ * 서버에 지도가 없어졌으면 다음부터 사진 지도로. 처음이고 통신이 안 돼서 실패하면 다음에 다시 묻는다
+ */
 export function lineMapConfig(apiUrl = serverConfig.apiUrl): Promise<LineMapConfig | null> {
   if (!apiUrl || !hasWebGL()) return Promise.resolve(null);
   probe ??= (async () => {
-    const urls = lineMapUrls(apiUrl);
-    try {
-      const r = await fetch(urls.info);
-      if (!r.ok) return null;
-      const info = (await r.json()) as { maxZoom?: unknown };
-      const maxzoom = typeof info.maxZoom === 'number' && info.maxZoom >= 6 && info.maxZoom <= 16 ? info.maxZoom : 14;
-      return { tiles: urls.tiles, glyphs: urls.glyphs, maxzoom };
-    } catch {
+    const known = remembered(apiUrl);
+    if (known !== null) {
+      void ask(apiUrl).then((z) => {
+        if (z !== undefined) remember(apiUrl, z);
+      });
+      return config(apiUrl, known);
+    }
+    const z = await ask(apiUrl);
+    if (z === undefined) {
       probe = null;
       return null;
     }
+    remember(apiUrl, z);
+    return z === null ? null : config(apiUrl, z);
   })();
   return probe;
 }
 
 /** 테스트용 */
-export function resetLineMapProbe(): void {
+export function resetLineMapProbe(forget = false): void {
   probe = null;
+  if (forget) {
+    try {
+      localStorage.removeItem(MEMORY_KEY);
+    } catch {
+      // 없음
+    }
+  }
 }

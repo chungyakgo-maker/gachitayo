@@ -25,6 +25,8 @@ export function newLineMap(el: HTMLElement, cfg: LineMapConfig, opts: { interact
     attributionControl: opts.attribution === false ? false : { compact: false },
     localIdeographFontFamily: LOCAL_HANGUL_FONT,
     interactive,
+    // 아이폰 3배 화면도 2배로 그린다 (선만 그린 지도라 차이가 거의 없고 훨씬 가볍다)
+    pixelRatio: Math.min(typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1, 2),
     dragRotate: false,
     pitchWithRotate: false,
     touchPitch: false,
