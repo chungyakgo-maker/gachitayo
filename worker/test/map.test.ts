@@ -49,6 +49,15 @@ describe('선 지도 (Worker)', () => {
     expect((await get('/map/tiles/a/b/c.mvt')).status).toBe(404);
   });
 
+  it('읽은 조각은 Cloudflare 지점 캐시에 두어 다음에는 R2까지 가지 않는다', async () => {
+    await put();
+    const first = await get('/map/tiles/14/13965/6355.mvt');
+    await first.arrayBuffer();
+    const again = await get('/map/tiles/14/13965/6355.mvt');
+    expect(again.headers.get('X-Map-Cache')).toBe('hit');
+    expect(await unzip(again)).toBe('tile-14-13965-6355');
+  });
+
   it('지도 파일을 바꿔도 새 파일로 읽는다 (etag가 달라지면 다시 읽음)', async () => {
     await put();
     expect((await get('/map/tiles/0/0/0.mvt')).status).toBe(200);

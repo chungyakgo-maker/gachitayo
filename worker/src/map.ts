@@ -8,36 +8,56 @@ import { HttpError, json } from './http';
 
 export const MAP_KEY = 'korea.pmtiles';
 
-/** R2에서 범위로 읽는 지도 파일. 파일이 바뀌면(etag 다름) 라이브러리가 머리·목록을 다시 읽는다 */
+/**
+ * R2에서 범위로 읽는 지도 파일. 파일이 바뀌면(etag 다름) 라이브러리가 머리·목록을 다시 읽는다.
+ * 빠르게 (사용자 요청 "지도 로딩이 느리다"): 읽은 조각을 Cloudflare 지점 캐시에 둔다. 같은 지점의 다음 요청은 R2까지 가지 않는다.
+ * 머리(처음 읽기, etag 모름)는 5분, 그 밖은 파일 etag를 열쇠에 넣어 30일 (파일이 바뀌면 열쇠가 달라진다)
+ */
 class R2Source implements Source {
+  hits = 0;
+  misses = 0;
   constructor(
     private readonly bucket: R2Bucket,
     private readonly key: string,
+    private readonly ctx?: ExecutionContext,
   ) {}
   getKey(): string {
     return this.key;
   }
   async getBytes(offset: number, length: number, _signal?: AbortSignal, etag?: string): Promise<RangeResponse> {
+    const cache = typeof caches === 'undefined' ? null : caches.default;
+    const cacheKey = new Request(`https://gachitayo-map-cache.internal/${this.key}/${etag ?? 'head'}/${offset}-${length}`);
+    const hit = await cache?.match(cacheKey).catch(() => undefined);
+    if (hit) {
+      this.hits++;
+      return { data: await hit.arrayBuffer(), etag: hit.headers.get('X-Etag') ?? undefined };
+    }
+    this.misses++;
     const obj = await this.bucket.get(this.key, { range: { offset, length }, onlyIf: etag ? { etagMatches: etag } : undefined });
     if (!obj) throw new HttpError(404, '지도 데이터가 아직 없어요');
     if (!('body' in obj)) throw new EtagMismatch();
-    return { data: await obj.arrayBuffer(), etag: obj.etag };
+    const data = await obj.arrayBuffer();
+    if (cache) {
+      const put = cache.put(cacheKey, new Response(data, { headers: { 'Cache-Control': `public, max-age=${etag ? 2592000 : 300}`, 'X-Etag': obj.etag } })).catch(() => {});
+      if (this.ctx) this.ctx.waitUntil(put);
+      else await put;
+    }
+    return { data, etag: obj.etag };
   }
 }
 
 // 같은 Worker 안에서 머리·목록을 다시 읽지 않게 (요청 사이에 남는다)
 const CACHE = new ResolvedValueCache(64, undefined);
 
-function archive(env: Cloudflare.Env): PMTiles {
-  return new PMTiles(new R2Source(env.MAP, MAP_KEY), CACHE);
+function archive(env: Cloudflare.Env, ctx?: ExecutionContext): PMTiles {
+  return new PMTiles(new R2Source(env.MAP, MAP_KEY, ctx), CACHE);
 }
 
 /**
  * 조각을 압축된 그대로 찾는다 (사용자 요청 "지도 로딩이 느리다": 풀어서 보내면 2~3배 무겁고 Worker도 일을 더 한다).
  * 목록(디렉터리)만 풀어 읽고, 조각은 R2에서 꺼낸 바이트 그대로.
  */
-async function rawTile(env: Cloudflare.Env, z: number, x: number, y: number): Promise<{ data: ArrayBuffer; gzip: boolean } | null> {
-  const source = new R2Source(env.MAP, MAP_KEY);
+async function rawTile(source: R2Source, z: number, x: number, y: number): Promise<{ data: ArrayBuffer; gzip: boolean } | null> {
   const h = await CACHE.getHeader(source);
   if (z < h.minZoom || z > h.maxZoom) return null;
   const id = zxyToTileId(z, x, y);
@@ -60,12 +80,12 @@ async function rawTile(env: Cloudflare.Env, z: number, x: number, y: number): Pr
 const TILE_RE = /^\/map\/tiles\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})\.mvt$/;
 const FONT_RE = /^\/map\/fonts\/([A-Za-z0-9 ]{1,40})\/(\d{1,5})-(\d{1,5})\.pbf$/;
 
-export async function handleMap(req: Request, env: Cloudflare.Env, path: string, headers: Headers): Promise<Response> {
+export async function handleMap(req: Request, env: Cloudflare.Env, path: string, headers: Headers, ctx?: ExecutionContext): Promise<Response> {
   if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405);
   const head = req.method === 'HEAD';
 
   if (path === '/map/info') {
-    const h = await archive(env).getHeader();
+    const h = await archive(env, ctx).getHeader();
     headers.set('Cache-Control', 'public, max-age=300');
     return json(200, headers, {
       minZoom: h.minZoom,
@@ -82,7 +102,11 @@ export async function handleMap(req: Request, env: Cloudflare.Env, path: string,
     if (z > 22 || x >= 2 ** z || y >= 2 ** z) throw new HttpError(400, '잘못된 타일');
     // 폰이 30일 보관 (지도 데이터는 한 달에 한 번 바뀐다)
     headers.set('Cache-Control', 'public, max-age=2592000');
-    const r = await rawTile(env, z, x, y);
+    const source = new R2Source(env.MAP, MAP_KEY, ctx);
+    const r = await rawTile(source, z, x, y);
+    // 지점 캐시로 끝났는지 (속도 확인용)
+    headers.set('X-Map-Cache', source.misses === 0 ? 'hit' : `miss ${source.misses}`);
+    headers.set('Access-Control-Expose-Headers', 'Content-Length, ETag, X-Map-Cache');
     if (!r) return new Response(null, { status: 204, headers });
     headers.set('Content-Type', 'application/x-protobuf');
     if (r.gzip) headers.set('Content-Encoding', 'gzip');

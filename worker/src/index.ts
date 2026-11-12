@@ -30,14 +30,14 @@ import { corsHeaders, errorResponse, HttpError, json, readJson, UUID_RE } from '
 /** 표 API 본문 최대 크기 (긴 코스 중심선, 랩 trace 묶음) */
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
 
-export async function handle(req: Request, env: Cloudflare.Env): Promise<Response> {
+export async function handle(req: Request, env: Cloudflare.Env, ctx?: ExecutionContext): Promise<Response> {
   const origin = req.headers.get('Origin');
   // 브라우저 요청인데 출처가 다르면 막는다 (Origin이 없는 요청은 브라우저 밖이라 CORS와 무관)
   if (origin !== null && origin !== env.ALLOWED_ORIGIN) return errorResponse(403, new Headers(), '허용하지 않은 출처');
   const headers = corsHeaders(origin, env);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
   try {
-    return await route(req, env, headers);
+    return await route(req, env, headers, ctx);
   } catch (e) {
     if (e instanceof HttpError) {
       if (e.status === 405) headers.set('Allow', 'GET, PUT, POST, DELETE, HEAD, OPTIONS');
@@ -48,12 +48,12 @@ export async function handle(req: Request, env: Cloudflare.Env): Promise<Respons
   }
 }
 
-async function route(req: Request, env: Cloudflare.Env, headers: Headers): Promise<Response> {
+async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: ExecutionContext): Promise<Response> {
   const path = new URL(req.url).pathname;
   const method = req.method;
 
   if (path.startsWith('/files/')) return handleFiles(req, env, path, headers);
-  if (path.startsWith('/map/')) return handleMap(req, env, path, headers);
+  if (path.startsWith('/map/')) return handleMap(req, env, path, headers, ctx);
 
   const live = /^\/live\/([^/]+)$/.exec(path);
   if (live) {
@@ -148,7 +148,7 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers): Promi
 }
 
 export default {
-  fetch(req: Request, env: Cloudflare.Env): Promise<Response> {
-    return handle(req, env);
+  fetch(req: Request, env: Cloudflare.Env, ctx: ExecutionContext): Promise<Response> {
+    return handle(req, env, ctx);
   },
 } satisfies ExportedHandler<Cloudflare.Env>;
