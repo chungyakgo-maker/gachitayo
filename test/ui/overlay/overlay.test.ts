@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeCtx } from './fakeCtx';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../../../src/ui/overlay/draw';
 import { frameFromLive, headline, widgetValue, type OverlayFrame } from '../../../src/ui/overlay/frame';
-import { drawMiniMap, fitView, mapModel } from '../../../src/ui/overlay/minimap';
+import { drawMiniMap, fitView, followView, mapModel } from '../../../src/ui/overlay/minimap';
 import { overlayTheme } from '../../../src/ui/overlay/theme';
 import type { Course } from '../../../src/types/course';
 
@@ -146,13 +146,14 @@ describe('미니맵 (지도 모드, 사양서 8.4)', () => {
     expect(mapModel(course)).toBe(m); // 코스마다 한 번만 계산
     const v = fitView(m, frame(), 390, 500, { insetBottom: 120 })!;
     for (const [x, y] of m.line) {
-      expect(v.X(x)).toBeGreaterThanOrEqual(44 - 1e-6);
-      expect(v.X(x)).toBeLessThanOrEqual(390 - 44 + 1e-6);
-      expect(v.Y(y)).toBeGreaterThanOrEqual(24 - 1e-6);
-      expect(v.Y(y)).toBeLessThanOrEqual(500 - 44 - 120 + 1e-6);
+      const [sx, sy] = v.P(x, y);
+      expect(sx).toBeGreaterThanOrEqual(44 - 1e-6);
+      expect(sx).toBeLessThanOrEqual(390 - 44 + 1e-6);
+      expect(sy).toBeGreaterThanOrEqual(24 - 1e-6);
+      expect(sy).toBeLessThanOrEqual(500 - 44 - 120 + 1e-6);
     }
     const north = m.line[1]!; // 두 번째 점이 북쪽
-    expect(v.Y(north[1])).toBeLessThan(v.Y(m.line[0]![1]));
+    expect(v.P(north[0], north[1])[1]).toBeLessThan(v.P(m.line[0]![0], m.line[0]![1])[1]);
   });
 
   it('코스 선, 출발선, 고스트(점선 원 + 이름표), 내 위치 화살표를 그린다', () => {
@@ -201,5 +202,30 @@ describe('앞 친구 간격 (M9): 델타 자리에 목표와의 차이', () => {
     const { ctx, texts } = fakeCtx();
     drawMiniMap(ctx, 390, 500, mapModel(course), frame({ ghost: null }), th, { friend: { x: 30, y: 40, label: '지훈' } });
     expect(texts().map((x) => x.text)).toEqual(['지훈']);
+  });
+
+  it('나를 가운데 (사용자 요청): 내 위치는 아래 띠를 뺀 화면 가운데, 북쪽 위. 보이는 거리는 화면 너비', () => {
+    const me = { x: 100, y: 50, psi: 0 };
+    const v = followView(me, 390, 500, { spanM: 300, insetBottom: 120 });
+    expect(v.P(100, 50)).toEqual([195, 190]);
+    expect(v.P(100, 60)[1]).toBeLessThan(190); // 북쪽은 위
+    expect(v.P(250, 50)[0]).toBeCloseTo(390, 6); // 150 m 동쪽 = 오른쪽 끝
+    expect(v.rot).toBe(0);
+  });
+
+  it('진행 방향 위 (사용자 요청): 진행 방향이 늘 화면 위, 화살표도 위, 북쪽 나침반', () => {
+    const psi = 0.3; // 동쪽에서 반시계 17°
+    const me = { x: 0, y: 0, psi };
+    const v = followView(me, 390, 500, { spanM: 300, insetBottom: 120, headingUp: psi });
+    const ahead = v.P(Math.cos(psi) * 50, Math.sin(psi) * 50);
+    expect(ahead[0]).toBeCloseTo(195, 6);
+    expect(ahead[1]).toBeLessThan(190);
+    const { ctx, calls, texts } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, mapModel(course), frame({ me, ghost: null }), th, { view: v, insetBottom: 120 });
+    expect(texts().map((t) => t.text)).toContain('N');
+    // 내 화살표 꼭짓점이 위쪽 (moveTo y < 중심)
+    const tip = calls.filter((c) => c.op === 'moveTo').at(-1)!;
+    expect(tip.args[1] as number).toBeLessThan(190 - 10);
+    expect(tip.args[0] as number).toBeCloseTo(195, 6);
   });
 });

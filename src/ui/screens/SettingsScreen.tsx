@@ -1,7 +1,7 @@
 // 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
-import { GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, updateSettings, useSettings, WIDGET_LABEL, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, MAP_VIEW_LABEL, updateSettings, useSettings, WIDGET_LABEL, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
@@ -109,6 +109,16 @@ export function SettingsScreen() {
             {MODES.map(([m, label]) => (
               <button key={m} type="button" aria-pressed={s.defaultMode === m} onClick={() => updateSettings({ defaultMode: m })}>
                 {label}
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="card-col" style={{ gap: 8 }} aria-label="지도 보기">
+          <span className="label">주행 지도 보기 (지도 모드)</span>
+          <div className="segmented small" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+            {(['fit', 'follow', 'heading'] as const).map((k) => (
+              <button key={k} type="button" aria-pressed={s.mapView === k} onClick={() => updateSettings({ mapView: k })}>
+                {MAP_VIEW_LABEL[k]}
               </button>
             ))}
           </div>

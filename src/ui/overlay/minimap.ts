@@ -1,5 +1,6 @@
 // 미니맵 (사양서 8.4 지도 모드, 13.1 오버레이의 미니맵): 지도 타일 없이 코스 선, 출발선(편도면 도착선),
-// 내 위치 화살표, 베스트 고스트(점선 원), 지나온 경로. 코스 전체가 한 화면에 보이게 고정한다 (북쪽이 위).
+// 내 위치 화살표, 베스트 고스트(점선 원), 지나온 경로.
+// 보기 (사용자 요청): 전체 코스(한 화면에, 북쪽 위) / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼 지도가 돈다).
 import { gateSegment } from '../../engine/course/geometry';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
@@ -36,10 +37,40 @@ export function mapModel(course: Course | null): MapModel {
   return m;
 }
 
+/** 평면 좌표(m) → 화면 좌표(px). rot: 지도를 돌린 각도(라디안, 반시계). 방향(화살표·게이트)을 같이 돌릴 때 쓴다 */
 export interface MapView {
-  X: (x: number) => number;
-  Y: (y: number) => number;
+  P: (x: number, y: number) => [number, number];
+  rot: number;
 }
+
+export type { MapViewMode } from '../../app/settings';
+
+/** 나를 가운데 두는 보기: span = 화면 너비에 보일 거리(m), psi = 진행 방향(진행 방향 위일 때) */
+export function followView(me: { x: number; y: number }, w: number, h: number, opts: { spanM: number; insetBottom?: number; top?: number; headingUp?: number | null }): MapView {
+  const top = opts.top ?? 0;
+  const cx = w / 2;
+  const cy = (top + h - (opts.insetBottom ?? 0)) / 2;
+  const sc = w / Math.max(50, opts.spanM);
+  // 진행 방향을 위(북쪽 자리)로: π/2 − psi 만큼 돌린다
+  const rot = opts.headingUp === null || opts.headingUp === undefined ? 0 : Math.PI / 2 - opts.headingUp;
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  return {
+    rot,
+    P: (x, y) => {
+      const dx = x - me.x;
+      const dy = y - me.y;
+      return [cx + (dx * c - dy * s) * sc, cy - (dx * s + dy * c) * sc];
+    },
+  };
+}
+
+/** 세계 방향(dx, dy, 북쪽 위 y) → 돌린 화면 방향 (y는 아래로) */
+const screenDir = (v: MapView, dx: number, dy: number): [number, number] => {
+  const c = Math.cos(v.rot);
+  const s = Math.sin(v.rot);
+  return [dx * c - dy * s, -(dx * s + dy * c)];
+};
 
 export interface MiniMapOpts {
   /** 아래쪽을 가리는 띠 높이 (px) */
@@ -88,23 +119,27 @@ export function fitView(model: MapModel, f: Pick<OverlayFrame, 'me' | 'path'>, w
   const sc = Math.max(1e-6, Math.min(aw / (maxX - minX), ah / (maxY - minY)));
   const ox = m + (aw - (maxX - minX) * sc) / 2;
   const oy = top + (ah - (maxY - minY) * sc) / 2;
-  return { X: (x) => ox + (x - minX) * sc, Y: (y) => oy + (maxY - y) * sc };
+  return { rot: 0, P: (x, y) => [ox + (x - minX) * sc, oy + (maxY - y) * sc] };
 }
 
 const STYLE = { wide: '#1F2327', wideW: 14, thin: '#3A3F45', gate: '#C9CDD2' };
 
 function polyline(ctx: Ctx, pts: ReadonlyArray<XY>, v: MapView, close: boolean): void {
   ctx.beginPath();
-  pts.forEach(([x, y], i) => (i ? ctx.lineTo(v.X(x), v.Y(y)) : ctx.moveTo(v.X(x), v.Y(y))));
+  pts.forEach(([x, y], i) => {
+    const [sx, sy] = v.P(x, y);
+    if (i) ctx.lineTo(sx, sy);
+    else ctx.moveTo(sx, sy);
+  });
   if (close) ctx.closePath();
 }
 
 function gateLine(ctx: Ctx, g: Gate, v: MapView, dashed: boolean): void {
-  const cx = v.X(g.cx);
-  const cy = v.Y(g.cy);
+  const [cx, cy] = v.P(g.cx, g.cy);
   // 게이트 선은 진행 방향에 수직, 화면에서 ±10 px
-  const nx = -g.dy;
-  const ny = -g.dx;
+  const [tx, ty] = screenDir(v, g.dx, g.dy);
+  const nx = -ty;
+  const ny = tx;
   ctx.setLineDash(dashed ? [4, 3] : []);
   ctx.strokeStyle = STYLE.gate;
   ctx.lineWidth = 3;
@@ -144,8 +179,7 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
   if (model.finish) gateLine(ctx, model.finish, v, true);
 
   if (f.ghost) {
-    const x = v.X(f.ghost.x);
-    const y = v.Y(f.ghost.y);
+    const [x, y] = v.P(f.ghost.x, f.ghost.y);
     ctx.setLineDash([3, 2]);
     ctx.globalAlpha = 0.8;
     ctx.strokeStyle = th.fg;
@@ -175,8 +209,7 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
   }
 
   if (opts.friend) {
-    const x = v.X(opts.friend.x);
-    const y = v.Y(opts.friend.y);
+    const [x, y] = v.P(opts.friend.x, opts.friend.y);
     ctx.setLineDash([]);
     ctx.beginPath();
     ctx.arc(x, y, 7, 0, Math.PI * 2);
@@ -192,16 +225,17 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     ctx.fillText(opts.friend.label, x, y - 16);
   }
 
+  if (v.rot !== 0) drawNorth(ctx, w, opts.top ?? 24, v, th);
+
   if (f.me) {
-    const x = v.X(f.me.x);
-    const y = v.Y(f.me.y);
+    const [x, y] = v.P(f.me.x, f.me.y);
     ctx.fillStyle = th.accentSoft;
     ctx.beginPath();
     ctx.arc(x, y, f.me.psi !== undefined ? 15 : 16, 0, Math.PI * 2);
     ctx.fill();
     if (f.me.psi !== undefined) {
-      const tx = Math.cos(f.me.psi);
-      const ty = -Math.sin(f.me.psi);
+      // 지도를 돌렸으면 화살표도 같이 (진행 방향 위면 늘 위를 가리킨다)
+      const [tx, ty] = screenDir(v, Math.cos(f.me.psi), Math.sin(f.me.psi));
       const ox = -ty;
       const oy = tx;
       ctx.beginPath();
@@ -226,4 +260,31 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     }
   }
   return v;
+}
+
+/** 진행 방향 위 보기에서 북쪽이 어디인지 (왼쪽 위 작은 나침반. 오른쪽 위는 재생 화면의 보기 버튼 자리) */
+function drawNorth(ctx: Ctx, _w: number, top: number, v: MapView, th: OverlayTheme): void {
+  const cx = 28;
+  const cy = top + 14;
+  const [nx, ny] = screenDir(v, 0, 1);
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(16, 17, 20, 0.85)';
+  ctx.fill();
+  ctx.strokeStyle = th.cardLine;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + nx * 11, cy + ny * 11);
+  ctx.lineTo(cx - ny * 4, cy + nx * 4);
+  ctx.lineTo(cx + ny * 4, cy - nx * 4);
+  ctx.closePath();
+  ctx.fillStyle = th.slow;
+  ctx.fill();
+  ctx.font = `700 9px ${th.sans}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = th.fg;
+  ctx.fillText('N', cx - nx * 7, cy - ny * 7);
 }

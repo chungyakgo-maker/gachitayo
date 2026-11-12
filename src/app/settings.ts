@@ -4,6 +4,9 @@ import { useSyncExternalStore } from 'react';
 export type DriveMode = 'map' | 'minimal' | 'dashboard';
 export type WidgetId = 'g' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap';
 export type DeltaPalette = 'green-red' | 'blue-orange';
+/** 주행 지도 모드의 보기 (사용자 요청): 전체 코스 / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼) */
+export type MapViewMode = 'fit' | 'follow' | 'heading';
+export const MAP_VIEW_LABEL: Record<MapViewMode, string> = { fit: '전체 코스', follow: '나를 가운데', heading: '진행 방향 위' };
 
 export interface Settings {
   defaultMode: DriveMode;
@@ -14,6 +17,8 @@ export interface Settings {
   gap: { friendId: string | null; nickname: string | null; targetS: number };
   /** 새 코스(지도·GPX로 만들 때)의 게이트 폭 m (사양서 8.8). 자동 코스는 엔진 기본값 */
   gateWidthM: number;
+  /** 주행 지도 모드의 보기 */
+  mapView: MapViewMode;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -28,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   deltaPalette: 'green-red',
   gap: { friendId: null, nickname: null, targetS: 2 },
   gateWidthM: 30,
+  mapView: 'fit',
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -67,6 +73,7 @@ function load(): Settings {
         typeof raw.gateWidthM === 'number' && Number.isFinite(raw.gateWidthM)
           ? Math.min(GATE_WIDTH_MAX_M, Math.max(GATE_WIDTH_MIN_M, Math.round(raw.gateWidthM)))
           : DEFAULT_SETTINGS.gateWidthM,
+      mapView: raw.mapView === 'follow' || raw.mapView === 'heading' ? raw.mapView : 'fit',
     };
   } catch {
     return DEFAULT_SETTINGS;

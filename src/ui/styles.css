@@ -725,8 +725,16 @@ html.app-h .modal-backdrop {
   z-index: 1000;
   top: 10px;
   right: calc(10px + var(--safe-r));
-  width: 180px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 270px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.map-view-toggle button {
+  font-size: 12px;
+}
+
+.replay-map .leaflet-host {
+  transform-origin: 50% 50%;
 }
 
 .map-label {

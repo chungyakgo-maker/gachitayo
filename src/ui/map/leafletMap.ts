@@ -208,6 +208,8 @@ export interface ReplayMapController {
   fit(points: Array<[number, number]>, insetBottom: number): void;
   /** 내 위치를 아래 띠를 뺀 화면 가운데에, 가깝게 */
   follow(lat: number, lon: number, insetBottom: number): void;
+  /** 지도 한가운데에 놓기 (진행 방향 위 보기: 지도판을 크게 만들어 돌리므로 가운데 = 나) */
+  centerOn(lat: number, lon: number): void;
   /** 위경도 → 지도 안의 화면 좌표 (px) */
   project(lat: number, lon: number): { x: number; y: number };
   setOnline(online: boolean): void;
@@ -261,6 +263,10 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
       // 아래 띠에 가리지 않게 위로 띠 높이의 절반만큼
       const c = map.project([lat, lon], FOLLOW_ZOOM).add([0, insetBottom / 2]);
       map.setView(map.unproject(c, FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
+    },
+    centerOn(lat, lon) {
+      map.invalidateSize({ pan: false });
+      map.setView([lat, lon], FOLLOW_ZOOM, { animate: false });
     },
     project(lat, lon) {
       const p = map.latLngToContainerPoint([lat, lon]);

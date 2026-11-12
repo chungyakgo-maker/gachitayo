@@ -19,7 +19,8 @@ import { formatDelta, formatLapTime } from '../format';
 import { IconGps } from '../icons';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, gLabel, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
-import { drawMiniMap, mapModel } from '../overlay/minimap';
+import { drawMiniMap, followView, mapModel } from '../overlay/minimap';
+import { useSmoothAngle, useSpanM } from '../hooks/useSmoothView';
 import { overlayTheme, type OverlayTheme } from '../overlay/theme';
 
 export interface DriveViewProps {
@@ -96,6 +97,9 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
   const hl = headline(frame);
   const h = { label: hl.label, text: hl.text, word: hl.word, cls: hl.tone === 'none' ? '' : hl.tone };
   const th = useMemo(() => overlayTheme(settings.deltaPalette), [settings.deltaPalette]);
+  // 나를 가운데 / 진행 방향 위 보기: 진행 방향과 보이는 거리를 부드럽게 (훅은 모드와 관계없이 늘 부른다)
+  const headSm = useSmoothAngle(snap?.pos?.psi);
+  const spanM = useSpanM(st?.speedKmh);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.end-btn, .map-view-toggle')) return;
@@ -269,6 +273,10 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
   const deltaLabel = `${h.label}${h.word ? ` · ${h.word}` : ''} ${h.text}${course ? `, ${lapText} ${formatLapTime(st?.lapElapsedMs ?? null, 1)}` : ''}`;
   const model = mapModel(course);
   const mapLabel = frame.ghost ? '코스 지도: 내 위치와 베스트 고스트' : '코스 지도: 내 위치';
+  const me = frame.me;
+  const mapView = settings.mapView;
+  const viewFor = (w: number, hh: number) =>
+    mapView === 'fit' || !me ? undefined : followView(me, w, hh, { spanM, insetBottom: 120, top: 0, headingUp: mapView === 'heading' ? (headSm ?? me.psi ?? null) : null });
   return (
     <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
       <div className="drive-pad">
@@ -285,9 +293,9 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
       <div className="drive-map">
         {replay ? (
           // 재생은 운전 중이 아니라서 지도 타일 위에 그린다 (전체 코스 / 따라가기)
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} />
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} initialView={mapView} heading={headSm} />
         ) : (
-          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front })} />
+          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, view: viewFor(w, hh) })} />
         )}
         <div className="drive-bottom">
           <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />

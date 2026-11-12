@@ -4,7 +4,7 @@ import { GapSection } from '../components/GapSection';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
-import { useSettings, WIDGET_LABEL, type DriveMode } from '../../app/settings';
+import { MAP_VIEW_LABEL, updateSettings, useSettings, WIDGET_LABEL, type DriveMode } from '../../app/settings';
 import { Sheet } from '../components/Sheet';
 import { formatDayKst, formatLapTime, formatLength } from '../format';
 import { IconBack, IconCheck, IconChevron, IconGps, IconPhone, IconPin, IconWarn } from '../icons';
@@ -127,6 +127,19 @@ export function PrepareScreen() {
           ))}
         </div>
       </section>
+
+      {d.mode === 'map' && (
+        <section aria-label="지도 보기" className="card-col" style={{ gap: 8 }}>
+          <span className="label">지도 보기</span>
+          <div className="segmented small" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+            {(['fit', 'follow', 'heading'] as const).map((k) => (
+              <button key={k} type="button" aria-pressed={settings.mapView === k} onClick={() => updateSettings({ mapView: k })}>
+                {MAP_VIEW_LABEL[k]}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <GapSection />
 
