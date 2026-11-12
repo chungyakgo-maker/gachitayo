@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // 정확도 보고서 (사람이 읽는 용도). 평소 테스트에서는 건너뛰고, REPORT=1일 때만 만든다.
 // 결과: REPORT_DIR(기본 report-out)에 fusion-report.json과 비교 그림 SVG
 import { mkdirSync, writeFileSync } from 'node:fs';
