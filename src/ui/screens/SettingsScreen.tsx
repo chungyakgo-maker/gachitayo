@@ -1,4 +1,5 @@
 // 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
+import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
 import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, MAP_VIEW_LABEL, updateSettings, useSettings, WIDGET_LABEL, type DeltaPalette, type DriveMode } from '../../app/settings';
@@ -137,6 +138,7 @@ export function SettingsScreen() {
           </div>
           <span className="sub">통신이 없으면 저절로 코스 선만 그려요. 끄면 데이터와 배터리를 덜 써요.</span>
         </section>
+        <DriveFriendsToggle />
         <section className="card-col" style={{ gap: 8 }} aria-label="G미터 최대값">
           <span className="label">G미터 최대값 (바깥 원)</span>
           <div className="segmented small" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>

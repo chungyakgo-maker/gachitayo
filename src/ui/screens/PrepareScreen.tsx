@@ -2,6 +2,7 @@
 import { MountTips } from '../components/MountTips';
 import { GapSection } from '../components/GapSection';
 import { ShareToggle } from '../components/ShareToggle';
+import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useFriends } from '../../app/friends';
 import { useAccount } from '../../app/account';
 import { useState } from 'react';
@@ -140,6 +141,7 @@ export function PrepareScreen() {
 
       {/* 주행 중 위치 공유 (사용자 요청): 기록 시작 전에 켜야 친구 지도와 친구의 앞 친구 간격에 내가 보인다 */}
       {shareOn && <ShareToggle variant="card" />}
+      {shareOn && <DriveFriendsToggle />}
 
       <section aria-label="코스" className="card card-row">
         <div className="card-col">

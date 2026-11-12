@@ -66,7 +66,7 @@ describe('앞 친구 간격 (초): 앞 친구가 지금 내 자리를 몇 초 �
     expect(rms(errs)).toBeLessThan(0.3);
   });
 
-  it('GapTracker: 1초 동안 부드럽게 하고, 앞 친구 위치가 5초 넘게 안 오면 신호 없음', () => {
+  it('GapTracker: 0.5초 동안 부드럽게 하고, 앞 친구 위치가 5초 넘게 안 오면 신호 없음', () => {
     const { trail, me, start } = scenario(stadiumTrack(), base, 7);
     const g = new GapTracker();
     let got: ReturnType<GapTracker['update']> = { gapS: null, stale: true };
@@ -79,5 +79,47 @@ describe('앞 친구 간격 (초): 앞 친구가 지금 내 자리를 몇 초 �
     // 앞 친구 위치가 끊김
     for (let t = 40; t < 47; t += 0.1) got = g.update(me(t, 2), start + t * 1000);
     expect(got.stale).toBe(true);
+  });
+
+  // 사용자 문의 "델타 딜레이": 실제 폰에서는 앞 친구 위치가 GPS 1초 간격 + GPS 지연 + 통신으로 1~2초 늦게 온다.
+  // 간격이 짧으면 친구 위치가 아직 내 자리까지 안 와서, 고치기 전에는 코너에서 한 바퀴 전 기록과 헷갈려 최대 43초 틀렸다
+  for (const seed of [7, 8, 9]) {
+    for (const lagS of [0.8, 1.5, 2.5]) {
+      it(`앞 친구 위치가 ${lagS}초 늦게 와도 간격 1초를 RMS < 0.2초로, 0.5초 넘게 틀리는 때 1% 미만 (모의 주행 ${seed}, 튄 점 포함)`, () => {
+        const { truth, trail, me, start } = scenario(stadiumTrack(), base, seed);
+        const errs: number[] = [];
+        const mine: TrailPoint[] = [];
+        let n = 0;
+        for (let t = 11; t < truth.t.at(-1)! - 3; t += 0.1) {
+          n++;
+          const m = me(t, 1);
+          const known = trail.filter((p) => p.t <= start + (t - lagS) * 1000 && p.t > start + (t - 180) * 1000);
+          const g = gapSeconds(known, m, mine.filter((q) => q.t > m.t - 30_000));
+          mine.push({ t: m.t, x: m.x, y: m.y });
+          if (g !== null) errs.push(g - 1);
+        }
+        expect(errs.length).toBeGreaterThan(n * 0.97);
+        expect(rms(errs)).toBeLessThan(0.2);
+        expect(errs.filter((e) => Math.abs(e) > 0.5).length).toBeLessThan(errs.length * 0.01);
+        expect(Math.max(...errs.map(Math.abs))).toBeLessThan(lagS <= 1.5 ? 1.2 : 2.5);
+      });
+    }
+  }
+
+  it('간격이 바뀌면 화면 값이 0.5초 남짓 늦게 따라온다 (평활 0.5초)', () => {
+    const { trail, start } = scenario(stadiumTrack(), base, 7);
+    const truth = simulateDrive(stadiumTrack(), base);
+    const gapAt = (t: number) => (t < 40 ? 2 : t < 45 ? 2 + (t - 40) / 5 : 3);
+    const tr = new GapTracker();
+    let fed = 0;
+    const out: Array<{ t: number; g: number; truth: number }> = [];
+    for (let t = 20; t < 60; t += 0.1) {
+      while (fed < trail.length && trail[fed]!.t <= start + (t - 0.8) * 1000) tr.push(trail[fed++]!);
+      const p = truthAt(truth, t - gapAt(t));
+      const r = tr.update({ x: p.x, y: p.y, psi: p.psi, t: start + t * 1000 }, start + t * 1000);
+      if (r.gapS !== null) out.push({ t, g: r.gapS, truth: gapAt(t) });
+    }
+    const lag = out.find((o) => o.g >= 2.5)!.t - out.find((o) => o.truth >= 2.5)!.t;
+    expect(lag).toBeLessThan(0.7);
   });
 });

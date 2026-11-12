@@ -30,11 +30,34 @@ const MAX_EXTRAPOLATE_SEGMENTS = 1.5;
 /** 앞 친구의 마지막 위치보다 이 거리 안쪽에서 앞서 있으면 "내가 앞섬"으로 본다 */
 const AHEAD_CHECK_M = 300;
 
-/** 앞 친구가 지금 내 자리를 몇 초 전에 지났는지. 찾지 못하면(내가 앞섬, 다른 길) null */
-export function gapSeconds(trail: readonly TrailPoint[], me: GapMe): number | null {
-  // 1. 앞 친구의 마지막 위치를 막 지났는데 다음 위치가 아직 안 온 경우: 마지막 구간을 그 속도로 늘려 본다.
-  //    마지막 위치보다 한참 앞이면 내가 앞선 것 (한 바퀴 전 기록과 헷갈리지 않게 여기서 끝낸다)
+/** 친구 최근 위치가 가까운데 이보다 오래전 통과를 고르면 한 바퀴 전 기록으로 본다 */
+const OLD_PASS_MS = 20_000;
+
+/** 내 최근 경로에서 이 시간 안의 통과만 본다 (한 바퀴 전과 헷갈리지 않게) */
+const MINE_WINDOW_MS = 30_000;
+
+/**
+ * 앞 친구가 지금 내 자리를 몇 초 전에 지났는지. 찾지 못하면(내가 앞섬, 다른 길) null.
+ * mine: 내 최근 위치들 (오래된 것부터, 지금 위치 me는 빼고). 있으면 0단계를 쓴다.
+ */
+export function gapSeconds(trail: readonly TrailPoint[], me: GapMe, mine: readonly TrailPoint[] = []): number | null {
+  // 0. 앞 친구의 최신 위치를 내가 이미 지났으면 (간격이 짧아 친구 위치가 아직 내 자리까지 안 옴):
+  //    내가 그 점을 지난 시각 − 친구가 그 점을 지난 시각. 직선으로 늘려 짐작하지 않아 코너에서도 맞다.
+  //    그 점에서의 간격이라 친구 위치가 늦게 온 만큼(보통 1~2초) 늦은 값이다 (실측 평가, 사용자 문의 "델타 딜레이")
   const n = trail.length;
+  if (n >= 1 && mine.length >= 1) {
+    const path: TrailPoint[] = [...mine.filter((q) => q.t >= me.t - MINE_WINDOW_MS), { t: me.t, x: me.x, y: me.y }];
+    // 친구의 최신 점이 튄 값이면 그 앞 점으로 (최근 3개까지)
+    for (let j = n - 1; j >= Math.max(0, n - 3); j--) {
+      if (isOutlier(trail, j)) continue;
+      const g = passedGap(path, trail, j);
+      if (g === 'not_passed') break;
+      if (g !== null) return g < -0.5 ? null : Math.max(0, g);
+    }
+  }
+
+  // 1. (내 경로가 아직 없을 때) 앞 친구의 마지막 위치를 막 지났는데 다음 위치가 아직 안 온 경우: 마지막 구간을 그 속도로 늘려 본다.
+  //    마지막 위치보다 한참 앞이면 내가 앞선 것 (한 바퀴 전 기록과 헷갈리지 않게 여기서 끝낸다)
   if (n >= 2) {
     const a = trail[n - 2]!;
     const b = trail[n - 1]!;
@@ -67,9 +90,113 @@ export function gapSeconds(trail: readonly TrailPoint[], me: GapMe): number | nu
     } else if (best) break;
   }
   if (!best) return null;
+  // 친구의 최근 위치가 바로 옆(300 m 안)인데 20초 넘게 전 통과를 골랐으면 한 바퀴 전 기록이다 (친구 위치가 늦게 와서 아직 없음)
+  const newest = trail[trail.length - 1]!;
+  if (newest.t - best.t > OLD_PASS_MS && trail.slice(-3).some((q) => Math.hypot(q.x - me.x, q.y - me.y) <= AHEAD_CHECK_M)) return null;
   const g = (me.t - best.t) / 1000;
   // 시계가 크게 어긋나 음수가 되면 믿지 않는다
   return g < -0.5 ? null : Math.max(0, g);
+}
+
+/** 이보다 빠르게 움직인 것처럼 보이면 튄 점이다 (m/s) */
+const MAX_PLAUSIBLE_SPEED_MPS = 80;
+
+/** 튄 점: 앞뒤 점(마지막 점이면 그 앞 두 점)으로 예상한 자리에서 이만큼 넘게 벗어남 (m) */
+const OUTLIER_M = 30;
+
+/**
+ * 친구 점 j가 튄 점인지: 주변 점 두 개로 그 시각의 자리를 예상한다 (앞뒤 사이, 앞의 두 점으로 늘림 등).
+ * 예상이 하나라도 30 m 안에 맞으면 정상 (예상에 쓴 점이 튄 점일 수도 있어서, 모두 어긋날 때만 튄 점)
+ */
+function isOutlier(trail: readonly TrailPoint[], j: number): boolean {
+  const b = trail[j]!;
+  const pairs: Array<[number, number]> = [
+    [j - 1, j + 1],
+    [j - 2, j - 1],
+    [j + 1, j + 2],
+    [j - 3, j - 2],
+    [j - 2, j + 1],
+    [j - 1, j + 2],
+  ];
+  let tried = 0;
+  for (const [i0, i1] of pairs) {
+    const p = trail[i0];
+    const q = trail[i1];
+    if (!p || !q) continue;
+    const span = q.t - p.t;
+    if (span <= 0 || Math.abs(b.t - p.t) > 2 * GAP_MAX_SEGMENT_MS || Math.abs(b.t - q.t) > 2 * GAP_MAX_SEGMENT_MS) continue;
+    tried++;
+    const u = (b.t - p.t) / span;
+    if (Math.hypot(b.x - (p.x + (q.x - p.x) * u), b.y - (p.y + (q.y - p.y) * u)) <= OUTLIER_M) return false;
+  }
+  return tried > 0;
+}
+
+/** 친구 점 j에서의 진행 방향 (단위 벡터). 앞뒤 점 중 튄 점이 아닌 것과 잇는다. 모르면 null */
+function friendDir(trail: readonly TrailPoint[], j: number): [number, number] | null {
+  const b = trail[j]!;
+  const ok = (p: TrailPoint | undefined) => {
+    if (!p) return false;
+    const d = Math.hypot(p.x - b.x, p.y - b.y);
+    const dt = Math.abs(p.t - b.t) / 1000;
+    return dt > 0 && dt <= GAP_MAX_SEGMENT_MS / 1000 && d > 0.5 && d / dt <= MAX_PLAUSIBLE_SPEED_MPS;
+  };
+  for (const k of [j - 1, j - 2, j + 1, j + 2]) {
+    const p = trail[k];
+    if (!ok(p) || isOutlier(trail, k)) continue;
+    const sgn = k < j ? 1 : -1;
+    const vx = (b.x - p!.x) * sgn;
+    const vy = (b.y - p!.y) * sgn;
+    const l = Math.hypot(vx, vy);
+    return [vx / l, vy / l];
+  }
+  return null;
+}
+
+/** 내가 지난 시각을 맞출 때 앞뒤로 보는 시간 (잡음이 있어도 방향·속도가 안정되게) */
+const PASS_BASE_MS = 500;
+
+/**
+ * 친구 점 trail[j]를 내가 이미 지났으면 그때의 간격(초). 내 경로가 그 점을 안 지났으면 'not_passed'
+ * (아직 그 점에 못 왔거나 정확히 그 위에 있음), 내 경로와 멀면(튄 점, 다른 길) null.
+ */
+function passedGap(path: readonly TrailPoint[], trail: readonly TrailPoint[], j: number): number | null | 'not_passed' {
+  const b = trail[j]!;
+  let k = -1;
+  let best = Infinity;
+  for (let i = 0; i < path.length; i++) {
+    const d = Math.hypot(path[i]!.x - b.x, path[i]!.y - b.y);
+    if (d < best) {
+      best = d;
+      k = i;
+    }
+  }
+  if (k < 0 || best > GAP_MAX_LATERAL_M) return null;
+  const last = path.length - 1;
+  if (k === last) return 'not_passed';
+  // 그 점 앞뒤 0.5초로 내 진행 방향과 속도
+  let i0 = k;
+  while (i0 > 0 && path[i0 - 1]!.t >= path[k]!.t - PASS_BASE_MS) i0--;
+  let i1 = k;
+  while (i1 < last && path[i1 + 1]!.t <= path[k]!.t + PASS_BASE_MS) i1++;
+  const p0 = path[i0]!;
+  const p1 = path[i1]!;
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  const L = Math.hypot(dx, dy);
+  const dt = p1.t - p0.t;
+  let tPass = path[k]!.t;
+  if (L >= 1 && dt > 0) {
+    // 같은 방향으로 지났는지 (친구 진행 방향. 튄 점과 이은 방향은 쓰지 않는다)
+    const fdir = friendDir(trail, j);
+    if (fdir && (fdir[0] * dx + fdir[1] * dy) / L < MIN_HEADING_COS) return null;
+    // 내 위치가 아직 그 점 뒤면 안 지난 것
+    const meNow = path[last]!;
+    if (((meNow.x - b.x) * dx + (meNow.y - b.y) * dy) / L <= 0) return 'not_passed';
+    const along = ((b.x - path[k]!.x) * dx + (b.y - path[k]!.y) * dy) / L;
+    tPass += (along / L) * dt;
+  }
+  return (tPass - b.t) / 1000;
 }
 
 /** 구간 a→b에서 내 위치와 가장 가까운 곳 (같은 방향, 옆으로 25 m 안). 아니면 null */
@@ -93,11 +220,15 @@ const TRAIL_KEEP_MS = 180_000;
 /** 앞 친구 위치가 이만큼 넘게 안 오면 "신호 없음" */
 export const GAP_STALE_MS = 5000;
 /** 부드럽게 하는 시간 상수 (초) */
-const SMOOTH_S = 1;
+const SMOOTH_S = 0.5;
 
 /** 받은 앞 친구 위치를 모아 두고, 그릴 때마다 간격을 부드럽게 계산한다 */
 export class GapTracker {
+  constructor(private readonly smoothS = SMOOTH_S) {}
+
   private trail: TrailPoint[] = [];
+  /** 내 최근 위치 (0단계용) */
+  private mine: TrailPoint[] = [];
   private smooth: number | null = null;
   private lastT: number | null = null;
 
@@ -114,6 +245,7 @@ export class GapTracker {
   /** 좌표계가 바뀌면(코스 원점) 모은 위치를 새 좌표로 */
   reset(points: TrailPoint[] = []): void {
     this.trail = [];
+    this.mine = [];
     this.smooth = null;
     this.lastT = null;
     for (const p of points) this.push(p);
@@ -126,14 +258,21 @@ export class GapTracker {
   update(me: GapMe, nowEpochMs: number): { gapS: number | null; stale: boolean } {
     const last = this.latest();
     const stale = !last || nowEpochMs - last.t > GAP_STALE_MS;
-    const raw = stale ? null : gapSeconds(this.trail, me);
+    const raw = stale ? null : gapSeconds(this.trail, me, this.mine);
+    const lastMine = this.mine[this.mine.length - 1];
+    if (!lastMine || me.t > lastMine.t) {
+      this.mine.push({ t: me.t, x: me.x, y: me.y });
+      let k = 0;
+      while (k < this.mine.length && this.mine[k]!.t < me.t - MINE_WINDOW_MS) k++;
+      if (k > 0) this.mine.splice(0, k);
+    }
     if (raw === null) {
       this.smooth = null;
       this.lastT = null;
       return { gapS: null, stale };
     }
     const dt = this.lastT === null ? Infinity : Math.max(0, (me.t - this.lastT) / 1000);
-    this.smooth = this.smooth === null || !Number.isFinite(dt) ? raw : this.smooth + (raw - this.smooth) * Math.min(1, dt / SMOOTH_S);
+    this.smooth = this.smooth === null || !Number.isFinite(dt) ? raw : this.smooth + (raw - this.smooth) * Math.min(1, dt / this.smoothS);
     this.lastT = me.t;
     return { gapS: this.smooth, stale };
   }

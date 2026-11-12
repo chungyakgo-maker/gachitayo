@@ -26,6 +26,8 @@ export interface Settings {
   mapTiles: boolean;
   /** G미터 바깥 원 = 이 값 g (사용자 요청: 1.5·2·2.5·3, 기본 2) */
   gMaxG: number;
+  /** 주행 지도에 위치를 공유 중인 친구들을 보인다 (사용자 요청: 끌 수 있게) */
+  driveFriends: boolean;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mapView: 'fit',
   mapTiles: true,
   gMaxG: G_MAX_DEFAULT,
+  driveFriends: true,
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -85,6 +88,7 @@ function load(): Settings {
       mapView: raw.mapView === 'follow' || raw.mapView === 'heading' ? raw.mapView : 'fit',
       mapTiles: raw.mapTiles !== false,
       gMaxG: (G_MAX_OPTIONS as readonly number[]).includes(raw.gMaxG as number) ? raw.gMaxG! : G_MAX_DEFAULT,
+      driveFriends: raw.driveFriends !== false,
     };
   } catch {
     return DEFAULT_SETTINGS;

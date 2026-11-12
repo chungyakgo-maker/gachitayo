@@ -356,7 +356,8 @@ export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targ
 export function useDriveFriends(snap: LiveSnapshot | null, frontId: string | null): Array<{ x: number; y: number; label: string }> {
   const acc = useAccount();
   const fr = useFriends();
-  const on = acc.status === 'ready' && snap !== null;
+  const { driveFriends } = useSettings();
+  const on = acc.status === 'ready' && snap !== null && driveFriends;
   useEffect(() => (on ? watchFriendPositions() : undefined), [on]);
   const origin = snap?.origin;
   if (!on || !origin) return [];

@@ -149,4 +149,18 @@ describe('주행 중 위치 공유 (사용자 요청)', () => {
     const none = renderHook(() => useDriveFriends(null, null));
     expect(none.result.current).toEqual([]);
   });
+
+  it('주행 지도 친구 위치를 끄면(설정) 받아 오지도 않고 그리지도 않는다 (사용자 요청)', async () => {
+    const { renderHook } = await import('@testing-library/react');
+    const { updateSettings, DEFAULT_SETTINGS } = await import('../../src/app/settings');
+    acc = ready;
+    fr = { ...base, positions: [{ userId: 'u3', nickname: '남', lat: 37.2, lon: 127.1001, hAcc: 5, heading: null, speed: 10, ageMs: 1000 }] };
+    vi.mocked(watchFriendPositions).mockClear();
+    updateSettings({ driveFriends: false });
+    const snap = { origin: { lat: 37.2, lon: 127.1 } } as Parameters<typeof useDriveFriends>[0];
+    const { result } = renderHook(() => useDriveFriends(snap, null));
+    expect(result.current).toEqual([]);
+    expect(watchFriendPositions).not.toHaveBeenCalled();
+    updateSettings(DEFAULT_SETTINGS);
+  });
 });
