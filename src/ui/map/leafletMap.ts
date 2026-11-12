@@ -9,6 +9,61 @@ import type { Course } from '../../types/course';
 
 export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 export const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+// ── 코스 그리기 (사용자 요청 시안 2): 빨간 선 + 빛 번짐, 출발 파랑 핀·도착 빨강 핀 + 큰 글자,
+//    출발선 파랑 · 도착선 흰 점선, 구간 경계는 큰 노랑 점과 글자. 코스 상세·메인·새 코스 지도가 같이 쓴다 (주행 지도는 따로) ──
+
+export const COURSE_STYLE = {
+  glow: '#ff3b30',
+  route: '#ff453a',
+  highlight: '#ffd2ce',
+  start: '#2f7bff',
+  finish: '#ff3b30',
+  sector: '#ffb224',
+  outline: '#0b0c0e',
+} as const;
+
+export type GateWhich = 'start' | 'finish';
+
+/** 빨간 코스 선: 넓고 옅은 두 줄(빛 번짐) + 진한 선 + 가운데 밝은 줄 */
+export function addRoute(layer: L.LayerGroup, pts: L.LatLngExpression[]): void {
+  const o = { lineJoin: 'round', lineCap: 'round', interactive: false } as const;
+  L.polyline(pts, { ...o, color: COURSE_STYLE.glow, opacity: 0.16, weight: 18, className: 'course-glow' }).addTo(layer);
+  L.polyline(pts, { ...o, color: COURSE_STYLE.glow, opacity: 0.3, weight: 10, className: 'course-glow' }).addTo(layer);
+  L.polyline(pts, { ...o, color: COURSE_STYLE.route, opacity: 1, weight: 4, className: 'course-line' }).addTo(layer);
+  L.polyline(pts, { ...o, color: COURSE_STYLE.highlight, opacity: 0.9, weight: 1.2 }).addTo(layer);
+}
+
+/** 출발선(파랑)·도착선(흰 점선), 검은 테두리 */
+export function addGateLine(layer: L.LayerGroup, a: L.LatLngExpression, b: L.LatLngExpression, which: GateWhich): void {
+  L.polyline([a, b], { color: COURSE_STYLE.outline, weight: 6.5, lineCap: 'round', interactive: false }).addTo(layer);
+  L.polyline([a, b], { color: which === 'start' ? COURSE_STYLE.start : '#ffffff', weight: 3.5, lineCap: 'round', dashArray: which === 'finish' ? '4 3' : undefined, interactive: false }).addTo(layer);
+}
+
+const PIN_SVG = (color: string) =>
+  `<svg width="26" height="36" viewBox="0 0 26 36" aria-hidden="true"><path d="M13 35C13 35 2 21.5 2 13A11 11 0 1 1 24 13C24 21.5 13 35 13 35Z" fill="${color}" stroke="#ffffff" stroke-width="2.2"/><circle cx="13" cy="13" r="4.6" fill="#ffffff"/></svg>`;
+
+/** 출발 파랑 핀 · 도착 빨강 핀. 끝이 그 점을 가리키고, 위에 큰 글자 */
+export function addPin(layer: L.LayerGroup, at: L.LatLngExpression, which: GateWhich, text: string): void {
+  const el = document.createElement('div');
+  el.innerHTML = PIN_SVG(which === 'start' ? COURSE_STYLE.start : COURSE_STYLE.finish);
+  const label = document.createElement('span');
+  label.className = 'map-label big pin-label';
+  label.textContent = text;
+  el.appendChild(label);
+  L.marker(at, { icon: L.divIcon({ className: `map-pin ${which}`, html: el, iconSize: [26, 36], iconAnchor: [13, 36] }), interactive: false, keyboard: false, zIndexOffset: 500 }).addTo(layer);
+}
+
+/** 구간 경계: 큰 노랑 점 + 그 위 노랑 글자 */
+export function addSector(layer: L.LayerGroup, at: L.LatLngExpression, text: string): void {
+  L.circleMarker(at, { radius: 7, color: COURSE_STYLE.outline, weight: 2.5, fillColor: COURSE_STYLE.sector, fillOpacity: 1, interactive: false }).addTo(layer);
+  const span = document.createElement('span');
+  span.textContent = text;
+  L.marker(at, { icon: L.divIcon({ className: 'map-label big map-sector', html: span, iconSize: [60, 20], iconAnchor: [30, 32] }), interactive: false, keyboard: false }).addTo(layer);
+}
+
+/** 핀과 글자가 점 위로 이만큼(px) 올라가 있어, 화면 맞출 때 위쪽을 더 비운다 */
+export const PIN_TOP_PX = 60;
+
 /** 타일이 이만큼 연달아 실패하면 통신이 안 되는 것으로 보고 타일 없이 그린다 */
 const TILE_FAILS_OFFLINE = 6;
 
@@ -105,28 +160,16 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     courseLayer.clearLayers();
     if (!course) return;
     const line = (course.centerline ?? []).map(([lat, lon]) => L.latLng(lat, lon));
-    if (line.length >= 2) {
-      const pts = course.kind === 'loop' ? [...line, line[0]!] : line;
-      L.polyline(pts, { color: '#eceef0', opacity: 0.22, weight: 10, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(courseLayer);
-      L.polyline(pts, { color: '#c9cdd2', opacity: 0.9, weight: 1.5, lineJoin: 'round', interactive: false }).addTo(courseLayer);
-    }
-    const gate = (g: Course['startGate'], text: string, dashed: boolean) => {
+    if (line.length >= 2) addRoute(courseLayer, course.kind === 'loop' ? [...line, line[0]!] : line);
+    const gate = (g: Course['startGate'], which: GateWhich, text: string) => {
       const s = gateSegment(g, course.origin);
       const a = fromLocal(course.origin, s.ax, s.ay);
       const b = fromLocal(course.origin, s.bx, s.by);
-      L.polyline(
-        [
-          [a.lat, a.lon],
-          [b.lat, b.lon],
-        ],
-        { color: '#eceef0', weight: 3, lineCap: 'round', dashArray: dashed ? '4 3' : undefined, interactive: false },
-      ).addTo(courseLayer);
-      // 이름은 진행 방향 반대쪽 20 m
-      const at = fromLocal(course.origin, s.cx - s.dx * 20, s.cy - s.dy * 20);
-      L.marker([at.lat, at.lon], { icon: L.divIcon({ className: 'map-label', html: text, iconSize: [32, 16], iconAnchor: [16, 8] }), interactive: false, keyboard: false }).addTo(courseLayer);
+      addGateLine(courseLayer, [a.lat, a.lon], [b.lat, b.lon], which);
+      addPin(courseLayer, [g.lat, g.lon], which, text);
     };
-    gate(course.startGate, '출발', false);
-    if (course.kind === 'point_to_point') gate(course.finishGate, '도착', true);
+    gate(course.startGate, 'start', '출발');
+    if (course.kind === 'point_to_point') gate(course.finishGate, 'finish', '도착');
   }
 
   function drawMe(me: MapFix | null) {
@@ -146,7 +189,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     if (pts.length === 0) return;
     move(() => {
       if (pts.length === 1 || !course) map.setView(centerFor(pts[pts.length - 1]!, 16), 16, { animate: false });
-      else map.fitBounds(L.latLngBounds(pts), { ...pad(44), maxZoom: 17, animate: false });
+      else map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(44, 44 + inset.top + PIN_TOP_PX), paddingBottomRight: L.point(44, 44 + inset.bottom), maxZoom: 17, animate: false });
     });
   }
 
@@ -394,7 +437,15 @@ export function createAnalysisMap(el: HTMLElement, onPick: (lat: number, lon: nu
 export type MapShape =
   | { kind: 'line'; pts: Array<[number, number]>; color: string; weight: number; dash?: string; opacity?: number }
   | { kind: 'dot'; at: [number, number]; color: string; r: number }
-  | { kind: 'label'; at: [number, number]; text: string };
+  | { kind: 'label'; at: [number, number]; text: string }
+  /** 코스 선 (빨간 선 + 빛 번짐) */
+  | { kind: 'route'; pts: Array<[number, number]> }
+  /** 출발선·도착선 */
+  | { kind: 'gate'; a: [number, number]; b: [number, number]; which: GateWhich }
+  /** 출발·도착 핀 + 글자 */
+  | { kind: 'pin'; at: [number, number]; which: GateWhich; text: string }
+  /** 구간 경계 점 + 글자 */
+  | { kind: 'sector'; at: [number, number]; text: string };
 
 export interface PickMapController {
   /** fit: 이 점들이 다 보이게 (없으면 그대로) */
@@ -431,6 +482,10 @@ export function createPickMap(el: HTMLElement, onPick: (lat: number, lon: number
       layer.clearLayers();
       for (const s of shapes) {
         if (s.kind === 'line') L.polyline(s.pts, { color: s.color, weight: s.weight, dashArray: s.dash, opacity: s.opacity ?? 1, lineCap: 'round', interactive: false }).addTo(layer);
+        else if (s.kind === 'route') addRoute(layer, s.pts);
+        else if (s.kind === 'gate') addGateLine(layer, s.a, s.b, s.which);
+        else if (s.kind === 'pin') addPin(layer, s.at, s.which, s.text);
+        else if (s.kind === 'sector') addSector(layer, s.at, s.text);
         else if (s.kind === 'dot') L.circleMarker(s.at, { radius: s.r, color: '#0d0e10', weight: 2, fillColor: s.color, fillOpacity: 1, interactive: false }).addTo(layer);
         else {
           const span = document.createElement('span');
@@ -441,7 +496,7 @@ export function createPickMap(el: HTMLElement, onPick: (lat: number, lon: number
       if (fit && fit.length) {
         map.invalidateSize({ pan: false });
         if (fit.length === 1) map.setView(fit[0]!, 17, { animate: false });
-        else map.fitBounds(L.latLngBounds(fit), { padding: [32, 32], maxZoom: 18, animate: false });
+        else map.fitBounds(L.latLngBounds(fit), { paddingTopLeft: [32, 32 + PIN_TOP_PX], paddingBottomRight: [32, 32], maxZoom: 18, animate: false });
       }
     },
     center(at, zoom) {

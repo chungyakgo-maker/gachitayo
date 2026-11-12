@@ -60,27 +60,24 @@ const SOURCE: Record<Course['source'], string> = { auto: '첫 주행으로 자�
 export function courseShapes(c: Course, pending: LatLon | null): { shapes: MapShape[]; fit: Array<[number, number]> } {
   const shapes: MapShape[] = [];
   const fit: Array<[number, number]> = [];
+  // 사용자 요청 시안 2: 빨간 선 + 빛 번짐, 출발 파랑 핀 · 도착 빨강 핀 + 큰 글자, 구간 경계 큰 노랑
   if (c.centerline && c.centerline.length >= 2) {
-    const pts = c.kind === 'loop' ? [...c.centerline, c.centerline[0]!] : c.centerline;
-    shapes.push({ kind: 'line', pts, color: '#eceef0', weight: 9, opacity: 0.2 });
-    shapes.push({ kind: 'line', pts, color: '#c9cdd2', weight: 1.5 });
+    shapes.push({ kind: 'route', pts: c.kind === 'loop' ? [...c.centerline, c.centerline[0]!] : c.centerline });
     fit.push(...c.centerline);
   }
-  const gate = (g: Course['startGate'], text: string, dash?: string) => {
+  const pins: MapShape[] = [];
+  const gate = (g: Course['startGate'], which: 'start' | 'finish', text: string) => {
     const s = gateSegment(g, c.origin);
     const a = fromLocal(c.origin, s.ax, s.ay);
     const b = fromLocal(c.origin, s.bx, s.by);
-    shapes.push({ kind: 'line', pts: [[a.lat, a.lon], [b.lat, b.lon]], color: '#aacae6', weight: 4, dash });
-    const t = fromLocal(c.origin, s.cx - s.dx * 20, s.cy - s.dy * 20);
-    shapes.push({ kind: 'label', at: [t.lat, t.lon], text });
+    shapes.push({ kind: 'gate', a: [a.lat, a.lon], b: [b.lat, b.lon], which });
+    pins.push({ kind: 'pin', at: [g.lat, g.lon], which, text });
     fit.push([g.lat, g.lon]);
   };
-  gate(c.startGate, '출발');
-  if (c.kind === 'point_to_point') gate(c.finishGate, '도착', '6 4');
-  for (const m of sectorMarks(c)) {
-    shapes.push({ kind: 'dot', at: [m.at.lat, m.at.lon], color: '#ffb224', r: 5 });
-    shapes.push({ kind: 'label', at: [m.at.lat, m.at.lon], text: m.label });
-  }
+  gate(c.startGate, 'start', '출발');
+  if (c.kind === 'point_to_point') gate(c.finishGate, 'finish', '도착');
+  for (const m of sectorMarks(c)) shapes.push({ kind: 'sector', at: [m.at.lat, m.at.lon], text: m.label });
+  shapes.push(...pins);
   if (pending) shapes.push({ kind: 'dot', at: [pending.lat, pending.lon], color: '#aacae6', r: 8 });
   return { shapes, fit };
 }

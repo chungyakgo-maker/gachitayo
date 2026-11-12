@@ -732,6 +732,54 @@ html.app-h .modal-backdrop {
   white-space: nowrap;
 }
 
+.map-label.big {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 20px;
+  letter-spacing: -0.2px;
+  /* 검은 테두리 (코스 지도 시안 2) */
+  text-shadow:
+    2px 0 0 #0b0c0e,
+    -2px 0 0 #0b0c0e,
+    0 2px 0 #0b0c0e,
+    0 -2px 0 #0b0c0e,
+    1.5px 1.5px 0 #0b0c0e,
+    -1.5px -1.5px 0 #0b0c0e,
+    1.5px -1.5px 0 #0b0c0e,
+    -1.5px 1.5px 0 #0b0c0e,
+    0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+.map-label.big.map-sector {
+  font-size: 15px;
+  color: #ffb224;
+}
+
+.map-pin {
+  overflow: visible;
+}
+
+.map-pin svg {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+
+.map-pin .pin-label {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.map-pin.start .pin-label {
+  color: #4c95ff;
+}
+
+.map-pin.finish .pin-label {
+  color: #ff5148;
+}
+
 .map-label.me {
   color: var(--fg);
   font-size: 12px;

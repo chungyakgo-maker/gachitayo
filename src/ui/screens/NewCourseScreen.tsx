@@ -22,13 +22,16 @@ export function NewCourseScreen() {
 
   const shapes = useMemo(() => {
     const s: MapShape[] = [];
+    // 출발선·도착선 자리는 핀(출발 파랑 · 도착 빨강, 코스 지도와 같게), 진행 방향 점은 작은 흰 점
     picks.forEach((p, i) => {
-      s.push({ kind: 'dot', at: [p.lat, p.lon], color: i % 2 === 0 ? '#aacae6' : '#eceef0', r: i % 2 === 0 ? 8 : 5 });
       if (i % 2 === 1) {
         const a = picks[i - 1]!;
-        s.push({ kind: 'line', pts: [[a.lat, a.lon], [p.lat, p.lon]], color: '#aacae6', weight: 3, dash: '6 4' });
-        s.push({ kind: 'label', at: [a.lat, a.lon], text: i === 1 ? '출발' : '도착' });
+        s.push({ kind: 'line', pts: [[a.lat, a.lon], [p.lat, p.lon]], color: '#eceef0', weight: 3, dash: '6 4' });
+        s.push({ kind: 'dot', at: [p.lat, p.lon], color: '#eceef0', r: 5 });
       }
+    });
+    picks.forEach((p, i) => {
+      if (i % 2 === 0) s.push({ kind: 'pin', at: [p.lat, p.lon], which: i === 0 ? 'start' : 'finish', text: i === 0 ? '출발' : '도착' });
     });
     if (fix) s.push({ kind: 'dot', at: [fix.lat, fix.lon], color: '#eceef0', r: 5 });
     return s;

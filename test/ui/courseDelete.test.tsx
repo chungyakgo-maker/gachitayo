@@ -77,6 +77,18 @@ describe('내비로 가기 (사용자 요청)', () => {
   });
 });
 
+describe('코스 상세 지도 모양 (사용자 요청 시안 2)', () => {
+  it('코스 선, 출발선·도착선, 구간 경계, 핀(맨 위에 그리게 마지막)', async () => {
+    const { courseShapes } = await import('../../src/ui/screens/CourseDetailScreen');
+    const { shapes } = courseShapes(course, null);
+    expect(shapes.map((x) => x.kind)).toEqual(['route', 'gate', 'gate', 'pin', 'pin']);
+    expect(shapes.filter((x) => x.kind === 'pin').map((x) => (x.kind === 'pin' ? [x.which, x.text] : null))).toEqual([
+      ['start', '출발'],
+      ['finish', '도착'],
+    ]);
+  });
+});
+
 describe('GPS 아이콘 (메인 지도)', () => {
   it('누를 수 있으면 "내 위치로" 버튼, 색은 GPS 상태 그대로 (약하면 빨강)', () => {
     const go = vi.fn();

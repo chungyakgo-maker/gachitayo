@@ -77,6 +77,23 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     m.destroy();
   });
 
+  it('코스 그리기 시안 2 (사용자 요청): 빨간 선 + 빛 번짐, 출발 파랑 핀 · 도착 빨강 핀 + 큰 글자, 출발선 파랑', async () => {
+    const { createMainMap, COURSE_STYLE } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    m.update(course, null);
+    expect(el.querySelectorAll(`path[stroke="${COURSE_STYLE.glow}"].course-glow`).length).toBe(2);
+    expect(el.querySelector(`path[stroke="${COURSE_STYLE.route}"].course-line`)).not.toBeNull();
+    expect(el.querySelector(`path[stroke="${COURSE_STYLE.start}"]`)).not.toBeNull();
+    const start = el.querySelector('.map-pin.start')!;
+    const finish = el.querySelector('.map-pin.finish')!;
+    expect(start.querySelector('path')!.getAttribute('fill')).toBe(COURSE_STYLE.start);
+    expect(finish.querySelector('path')!.getAttribute('fill')).toBe(COURSE_STYLE.finish);
+    expect(start.querySelector('.map-label.big')!.textContent).toBe('출발');
+    expect(finish.querySelector('.map-label.big')!.textContent).toBe('도착');
+    m.destroy();
+  });
+
   it('코스가 없으면 내 위치를 따라가고, 사용자가 지도를 옮기면 멈췄다가 "내 위치"를 누르면 다시 따라간다', async () => {
     const { createMainMap } = await import('../../src/ui/map/leafletMap');
     const el = host();
