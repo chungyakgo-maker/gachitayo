@@ -82,6 +82,39 @@ describe('주행 중 계산 묶음 (사양서 5.3)', () => {
     expect(snaps.at(-1)!.frame).toBe('course');
     expect(snaps.some((x) => x.state?.sectorDeltas[0] != null)).toBe(true);
   });
+
+  it('코스 주행의 지나온 길 (사용자 요청): 랩이 시작될 때마다 pathFrom이 그 자리로 옮겨 "이번 랩에서 지나온 길"만 남는다', () => {
+    const truth = simulateDrive(oval, scaled(0.97));
+    const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed: 95 });
+    // path는 계속 자라는 같은 배열이라 그때그때 이번 랩 길을 복사해 둔다
+    const seen: Array<{ lapNo: number; s: number | null; lap: Array<readonly [number, number]>; from: number }> = [];
+    const p = new LivePipeline({ course: first.course!, ref: null });
+    let i = 0;
+    let j = 0;
+    for (let t = 0; t <= truth.t.at(-1)! * 1000; t += 100) {
+      while (i < s.gps.length && s.gps[i]!.tRecv <= t) p.pushGps(s.gps[i++]!);
+      while (j < s.motion.length && s.motion[j]!.t <= t) p.pushMotion(s.motion[j++]!);
+      const x = p.tick(t);
+      if (x.state) seen.push({ lapNo: x.state.lapNo, s: x.state.s, lap: x.path.slice(x.pathFrom), from: x.pathFrom });
+    }
+    // 랩 번호가 바뀐 바로 뒤: 이번 랩 길은 몇 점뿐
+    let checked = 0;
+    for (let k = 1; k < seen.length; k++) {
+      if (seen[k - 1]!.lapNo === seen[k]!.lapNo) continue;
+      expect(seen[k]!.lap.length).toBeGreaterThanOrEqual(1);
+      expect(seen[k]!.lap.length).toBeLessThan(15);
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(2);
+    // 랩 중간: 이번 랩 길 길이 ≈ 랩 시작 뒤 달린 코스 거리 (한 바퀴 전체가 아님)
+    const mid = seen.find((x) => x.lapNo >= 2 && x.s !== null && x.s > 300 && x.s < 400)!;
+    let len = 0;
+    for (let k = 1; k < mid.lap.length; k++) len += Math.hypot(mid.lap[k]![0] - mid.lap[k - 1]![0], mid.lap[k]![1] - mid.lap[k - 1]![1]);
+    expect(len).toBeGreaterThan(mid.s! - 30);
+    expect(len).toBeLessThan(mid.s! + 30);
+    // 출발선 전에는 처음부터
+    expect(seen[0]!.from).toBe(0);
+  });
 });
 
 describe('고스트 위치 (사양서 7.11, 10.1)', () => {

@@ -52,6 +52,8 @@ export interface LiveSnapshot {
   ghost: { x: number; y: number; s: number } | null;
   /** 지나온 경로 (같은 좌표계, 3 m 간격) */
   path: ReadonlyArray<readonly [number, number]>;
+  /** 이번 랩(또는 랩 밖 구간)이 시작된 path 위치. 코스 주행 지도는 여기부터 그린다 (사용자 요청: 코스 주행도 지나온 길) */
+  pathFrom: number;
 }
 
 const STEP_MS = 20;
@@ -86,6 +88,9 @@ export class LivePipeline {
   private state: LiveState | null = null;
   private pos: LiveSnapshot['pos'] = null;
   private path: Array<[number, number]> = [];
+  private pathFrom = 0;
+  /** 랩 경계를 알아보려고: 직전 랩 번호·랩 안인지·랩 경과 시간 */
+  private lapMark: { no: number; inLap: boolean; elapsed: number | null } | null = null;
 
   constructor(opts: LivePipelineOpts) {
     this.motion = new LiveMotion50(opts.axisSigns);
@@ -101,6 +106,8 @@ export class LivePipeline {
     this.ref = ref;
     this.engine = new LiveEngine(this.geom, ref);
     this.state = null;
+    this.lapMark = null;
+    this.pathFrom = 0;
     const newOrigin = this.displayOrigin();
     if (oldOrigin && newOrigin && !sameOrigin(oldOrigin, newOrigin)) {
       this.path = this.path.map(([x, y]) => {
@@ -184,6 +191,7 @@ export class LivePipeline {
       calibration: { state: this.cal.state, stillProgress, signsConfirmed: cal?.signsConfirmed ?? false, motionActive, progress: this.cal.progress() },
       ghost: this.ghost(),
       path: this.path,
+      pathFrom: this.pathFrom,
     };
   }
 
@@ -229,11 +237,28 @@ export class LivePipeline {
       gEstimated: estimated,
     });
     this.pos = { x: d.x, y: d.y, psi: p.psi };
+    this.markLap(this.state);
     const last = this.path[this.path.length - 1];
     if (!last || Math.hypot(d.x - last[0], d.y - last[1]) >= PATH_STEP_M) {
       this.path.push([d.x, d.y]);
-      if (this.path.length > PATH_MAX) this.path.splice(0, this.path.length - PATH_MAX);
+      if (this.path.length > PATH_MAX) {
+        const cut = this.path.length - PATH_MAX;
+        this.path.splice(0, cut);
+        this.pathFrom = Math.max(0, this.pathFrom - cut);
+      }
     }
+  }
+
+  /** 출발선(랩 시작)이나 도착선(편도 끝)을 지나면 지나온 길을 그 자리부터 다시 (마지막 점은 남겨 선이 이어지게) */
+  private markLap(st: LiveState): void {
+    if (!this.geom) return;
+    const now = { no: st.lapNo, inLap: st.lapElapsedMs !== null, elapsed: st.lapElapsedMs };
+    const prev = this.lapMark;
+    this.lapMark = now;
+    if (!prev) return;
+    // 같은 번호로 출발선을 다시 지나도(편도 출발 뒤 되돌아와 다시 출발) 경과 시간이 줄어드니 새 랩
+    const restarted = now.inLap && prev.inLap && now.elapsed !== null && prev.elapsed !== null && now.elapsed < prev.elapsed;
+    if (now.no !== prev.no || now.inLap !== prev.inLap || restarted) this.pathFrom = Math.max(0, this.path.length - 1);
   }
 
   private ghost(): LiveSnapshot['ghost'] {

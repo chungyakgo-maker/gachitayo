@@ -36,7 +36,7 @@ export interface OverlayFrame {
   /** 코스 원점 기준 평면 m. psi는 x축에서 반시계 라디안 */
   me: { x: number; y: number; psi?: number } | null;
   ghost: { x: number; y: number } | null;
-  /** 지나온 경로 (첫 주행) */
+  /** 지나온 경로 (첫 주행은 처음부터, 코스 주행은 이번 랩만) */
   path?: ReadonlyArray<XY>;
   /** 앞 친구 간격 (M9). 앞 친구를 고르지 않았으면 없음 */
   gap?: GapInfo | null;
@@ -75,7 +75,8 @@ export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, has
     sectorDeltas: st?.sectorDeltas ?? [null, null, null],
     me: snap?.pos ?? null,
     ghost: hasCourse && hasRef && snap?.ghost ? { x: snap.ghost.x, y: snap.ghost.y } : null,
-    path: hasCourse ? undefined : snap?.path,
+    // 코스가 있으면 이번 랩에서 지나온 길만 (한 바퀴 돌면 코스 전체가 빨개지지 않게)
+    path: snap ? (hasCourse ? snap.path.slice(snap.pathFrom) : snap.path) : undefined,
   };
 }
 

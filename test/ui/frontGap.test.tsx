@@ -23,6 +23,7 @@ function snap(tSec: number): LiveSnapshot {
     calibration: { state: 'calibrated', stillProgress: 1, signsConfirmed: true, motionActive: true },
     ghost: null,
     path: [],
+    pathFrom: 0,
   };
 }
 const follow = (upTo: number): FollowState => ({

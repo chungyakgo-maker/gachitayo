@@ -64,7 +64,7 @@ describe('오버레이 상태 (시각 t의 주행 상태, 사양서 13.1)', () =
     expect(widgetValue('lapno', frame({ lapNo: 0 }))).toMatchObject({ value: '—', unit: '' });
   });
 
-  it('실시간 스냅샷에서 만든다: 고스트는 코스와 비교 랩이 모두 있을 때만, 경로는 첫 주행에만', () => {
+  it('실시간 스냅샷에서 만든다: 고스트는 코스와 비교 랩이 모두 있을 때만, 경로는 코스가 있으면 이번 랩만 (사용자 요청)', () => {
     const snap = {
       t: 5,
       state: null,
@@ -75,11 +75,12 @@ describe('오버레이 상태 (시각 t의 주행 상태, 사양서 13.1)', () =
       gps: { ready: true, hAcc: 4, ageMs: 100 },
       calibration: { state: 'calibrated' as const, stillProgress: 1, signsConfirmed: true, motionActive: true },
       ghost: { x: 3, y: 4, s: 10 },
-      path: [[0, 0] as const],
+      path: [[0, 0] as const, [1, 0] as const, [2, 0] as const],
+      pathFrom: 1,
     };
-    expect(frameFromLive(snap, true, true)).toMatchObject({ hasState: false, speedKmh: 0, ghost: { x: 3, y: 4 }, path: undefined });
+    expect(frameFromLive(snap, true, true)).toMatchObject({ hasState: false, speedKmh: 0, ghost: { x: 3, y: 4 }, path: [[1, 0], [2, 0]] });
     expect(frameFromLive(snap, true, false).ghost).toBeNull();
-    expect(frameFromLive(snap, false, false)).toMatchObject({ ghost: null, path: [[0, 0]] });
+    expect(frameFromLive(snap, false, false)).toMatchObject({ ghost: null, path: [[0, 0], [1, 0], [2, 0]] });
     expect(frameFromLive(null, true, true)).toMatchObject({ hasState: false, speedKmh: null, me: null });
   });
 });

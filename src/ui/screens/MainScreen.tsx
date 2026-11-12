@@ -97,11 +97,8 @@ export function MainScreen() {
                 <span className="dim">· {fix ? '근처 코스 없음' : '위치 확인 중'}</span>
               </span>
             </div>
-            {permission === 'denied' ? (
-              <span className="sub">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>
-            ) : permission !== 'granted' && !fix ? (
-              <span className="sub">주행 시작을 누르면 위치 권한을 물어봐요</span>
-            ) : null}
+            {/* "주행 시작을 누르면 위치 권한을 물어봐요" 안내는 뺐다 (사용자 요청). 권한을 끈 경우만 알린다 */}
+            {permission === 'denied' && <span className="sub">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>}
           </div>
         )}
         {acc.status === 'none' && acc.lost && (

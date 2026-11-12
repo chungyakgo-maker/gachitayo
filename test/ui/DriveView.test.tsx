@@ -60,6 +60,7 @@ function snap(st: LiveState | null): LiveSnapshot {
     calibration: { state: 'calibrated', stillProgress: 1, signsConfirmed: true, motionActive: true },
     ghost: { x: 15, y: 25, s: 105 },
     path: [],
+    pathFrom: 0,
   };
 }
 const props = (p: Partial<DriveViewProps> = {}): DriveViewProps => ({
