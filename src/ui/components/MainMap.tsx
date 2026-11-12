@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
-import type { FriendMarker, MainMapController, MapFix } from '../map/leafletMap';
+import type { FriendMarker, MainMapApi, MapFix } from '../map/mapTypes';
+import { lineMapConfig } from '../map/lineMapSupport';
 import { GpsIcon, type GpsState } from './GpsIcon';
 import { CourseMap } from './CourseMap';
 
@@ -29,20 +30,33 @@ const insetVars = (t: number, b: number) => ({ '--inset-t': `${t}px`, '--inset-b
 
 export function MainMap({ course, me, label, friends = [], insetTop = 0, insetBottom = 0, gps, gpsAcc, children }: MainMapProps) {
   const el = useRef<HTMLDivElement>(null);
-  const ctl = useRef<MainMapController | null>(null);
+  const ctl = useRef<MainMapApi | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
   const [tiles, setTiles] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    import('../map/leafletMap')
-      .then(({ createMainMap }) => {
-        if (!alive || !el.current) return;
-        ctl.current = createMainMap(el.current, setTiles);
-        ctl.current.setOnline(isOnline());
-        setState('ready');
-      })
-      .catch(() => alive && setState('failed'));
+    // 선 지도(사양서 8.9)를 쓸 수 있으면 그것으로, 아니면 사진 지도로
+    void (async () => {
+      const cfg = await lineMapConfig();
+      if (!alive || !el.current) return;
+      if (cfg) {
+        try {
+          const { createLineMainMap } = await import('../map/lineMainMap');
+          if (!alive || !el.current) return;
+          ctl.current = createLineMainMap(el.current, cfg, setTiles);
+          setState('ready');
+          return;
+        } catch {
+          // 선 지도를 못 띄우면 사진 지도로
+        }
+      }
+      const { createMainMap } = await import('../map/leafletMap');
+      if (!alive || !el.current) return;
+      ctl.current = createMainMap(el.current, setTiles);
+      ctl.current.setOnline(isOnline());
+      setState('ready');
+    })().catch(() => alive && setState('failed'));
     const on = () => ctl.current?.setOnline(true);
     const off = () => ctl.current?.setOnline(false);
     window.addEventListener('online', on);

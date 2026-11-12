@@ -1,5 +1,7 @@
 // 코스 편집 지도 모양(MapShape, [위도, 경도]) → 선 지도(MapLibre)에 넣을 GeoJSON ([경도, 위도])과 글자·핀 목록.
 // 지도 라이브러리를 가져오지 않는 순수 변환이라 jsdom 테스트로 확인한다.
+import { gateSegment } from '../../engine/course/geometry';
+import { fromLocal } from '../../engine/geo';
 import type { GateWhich, MapShape } from './courseStyle';
 
 type LngLat = [number, number];
@@ -78,4 +80,66 @@ export function lineShapes(shapes: readonly MapShape[]): LineShapes {
     }
   }
   return { routes: fc(routes), gates: fc(gates), lines: fc(lines), dashed: fc(dashed), dots: fc(dots), sectorDots: fc(sectorDots), blockers: fc(blockers), ...out };
+}
+
+// ── 메인·주행 지도용 순수 도우미 ──
+
+/** 사진 지도(Leaflet, 256px 타일) 확대 단계 → 선 지도(MapLibre, 512px 타일)에서 같은 넓이의 단계 */
+export const lineZoom = (leafletZoom: number): number => leafletZoom - 1;
+
+/** 코스 방향(동쪽 0, 반시계, 라디안) → 나침반 방위(북 0, 시계, °) */
+export function headingToBearing(psi: number): number {
+  const b = 90 - (psi * 180) / Math.PI;
+  return ((b % 360) + 360) % 360;
+}
+
+/** 위치 오차 원 (반지름 m) → 다각형 [경도, 위도] (n개 점, 닫힘) */
+export function circlePolygon(lat: number, lon: number, radiusM: number, n = 48): LngLat[] {
+  const out: LngLat[] = [];
+  const dLat = radiusM / 111_320;
+  const dLon = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
+  for (let i = 0; i <= n; i++) {
+    const a = (2 * Math.PI * i) / n;
+    out.push([lon + dLon * Math.cos(a), lat + dLat * Math.sin(a)]);
+  }
+  return out;
+}
+
+/** 메인 지도의 코스 모양: 코스 선, 출발선(편도면 도착선), 핀 (구간 경계는 없음) */
+export function mainCourseShapes(course: import('../../types/course').Course): MapShape[] {
+  const shapes: MapShape[] = [];
+  const line = course.centerline ?? [];
+  if (line.length >= 2) shapes.push({ kind: 'route', pts: course.kind === 'loop' ? [...line, line[0]!] : line });
+  const pins: MapShape[] = [];
+  const gate = (g: import('../../types/course').Gate, which: GateWhich, text: string) => {
+    const s = gateSegment(g, course.origin);
+    const a = fromLocal(course.origin, s.ax, s.ay);
+    const b = fromLocal(course.origin, s.bx, s.by);
+    shapes.push({ kind: 'gate', a: [a.lat, a.lon], b: [b.lat, b.lon], which });
+    pins.push({ kind: 'pin', at: [g.lat, g.lon], which, text });
+  };
+  gate(course.startGate, 'start', '출발');
+  if (course.kind === 'point_to_point') gate(course.finishGate, 'finish', '도착');
+  return [...shapes, ...pins];
+}
+
+/** 분석 지도: 랩 선 → 조각들. 점마다 색이 있으면 점 i-1→i 구간을 점 i의 속도 색으로, 같은 색이 이어지면 한 조각으로 묶는다
+ *  (조각이 짧으면 넓게 볼 때 지도가 지우므로 묶어서 길게) */
+export function lapSegments(lap: import('./mapTypes').AnalysisLapLine | null, fallback: string): Feature[] {
+  if (!lap || lap.pts.length < 2) return [];
+  if (!lap.colors) return [line(lap.pts, { color: lap.colorAll ?? fallback })];
+  const out: Feature[] = [];
+  let run: Array<[number, number]> = [lap.pts[0]!];
+  let color = lap.colors[1]!;
+  for (let i = 1; i < lap.pts.length; i++) {
+    const c = lap.colors[i]!;
+    if (c !== color) {
+      out.push(line(run, { color }));
+      run = [lap.pts[i - 1]!];
+      color = c;
+    }
+    run.push(lap.pts[i]!);
+  }
+  out.push(line(run, { color }));
+  return out;
 }

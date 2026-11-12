@@ -7,7 +7,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { MapViewMode } from '../../app/settings';
 import { fromLocal, type LatLon } from '../../engine/geo';
-import type { ReplayMapController } from '../map/leafletMap';
+import type { ReplayMapController } from '../map/mapTypes';
+import { lineMapConfig } from '../map/lineMapSupport';
+import { headingToBearing } from '../map/lineShapes';
 import { drawMiniMap, followView, type MapModel, type MapView, type MiniMapOpts } from '../overlay/minimap';
 import type { OverlayFrame } from '../overlay/frame';
 import type { OverlayTheme } from '../overlay/theme';
@@ -43,6 +45,8 @@ export function LiveMap(props: LiveMapProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const ctl = useRef<ReplayMapController | null>(null);
   const [state, setState] = useState<'off' | 'loading' | 'ready' | 'failed'>(tiles ? 'loading' : 'off');
+  // 선 지도는 스스로 돈다 (지도판을 CSS로 돌리지 않아 지명이 거꾸로 서지 않는다)
+  const [native, setNative] = useState(false);
 
   // 받은 위치들 (그릴 때 이어 준다)
   const lerp = useRef({ me: new PoseLerp(), friend: new PoseLerp(), ghost: new PoseLerp() });
@@ -59,14 +63,28 @@ export function LiveMap(props: LiveMapProps) {
   useEffect(() => {
     if (!tiles) return;
     let alive = true;
-    import('../map/leafletMap')
-      .then(({ createReplayMap }) => {
-        if (!alive || !host.current) return;
-        ctl.current = createReplayMap(host.current);
-        ctl.current.setOnline(isOnline());
-        setState('ready');
-      })
-      .catch(() => alive && setState('failed'));
+    // 선 지도(사양서 8.9)를 쓸 수 있으면 그것으로, 아니면 사진 지도로
+    void (async () => {
+      const cfg = await lineMapConfig();
+      if (!alive || !host.current) return;
+      if (cfg) {
+        try {
+          const { createLineReplayMap } = await import('../map/lineReplayMap');
+          if (!alive || !host.current) return;
+          ctl.current = createLineReplayMap(host.current, cfg);
+          setNative(true);
+          setState('ready');
+          return;
+        } catch {
+          // 선 지도를 못 띄우면 사진 지도로
+        }
+      }
+      const { createReplayMap } = await import('../map/leafletMap');
+      if (!alive || !host.current) return;
+      ctl.current = createReplayMap(host.current);
+      ctl.current.setOnline(isOnline());
+      setState('ready');
+    })().catch(() => alive && setState('failed'));
     return () => {
       alive = false;
       ctl.current?.destroy();
@@ -99,7 +117,8 @@ export function LiveMap(props: LiveMapProps) {
   const H = box.height;
   const vc = insetTop + (H - insetTop - insetBottom) / 2;
   const D = Math.ceil(2 * Math.hypot(W / 2, Math.max(vc, H - vc))) + 8;
-  const rotating = view === 'heading';
+  // 사진 지도만 지도판을 크게 만들어 CSS로 돌린다
+  const rotating = view === 'heading' && !native;
 
   /** 한 프레임 그리기 */
   const drawFrame = (now: number) => {
@@ -121,7 +140,25 @@ export function LiveMap(props: LiveMapProps) {
 
     let mapView: MapView | undefined;
     const k = ctl.current;
-    if (p.tiles && k && state === 'ready' && p.origin) {
+    if (p.tiles && k && state === 'ready' && p.origin && k.nativeRotate && k.trackHeading) {
+      // 선 지도: 지도가 스스로 돌고, 내 위치는 가려지지 않은 영역 가운데
+      const turn = p.view === 'heading' && sm.head !== null;
+      if (host.current) host.current.style.transform = '';
+      if (p.view !== 'fit' && me) {
+        const ll = fromLocal(p.origin, me.x, me.y);
+        if (turn) k.trackHeading(ll.lat, ll.lon, headingToBearing(sm.head!), ins);
+        else k.track(ll.lat, ll.lon, ins);
+      }
+      const origin = p.origin;
+      mapView = {
+        rot: turn ? Math.PI / 2 - sm.head! : 0,
+        P: (x, y) => {
+          const ll = fromLocal(origin, x, y);
+          const q = k.project(ll.lat, ll.lon);
+          return [q.x, q.y];
+        },
+      };
+    } else if (p.tiles && k && state === 'ready' && p.origin) {
       const turn = p.view === 'heading' && sm.head !== null;
       const rotDeg = turn ? -(90 - (sm.head! * 180) / Math.PI) : 0;
       if (host.current) host.current.style.transform = turn ? `rotate(${rotDeg}deg)` : '';

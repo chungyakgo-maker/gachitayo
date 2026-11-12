@@ -7,11 +7,13 @@ import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 import { COURSE_STYLE, PIN_TOP_PX, pinElement, sectorLabelElement, type GateWhich, type PickMapController } from './courseStyle';
+import { FOLLOW_ZOOM, type AnalysisMapController, type FriendMarker, type MainMapApi, type MapFix, type ReplayMapController } from './mapTypes';
 
 export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 export const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 // ── 코스 그리기 (사용자 요청 시안 2): 색·핀은 courseStyle.ts (선 지도와 같이 쓴다) ──
 export { COURSE_STYLE, PIN_TOP_PX, type GateWhich, type MapShape, type PickMapController } from './courseStyle';
+export { FOLLOW_ZOOM, type AnalysisLapLine, type AnalysisMapController, type FriendMarker, type MainMapApi, type MapFix, type ReplayMapController } from './mapTypes';
 
 /** 빨간 코스 선: 넓고 옅은 두 줄(빛 번짐) + 진한 선 + 가운데 밝은 줄 */
 export function addRoute(layer: L.LayerGroup, pts: L.LatLngExpression[]): void {
@@ -42,37 +44,11 @@ export function addSector(layer: L.LayerGroup, at: L.LatLngExpression, text: str
 /** 타일이 이만큼 연달아 실패하면 통신이 안 되는 것으로 보고 타일 없이 그린다 */
 const TILE_FAILS_OFFLINE = 6;
 
-export interface MapFix {
-  lat: number;
-  lon: number;
-  hAcc: number;
-}
-
-export interface FriendMarker {
-  userId: string;
-  nickname: string;
-  lat: number;
-  lon: number;
-  /** 몇 ms 전 위치인지 (30초가 넘으면 흐리게) */
-  ageMs: number;
-}
-
-export interface MainMapController {
-  update(course: Course | null, me: MapFix | null): void;
-  setOnline(online: boolean): void;
-  /** "내 위치" 버튼: 내 위치로 옮기고 다시 따라간다 */
-  locate(me: MapFix): void;
-  /** 위치 공유 중인 친구 (점과 닉네임) */
-  setFriends(list: FriendMarker[]): void;
-  /** 친구들(과 나)이 다 보이게 */
-  fitFriends(me: MapFix | null): void;
-  /** 지도 위에 얹은 칸이 가리는 높이 (px). 내 위치·맞추기는 가려지지 않은 영역 기준 (사용자 요청) */
-  setInsets(top: number, bottom: number): void;
+export interface MainMapController extends MainMapApi {
   /** 타일을 보여주는 중인지 (시험용) */
   tilesShown(): boolean;
   /** Leaflet 지도 (시험용) */
   readonly map: L.Map;
-  destroy(): void;
 }
 
 const ACCENT = '#aacae6';
@@ -239,28 +215,6 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
 // 운전 중이 아니라서 타일을 쓴다 (주행 중 지도 모드는 사양서 8.4대로 타일 없이). 지도는 바탕만 그리고,
 // 코스·고스트·내 위치는 오버레이 그리기 함수(캔버스)가 이 지도의 좌표 변환으로 그 위에 그린다.
 
-export interface ReplayMapController {
-  /** 점들이 가려지지 않은 영역을 꽉 채우게 */
-  fit(points: Array<[number, number]>, inset: { top: number; bottom: number }): void;
-  /** 내 위치를 가려지지 않은 영역의 가운데에, 가깝게 */
-  follow(lat: number, lon: number, inset: { top: number; bottom: number }): void;
-  /** 지도 한가운데에 놓기 (진행 방향 위 보기: 지도판을 크게 만들어 돌리므로 가운데 = 나) */
-  centerOn(lat: number, lon: number): void;
-  /**
-   * 매 프레임 따라가기 (사용자 요청 "지도가 뚝뚝 끊긴다"): 다시 맞추지 않고 지도판을 그만큼만 밀어 가볍다.
-   * 확대 단계가 다르거나 크게 떨어지면 한 번 맞춘다
-   */
-  track(lat: number, lon: number, inset: { top: number; bottom: number }): void;
-  /** 지도 상자 크기가 바뀌었을 때 */
-  resize(): void;
-  /** 위경도 → 지도 안의 화면 좌표 (px) */
-  project(lat: number, lon: number): { x: number; y: number };
-  setOnline(online: boolean): void;
-  destroy(): void;
-}
-
-export const FOLLOW_ZOOM = 17;
-
 export function createReplayMap(el: HTMLElement): ReplayMapController {
   // 재생 화면은 두 번 탭으로 모드를 바꾸므로 지도 조작은 모두 끈다.
   // 지도 출처는 지도판이 돌아가도 바로 보이게 바깥(LiveMap)에서 글자로 쓴다
@@ -338,20 +292,6 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
 }
 
 // ── 분석 지도 (사양서 8.6): 랩 A는 속도로 색칠, 랩 B는 가는 회색 선, 고른 지점 표시. 누르면 그 위치를 알려 준다 ──
-
-export interface AnalysisLapLine {
-  pts: Array<[number, number]>;
-  /** 점마다 색 (속도 색칠). 없으면 colorAll */
-  colors?: string[];
-  colorAll?: string;
-}
-
-export interface AnalysisMapController {
-  setLines(a: AnalysisLapLine | null, b: AnalysisLapLine | null, fit: boolean): void;
-  setMarker(at: [number, number] | null): void;
-  setOnline(online: boolean): void;
-  destroy(): void;
-}
 
 export function createAnalysisMap(el: HTMLElement, onPick: (lat: number, lon: number) => void): AnalysisMapController {
   const map = L.map(el, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, fadeAnimation: false, doubleClickZoom: false });

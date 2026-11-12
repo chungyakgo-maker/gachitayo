@@ -106,3 +106,68 @@ describe('선 지도를 쓸 수 있는지', () => {
     getContext.mockRestore();
   });
 });
+
+describe('메인·주행·분석 선 지도 도우미', () => {
+  it('확대 단계: 사진 지도보다 1 작은 값이 같은 넓이 (512px 타일)', async () => {
+    const { lineZoom } = await import('../../src/ui/map/lineShapes');
+    expect(lineZoom(17)).toBe(16);
+  });
+
+  it('진행 방향 → 나침반 방위 (동쪽 90°, 북쪽 0°, 서쪽 270°)', async () => {
+    const { headingToBearing } = await import('../../src/ui/map/lineShapes');
+    expect(headingToBearing(0)).toBeCloseTo(90, 9);
+    expect(headingToBearing(Math.PI / 2)).toBeCloseTo(0, 9);
+    expect(headingToBearing(Math.PI)).toBeCloseTo(270, 9);
+    expect(headingToBearing(-Math.PI / 2)).toBeCloseTo(180, 9);
+  });
+
+  it('오차 원: 닫힌 다각형, 중심에서 반지름만큼', async () => {
+    const { circlePolygon } = await import('../../src/ui/map/lineShapes');
+    const ring = circlePolygon(37.5, 127, 50, 36);
+    expect(ring).toHaveLength(37);
+    expect(ring[0]).toEqual(ring[36]);
+    for (const [lon, lat] of ring) {
+      const d = Math.hypot((lat - 37.5) * 111_320, (lon - 127) * 111_320 * Math.cos((37.5 * Math.PI) / 180));
+      expect(Math.abs(d - 50)).toBeLessThan(0.01);
+    }
+  });
+
+  it('메인 지도 코스: 선 · 출발선(편도면 도착선) · 핀, 구간 경계는 없음', async () => {
+    const { mainCourseShapes } = await import('../../src/ui/map/lineShapes');
+    const { BUILTIN_COURSES, builtinCourse } = await import('../../src/courses/builtin');
+    const { BUILTIN_POINTS } = await import('../../src/courses/builtinData');
+    const b = BUILTIN_COURSES[0]!;
+    const c = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'x', gateWidthM: 30 });
+    expect(mainCourseShapes(c).map((s) => s.kind)).toEqual(['route', 'gate', 'gate', 'pin', 'pin']);
+    const loop = { ...c, kind: 'loop' as const, finishGate: c.startGate };
+    const shapes = mainCourseShapes(loop);
+    expect(shapes.map((s) => s.kind)).toEqual(['route', 'gate', 'pin']);
+    const route = shapes[0] as { pts: Array<[number, number]> };
+    expect(route.pts[route.pts.length - 1]).toEqual(route.pts[0]); // 랩은 닫는다
+  });
+
+  it('분석 지도: 랩 A는 속도 색 조각(같은 색은 묶음), 색이 없으면 한 줄', async () => {
+    const { lapSegments } = await import('../../src/ui/map/lineShapes');
+    const pts: Array<[number, number]> = [
+      [37, 127],
+      [37.001, 127],
+      [37.002, 127.001],
+    ];
+    const segs = lapSegments({ pts, colors: ['#000', '#f00', '#0f0'] }, '#aacae6');
+    expect(segs.map((f) => f.properties.color)).toEqual(['#f00', '#0f0']);
+    expect(segs[0]!.geometry.coordinates).toEqual([
+      [127, 37],
+      [127, 37.001],
+    ]);
+    expect(lapSegments({ pts, colorAll: '#9aa1a9' }, '#aacae6').map((f) => f.properties.color)).toEqual(['#9aa1a9']);
+    // 같은 색이 이어지면 한 조각 (짧은 조각이 넓게 볼 때 사라지지 않게)
+    const four: Array<[number, number]> = [...pts, [37.003, 127.002]];
+    const merged = lapSegments({ pts: four, colors: ['#000', '#f00', '#f00', '#0f0'] }, '#aacae6');
+    expect(merged.map((f) => [f.properties.color, f.geometry.coordinates.length])).toEqual([
+      ['#f00', 3],
+      ['#0f0', 2],
+    ]);
+    expect(merged[1]!.geometry.coordinates[0]).toEqual([127.001, 37.002]); // 이어지게 앞 조각 끝점부터
+    expect(lapSegments(null, '#aacae6')).toEqual([]);
+  });
+});

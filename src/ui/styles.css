@@ -1633,14 +1633,21 @@ html.app-h .modal-backdrop {
   background: #08090a;
 }
 
-.course-map .maplibregl-ctrl.maplibregl-ctrl-attrib {
+/* 선 지도 출처 표시 (모든 지도): 어둡게 */
+.maplibregl-map .maplibregl-ctrl.maplibregl-ctrl-attrib {
   background: rgba(13, 14, 16, 0.75);
   color: var(--fg-faint);
   font-size: 10px;
 }
 
-.course-map .maplibregl-ctrl.maplibregl-ctrl-attrib a {
+.maplibregl-map .maplibregl-ctrl.maplibregl-ctrl-attrib a {
   color: var(--fg-dim);
+}
+
+.main-map .maplibregl-map,
+.analysis-map .maplibregl-map {
+  font-family: var(--sans);
+  background: #08090a;
 }
 
 .course-map .leaflet-container .leaflet-control-attribution {
@@ -2321,5 +2328,10 @@ button.map-gps:active {
 }
 
 .main-map .leaflet-bottom {
+  bottom: var(--inset-b, 0px);
+}
+
+/* 선 지도: 출처 표시를 아래 탭 위로 */
+.main-map .maplibregl-ctrl-bottom-right {
   bottom: var(--inset-b, 0px);
 }
