@@ -1,8 +1,9 @@
 // 기록 탭: 최근 주행 목록 → 분석 (사양서 8.6). 계산 전 기록은 종료 요약에서 계산한다.
 // 기록 지우기 (M10, 사용자 요청): 휴지통 → 확인 창 → 폰과 서버에서 지운다.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRecording } from '../../app/recording';
 import { deleteSessionRecord } from '../../app/sync';
+import { importRawFile } from '../../app/rawTransfer';
 import { Overlay } from '../components/Overlay';
 import type { SessionStatus } from '../../types/session';
 import { Tabbed } from '../components/TabBar';
@@ -23,6 +24,19 @@ export function HistoryScreen() {
   const [ask, setAsk] = useState<{ id: string; when: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<{ text: string; warn?: boolean } | null>(null);
+  const onImport = async (f: File | undefined) => {
+    if (!f) return;
+    setImportMsg({ text: '가져와서 계산하는 중…' });
+    try {
+      const id = await importRawFile(f);
+      setImportMsg(null);
+      window.location.hash = `#/analysis/${id}`;
+    } catch (e) {
+      setImportMsg({ text: e instanceof Error ? e.message : String(e), warn: true });
+    }
+  };
   const remove = async () => {
     if (!ask) return;
     setBusy(true);
@@ -40,8 +54,22 @@ export function HistoryScreen() {
     <Tabbed path="/history">
       <main className="page">
         <header className="page-head">
-          <h1 className="big">기록</h1>
+          <h1 className="big" style={{ flex: 1 }}>
+            기록
+          </h1>
+          <button type="button" className="btn small" onClick={() => fileInput.current?.click()}>
+            원본 파일 가져오기
+          </button>
         </header>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".gz,.json,application/gzip,application/json"
+          hidden
+          aria-label="원본 파일 고르기"
+          onChange={(e) => void onImport(e.target.files?.[0]).finally(() => (e.target.value = ''))}
+        />
+        {importMsg && <div className={`notice${importMsg.warn ? ' warn' : ''}`}>{importMsg.text}</div>}
         {list.length === 0 ? (
           <div className="empty">아직 주행 기록이 없어요.</div>
         ) : (
@@ -60,6 +88,7 @@ export function HistoryScreen() {
                         {sum ? ` · ${sum.lapCount}랩` : ''}
                         {s.endedAt ? ` · ${formatDuration(s.endedAt - s.startedAt)}` : ''}
                         {STATUS[s.status] ? ` · ${STATUS[s.status]}` : ''}
+                        {s.imported ? ' · 가져온 기록' : ''}
                       </span>
                     </span>
                     <span className="right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

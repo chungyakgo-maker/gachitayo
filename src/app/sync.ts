@@ -47,6 +47,8 @@ async function refreshPending(): Promise<void> {
 
 /** 처리한 세션을 올릴 차례에 넣는다 (서버 설정 전이어도 넣어 두면 설정 뒤에 올라간다) */
 export async function enqueueSessionUpload(sessionId: string): Promise<void> {
+  // 다른 기기에서 가져온 기록은 이 기기에만 둔다 (질문 6 결정)
+  if ((await getRepo().get(sessionId))?.imported) return;
   await getQueueRepo().enqueue('session', sessionId, Date.now());
   await refreshPending();
   void kickSync();
@@ -109,7 +111,7 @@ export async function initSync(): Promise<void> {
     const q = getQueueRepo();
     const queued = new Set((await q.all()).map((i) => i.targetId));
     for (const s of await getRepo().list()) {
-      if (s.status === 'processed' && !queued.has(s.id)) await q.enqueue('session', s.id, Date.now());
+      if (s.status === 'processed' && !s.imported && !queued.has(s.id)) await q.enqueue('session', s.id, Date.now());
     }
   } catch {
     // 저장소 오류는 기록 화면에서 따로 알린다

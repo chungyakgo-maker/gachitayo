@@ -3,6 +3,7 @@
 // 그래프는 trace, 지도·지점 정보·G 다이어그램은 처리된 궤적을 쓴다. 넓은 화면은 그래프와 지도를 나란히.
 import { useEffect, useMemo, useState } from 'react';
 import { loadAnalysis, loadProcessedOf, type AnalysisData } from '../../app/analysis';
+import { prepareRawExport } from '../../app/rawTransfer';
 import { getRepo } from '../../app/recording';
 import { loadRaw } from '../../app/sessionProcessing';
 import type { GpsSample } from '../../types/samples';
@@ -302,23 +303,48 @@ export function AnalysisScreen({ sessionId }: { sessionId: string }) {
       )}
 
       {exportOpen && (
-        <ExportSheet hasLap={lapA !== null} compareLabel={labelB} onClose={() => setExportOpen(false)} onExport={(k, r) => exportFile(k, r)} />
+        <ExportSheet sessionId={session.id} hasLap={lapA !== null} compareLabel={labelB} onClose={() => setExportOpen(false)} onExport={(k, r) => exportFile(k, r)} />
       )}
     </main>
   );
 }
 
-function ExportSheet({ hasLap, compareLabel, onClose, onExport }: { hasLap: boolean; compareLabel: string | null; onClose: () => void; onExport: (k: 'csv' | 'laps' | 'gpx', r: 'all' | 'lap') => void }) {
-  const [kind, setKind] = useState<'csv' | 'laps' | 'gpx'>('csv');
+function ExportSheet({
+  sessionId,
+  hasLap,
+  compareLabel,
+  onClose,
+  onExport,
+}: {
+  sessionId: string;
+  hasLap: boolean;
+  compareLabel: string | null;
+  onClose: () => void;
+  onExport: (k: 'csv' | 'laps' | 'gpx', r: 'all' | 'lap') => void;
+}) {
+  const [kind, setKind] = useState<'csv' | 'laps' | 'gpx' | 'raw'>('csv');
   const [range, setRange] = useState<'all' | 'lap'>('all');
+  // 원본 파일은 만드는 데 시간이 걸려(서버에서 받을 수도) 미리 만든다. 공유 창은 탭 직후에만 열린다
+  const [raw, setRaw] = useState<{ file: File | null; error: string | null }>({ file: null, error: null });
+  useEffect(() => {
+    if (kind !== 'raw' || raw.file) return;
+    let alive = true;
+    prepareRawExport(sessionId)
+      .then((file) => alive && setRaw({ file, error: null }))
+      .catch((e: Error) => alive && setRaw({ file: null, error: e.message }));
+    return () => {
+      alive = false;
+    };
+  }, [kind, sessionId, raw.file]);
   return (
     <Sheet title="내보내기" onClose={onClose}>
-      <div className="segmented small" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }} role="group" aria-label="형식">
+      <div className="segmented small" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }} role="group" aria-label="형식">
         {(
           [
             ['csv', 'CSV'],
             ['laps', '랩 요약 CSV'],
             ['gpx', 'GPX'],
+            ['raw', '원본 (PC에서 보기)'],
           ] as const
         ).map(([k, label]) => (
           <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
@@ -339,11 +365,19 @@ function ExportSheet({ hasLap, compareLabel, onClose, onExport }: { hasLap: bool
           <span className="sub">델타(delta_s) 비교 랩: {compareLabel ?? '없음 (빈칸)'}. 영상 오버레이 프로그램(Telemetry Overlay 등)에서 바로 읽어요.</span>
         </>
       )}
+      {kind === 'raw' && (
+        <span className="sub">
+          {raw.error ?? (raw.file ? 'PC의 같이타요 기록 탭에서 "원본 파일 가져오기"로 열면 같은 코스로 계산해서 보여줘요. 가져온 기록은 그 PC에만 저장돼요.' : '원본 파일을 만드는 중…')}
+        </span>
+      )}
       <button
         type="button"
         className="primary-btn"
+        disabled={kind === 'raw' && !raw.file}
         onClick={() => {
-          onExport(kind, range);
+          if (kind === 'raw') {
+            if (raw.file) void shareOrDownload(raw.file);
+          } else onExport(kind, range);
           onClose();
         }}
       >

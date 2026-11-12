@@ -1,6 +1,7 @@
 // 원본 파일 (사양서 6.7): 열 단위 배열 JSON, gzip은 gzip.ts에서.
 // 기기 축 원본을 그대로 담아, 주행 후에 보정과 계산을 다시 할 수 있게 한다.
 import type { GpsSample, RawMotionSample, SessionEvent } from '../types/samples';
+import type { Course } from '../types/course';
 import type { Channels, ChunkRecord, DeviceInfo, SessionRecord } from '../types/session';
 
 export interface RawFileV1 {
@@ -32,6 +33,8 @@ export interface RawFileV1 {
   events: SessionEvent[];
   /** 추가 센서 채널 (사양서 13.2 확장 지점). 1단계에서는 {}. 예전 파일에는 없다 */
   channels?: Channels;
+  /** 이 기록의 코스 (분석 화면에서 내보낼 때만, PC에서 같은 코스로 계산하려고). 서버 원본 파일에는 없다 */
+  course?: Course;
 }
 
 /** 소수 d자리 반올림. 1.005 → 1.01처럼 십진수 기준으로 맞추기 위해 지수 표기를 쓴다. */
