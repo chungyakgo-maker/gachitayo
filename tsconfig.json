@@ -6,5 +6,7 @@
     "jsx": "react-jsx",
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test"],
+  // 보고서 생성은 Node 기능을 써서 따로 검사한다 (tsconfig.report.json)
+  "exclude": ["test/report"]
 }

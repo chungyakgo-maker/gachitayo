@@ -2,12 +2,12 @@
 // 재샘플링 → 거치 보정(세션 전체) → 축 부호 판별·수정 → EKF(기록) → RTS 스무더.
 import { config } from '../config';
 import type { LatLon } from '../geo';
-import { calibrateSession, detectAxisSigns, type CalEvent, type CalSegment } from '../../normalize/mount';
+import { calibrateSession, platformSigns, type CalEvent, type CalSegment } from '../../normalize/mount';
 import { resampleMotion, type AxisSigns } from '../../normalize/resample';
 import type { GpsSample, RawMotionSample } from '../../types/samples';
 import { FusionRunner } from './forward';
 import { prepareGps } from './gpsObs';
-import { filteredTrack, rtsSmooth, type SmoothedTrack } from './smoother';
+import { bridgeGpsOnlyGaps, filteredTrack, rtsSmooth, type SmoothedTrack } from './smoother';
 
 export type { SmoothedTrack };
 
@@ -15,9 +15,10 @@ export interface SessionProcessResult {
   origin: LatLon;
   /** 스무더 결과 (50 Hz) */
   track: SmoothedTrack;
-  /** 필터 결과 (주행 중 실시간과 같은 값) */
+  /** 앞에서 뒤로 한 번만 필터한 결과 (세션 전체 보정을 쓰므로 주행 중 실시간 값과는 다를 수 있다) */
   filtered: SmoothedTrack;
   calibration: { segments: CalSegment[]; events: CalEvent[] };
+  /** 플랫폼 원본 축 부호 (기본값 표를 정하는 데 쓴다) */
   axisSigns: AxisSigns & { confidence: 'high' | 'low' };
   /** GPS 속도를 위치 차이로 계산한 점이 많음 (사양서 6.3) */
   speedQualityLow: boolean;
@@ -38,20 +39,17 @@ export function processSession(input: {
   const obs = prepareGps(sorted, origin);
   const derived = obs.filter((o) => o.speedDerived).length;
 
-  let signs: AxisSigns = input.axisSigns ?? { accel: 1, gyro: 1 };
-  let m50 = resampleMotion(input.motion, signs);
-  let calibration = calibrateSession(m50, obs);
-  let confidence: 'high' | 'low' = 'low';
-  const firstCal = calibration.segments.find((s) => s.cal)?.cal;
-  if (firstCal && m50.hasGyro) {
-    const d = detectAxisSigns(m50, obs, firstCal);
-    confidence = d.confidence;
-    if (d.confidence === 'high' && (d.accel !== 1 || d.gyro !== 1)) {
-      signs = { accel: (signs.accel * d.accel) as 1 | -1, gyro: (signs.gyro * d.gyro) as 1 | -1 };
-      m50 = resampleMotion(input.motion, signs);
-      calibration = calibrateSession(m50, obs);
-    }
-  }
+  const base: AxisSigns = input.axisSigns ?? { accel: 1, gyro: 1 };
+  const m50 = resampleMotion(input.motion, base);
+  // 축 부호 보정은 보정 결과(yawSign, latSign)에 들어 있다
+  const calibration = calibrateSession(m50, obs);
+  const signed = calibration.segments.find((s) => s.cal?.signsConfirmed)?.cal;
+  const fix = signed ? platformSigns(signed.yawSign, signed.latSign) : { accel: 1 as const, gyro: 1 as const };
+  const signs: AxisSigns = {
+    accel: (base.accel * fix.accel) as 1 | -1,
+    gyro: (base.gyro * fix.gyro) as 1 | -1,
+  };
+  const confidence: 'high' | 'low' = signed ? 'high' : 'low';
 
   const segs = calibration.segments;
   const runner = new FusionRunner({
@@ -64,9 +62,15 @@ export function processSession(input: {
   runner.runTo(tEnd);
   const history = runner.history()!;
 
+  // GPS가 오래 끊긴 구간 (GPS만 모드일 때 매끄럽게 잇는다)
+  const gaps: Array<[number, number]> = [];
+  for (let i = 1; i < obs.length; i++) {
+    if (obs[i]!.t - obs[i - 1]!.t > config.fusion.noGateAfterGapS * 1000) gaps.push([obs[i - 1]!.t, obs[i]!.t]);
+  }
+
   return {
     origin,
-    track: rtsSmooth(history),
+    track: bridgeGpsOnlyGaps(rtsSmooth(history), gaps),
     filtered: filteredTrack(history),
     calibration,
     axisSigns: { ...signs, confidence },

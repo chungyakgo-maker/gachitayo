@@ -19,6 +19,12 @@ export const config = {
     stationaryAccStdMax: 0.8,
     /** 정차 창 안에 있어야 하는 GPS fix 수 */
     stationaryMinGpsFixes: 2,
+    /** GPS 속도가 없는 기기: 이 시간 동안의 GPS 위치가 모여 있으면 정차로 본다 */
+    stationaryDerivedWindowS: 4,
+    /** GPS 속도가 없는 기기: 이 시간 동안 위치로 직선 맞춤한 속도가 이 값 미만이면 정차 (출발 직후 가속을 정차로 착각하지 않게) */
+    stationaryDerivedMaxSpeedMps: 2,
+    /** 주행 후 보정: 정차 창 검사 간격 (Motion50 샘플 수) */
+    offlineStationaryStep: 25,
     /** 앞 방향: GPS 속도 변화율 하한 */
     forwardMinAccelMps2: 1.5,
     /** 앞 방향: 속도 하한 */
@@ -27,7 +33,7 @@ export const config = {
     forwardMaxYawRate: 0.05,
     /** 앞 방향을 정하는 데 필요한 조건 만족 GPS 구간 수 */
     forwardMinIntervals: 3,
-    /** 앞 방향 계산에 쓰는 GPS 앞뒤 간격 상한 */
+    /** 앞 방향 계산에 쓰는 GPS 앞뒤 간격 상한 (속도 없는 기기는 앞뒤 2점씩이라 2배) */
     forwardMaxGpsSpanMs: 3000,
     /** 재보정: 예상 중력 방향과의 각도 차 */
     recalAngleDeg: 10,
@@ -37,8 +43,18 @@ export const config = {
     recalAvgWindowS: 0.5,
     /** 재보정 판단: 마지막 GPS가 이보다 오래되면 판단하지 않음 */
     recalMaxGpsAgeMs: 1500,
+    /** 재보정 판단: 속도 변화율을 구하는 연속 GPS 간격 상한 */
+    recalMaxGpsStepMs: 2500,
+    /** 재보정 판단 주기 (Motion50 샘플 수, 50 Hz에서 5 = 10 Hz) */
+    recalCheckEvery: 5,
     /** 축 부호 판별: 필요한 회전 구간 수 */
     axisSignMinTurns: 5,
+    /** 축 부호 판별: 정규화한 일치도(−1~1)의 절댓값이 이 이상이어야 확정 */
+    axisSignMinAgreement: 0.5,
+    /** 앞 방향 확인: 이 이상의 GPS 속도 변화율 구간을 쓴다 */
+    fwdCheckMinAccelMps2: 1,
+    /** 앞 방향 확인: 필요한 구간 수 */
+    fwdCheckMinSamples: 5,
     /** 축 부호 판별: 회전으로 보는 GPS 방향 변화율 rad/s */
     axisSignMinYawRate: 0.1,
     /** 축 부호 판별: 속도 하한 */
@@ -61,6 +77,8 @@ export const config = {
     outlierSigma: 3,
     /** 연속으로 이만큼 버리면 다음 점으로 위치를 다시 맞춘다 */
     maxConsecutiveRejects: 3,
+    /** GPS가 이보다 오래 끊겼다 돌아오면 첫 점은 이상치 검사 없이 받아들인다 */
+    noGateAfterGapS: 3,
     /** 과정 잡음 밀도 (단위²/s): 위치, 방향, 속도, 가속도 바이어스 */
     q: {
       imu: { pos: 0.05 ** 2, psi: 0.03 ** 2, v: 0.3 ** 2, b: 0.05 ** 2 },
@@ -70,7 +88,7 @@ export const config = {
     /** GPS 속도를 위치 차이로 계산한 점이 이 비율을 넘으면 "속도 품질 낮음" */
     speedQualityLowFraction: 0.2,
     /** 처음 상태의 표준편차 */
-    init: { psiUnknownRad: Math.PI, psiKnownRad: 0.1, vUnknownMps: 3, vKnownMps: 0.5, b: 0.5 },
+    init: { posSigmaM: 5, psiUnknownRad: Math.PI, psiKnownRad: 0.1, vUnknownMps: 3, vKnownMps: 0.5, b: 0.5 },
   },
 
   /** GPS 준비 판정 (사양서 7.4) */

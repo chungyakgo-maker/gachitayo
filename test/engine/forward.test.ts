@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultSensorOpts, simulateDrive, stadiumTrack, synthesizeSensors, truthAt, type SensorOpts, type Truth } from '../generators';
 import { resampleMotion } from '../../src/normalize/resample';
 import { prepareGps } from '../../src/engine/fusion/gpsObs';
-import { calibrateSession } from '../../src/normalize/mount';
+import { MountCalibrator, calibrateSession } from '../../src/normalize/mount';
 import { FusionRunner, type FusedPoint } from '../../src/engine/fusion/forward';
 import { toLocal } from '../../src/engine/geo';
 
@@ -85,4 +85,39 @@ describe('FusionRunner (주행 중 EKF)', () => {
     const r = run({ noGyro: true });
     expect(r.posRms).toBeLessThan(r.rawRms);
   });
+
+  const realtimeCases: Array<[string, Partial<SensorOpts>]> = [
+    ['가속도 부호 반대', { accelSign: -1 }],
+    ['자이로 부호 반대', { gyroSign: -1 }],
+    ['둘 다 반대', { accelSign: -1, gyroSign: -1 }],
+    ['GPS 속도 없음', { speedNull: true }],
+  ];
+  for (const [name, extra] of realtimeCases) {
+    it(`실시간(보정기와 함께 진행): ${name}인 기기에서도 GPS 원본보다 정확하다`, () => {
+      const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed: 23, ...extra });
+      const m50 = resampleMotion(s.motion);
+      const obs = prepareGps(s.gps, s.origin);
+      const cal = new MountCalibrator(m50);
+      const runner = new FusionRunner({ m50, calibrationAt: () => cal.current });
+      let j = 0;
+      let se = 0;
+      let n = 0;
+      for (let i = 0; i < m50.n; i++) {
+        const t = m50.t0 + i * m50.dt;
+        while (j < obs.length && obs[j]!.t <= t) {
+          cal.pushGps(obs[j]!);
+          runner.pushGps(obs[j++]!);
+        }
+        cal.pushMotion(i);
+        runner.runTo(t);
+        const p = runner.current();
+        if (!p || p.t !== t || t < 3000) continue;
+        const tr = truthAt(truth, t / 1000);
+        se += (p.x - tr.x) ** 2 + (p.y - tr.y) ** 2;
+        n++;
+      }
+      const raw = run({ seed: 23, ...extra }).rawRms;
+      expect(Math.sqrt(se / n)).toBeLessThan(raw);
+    });
+  }
 });

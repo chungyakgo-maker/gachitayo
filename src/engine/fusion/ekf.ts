@@ -51,7 +51,7 @@ export class CarEkf {
   private readonly tmp = new Float64Array(N * N);
   private readonly tmp2 = new Float64Array(N * N);
 
-  init(x: number, y: number, psi: number | null, v: number | null, posSigma = 5): void {
+  init(x: number, y: number, psi: number | null, v: number | null, posSigma: number = cfg.init.posSigmaM): void {
     this.x.set([x, y, psi ?? 0, v ?? 0, 0]);
     this.P.fill(0);
     this.P[0] = posSigma ** 2;
@@ -97,8 +97,11 @@ export class CarEkf {
     this.P[24] += q.b * dt;
   }
 
-  /** GPS 위치 관측. 예측에서 3σ 넘게 떨어지면 버리고, 연속으로 버려지면 위치를 다시 맞춘다 */
-  updatePosition(zx: number, zy: number, sigma: number): PositionUpdate {
+  /**
+   * GPS 위치 관측. 예측에서 3σ 넘게 떨어지면 버리고, 연속으로 버려지면 위치를 다시 맞춘다.
+   * gate=false면 이상치 검사 없이 받아들인다 (오래 끊겼다 돌아온 첫 점: 예측이 크게 벗어나 있어도 상관관계를 지킨 채 끌어온다).
+   */
+  updatePosition(zx: number, zy: number, sigma: number, gate = true): PositionUpdate {
     const P = this.P;
     const r = sigma * sigma;
     const s00 = P[0]! + r;
@@ -111,7 +114,7 @@ export class CarEkf {
     const n0 = zx - this.x[0]!;
     const n1 = zy - this.x[1]!;
     const d2 = n0 * (i00 * n0 + i01 * n1) + n1 * (i01 * n0 + i11 * n1);
-    if (d2 > cfg.outlierSigma ** 2) {
+    if (gate && d2 > cfg.outlierSigma ** 2) {
       if (this.rejects >= cfg.maxConsecutiveRejects) {
         this.resetPosition(zx, zy, sigma);
         return 'reset';

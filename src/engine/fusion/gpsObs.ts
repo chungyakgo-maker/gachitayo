@@ -36,15 +36,50 @@ export function prepareGps(gps: GpsSample[], origin: LatLon): GpsObs[] {
       psi: g.heading === null ? null : gpsPsiFromHeading(g.heading),
     };
   });
-  // 속도가 없는 점: 앞뒤 점의 위치 차이로 계산 (끝점은 한쪽만)
+  // 속도가 없는 점: 앞뒤 2점씩(약 4초) 떨어진 위치 차이로 계산 (끝점은 한쪽만). 잡음을 줄이기 위해 간격을 넓힌다
   for (let i = 0; i < obs.length; i++) {
     const o = obs[i]!;
     if (o.speed !== null) continue;
-    const a = obs[Math.max(0, i - 1)]!;
-    const b = obs[Math.min(obs.length - 1, i + 1)]!;
+    const a = obs[Math.max(0, i - 2)]!;
+    const b = obs[Math.min(obs.length - 1, i + 2)]!;
     const dt = (b.t - a.t) / 1000;
     o.speed = dt > 0 ? Math.hypot(b.x - a.x, b.y - a.y) / dt : 0;
     o.speedDerived = true;
   }
   return obs;
+}
+
+/** 진행 방향을 구하는 데 필요한 최소 이동 거리 (이보다 짧으면 위치 잡음이 방향을 정해 버린다) */
+const MIN_STEP_FOR_HEADING_M = 2;
+
+function yawFrom(a: GpsObs, c: GpsObs, b: GpsObs): number | null {
+  const span = (b.t - a.t) / 1000;
+  if (span <= 0) return null;
+  if (a.psi !== null && b.psi !== null) return wrapAngle(b.psi - a.psi) / span;
+  if (Math.hypot(c.x - a.x, c.y - a.y) < MIN_STEP_FOR_HEADING_M) return null;
+  if (Math.hypot(b.x - c.x, b.y - c.y) < MIN_STEP_FOR_HEADING_M) return null;
+  const p1 = Math.atan2(c.y - a.y, c.x - a.x);
+  const p2 = Math.atan2(b.y - c.y, b.x - c.x);
+  return wrapAngle(p2 - p1) / span / 0.5;
+}
+
+/**
+ * GPS로 구한 진행 방향 변화율 (rad/s, 좌회전 +). 가운데 점 k와 앞뒤 점을 쓴다.
+ * GPS 방향 값이 있으면 그 차이로, 없으면 위치로 계산한다. 자이로 부호·유무와 무관하다.
+ */
+export function gpsYawRateAt(gps: GpsObs[], k: number, maxSpanMs: number): number | null {
+  const a = gps[k - 1];
+  const c = gps[k];
+  const b = gps[k + 1];
+  if (!a || !b || !c || b.t - a.t > maxSpanMs) return null;
+  return yawFrom(a, c, b);
+}
+
+/** 실시간용: 마지막 점 n과 그 앞 점들로 구한 진행 방향 변화율 */
+export function gpsYawRateBackward(gps: GpsObs[], n: number, maxSpanMs: number): number | null {
+  const a = gps[n - 2];
+  const c = gps[n - 1];
+  const b = gps[n];
+  if (!a || !b || !c || b.t - a.t > maxSpanMs) return null;
+  return yawFrom(a, c, b);
 }

@@ -82,4 +82,15 @@ describe('RTS 스무더와 세션 처리 (사양서 7.3 주행 후)', () => {
     expect(r.gpsOnly).toBe(true);
     expect(r.track.n).toBeGreaterThan(1000);
   });
+
+  it('GPS만 모드에서 20초 끊겨도 돌아온 GPS를 받아들이고, 끊김 뒤에는 바로 정상으로 돌아온다', () => {
+    const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed: 33, dropouts: [[60, 80]] });
+    const r = processSession({ gps: s.gps, motion: [] });
+    const e = errors(r.track, r.origin, s);
+    const f = errors(r.filtered, r.origin, s);
+    const inGap = Math.max(...e.filter((x) => x.t >= 60_000 && x.t <= 80_000).map((x) => x.pos));
+    const after = Math.max(...f.filter((x) => x.t >= 83_000 && x.t <= 90_000).map((x) => x.pos));
+    expect(inGap).toBeLessThan(150);
+    expect(after).toBeLessThan(15);
+  });
 });

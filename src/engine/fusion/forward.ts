@@ -108,6 +108,7 @@ export class FusionRunner {
   readonly ekf = new CarEkf();
   private readonly gps: GpsObs[];
   private j = 0;
+  private prevGpsT = -Infinity;
   private tGrid: number | null = null;
   private last: FusedPoint | null = null;
   private lastMode: FusionMode = 'gps_only';
@@ -137,6 +138,7 @@ export class FusionRunner {
       const first = this.gps[this.j];
       if (!first || first.t > t) return;
       this.j += 1;
+      this.prevGpsT = first.t;
       this.ekf.init(
         first.x,
         first.y,
@@ -169,9 +171,11 @@ export class FusionRunner {
     const m = this.opts.m50;
     const i = Math.round((t - m.t0) / m.dt);
     const cal = this.opts.calibrationAt(t);
-    if (!cal || i < 0 || i >= m.n || !m.valid[i]) return { ax: 0, yawRate: 0, mode: 'gps_only' };
+    // 보정 확인(앞 방향, 축 부호) 전에는 모션을 쓰지 않는다: 거꾸로 된 가속도를 적분하면 속도가 크게 틀어진다
+    if (!cal || !cal.signsConfirmed || i < 0 || i >= m.n || !m.valid[i]) return { ax: 0, yawRate: 0, mode: 'gps_only' };
     const c = toCar(cal, [m.fx[i]!, m.fy[i]!, m.fz[i]!], [m.wx[i]!, m.wy[i]!, m.wz[i]!]);
-    return { ax: c.ax, yawRate: c.yawRate, mode: m.hasGyro ? 'imu' : 'imu_no_gyro' };
+    const useGyro = m.gyroValid[i] === 1;
+    return { ax: c.ax, yawRate: c.yawRate, mode: useGyro ? 'imu' : 'imu_no_gyro' };
   }
 
   /** GPS 수신 시각과 격자 시각의 차이만큼 현재 속도로 옮겨서 반영한다 */
@@ -179,10 +183,14 @@ export class FusionRunner {
     const lead = (tk - o.t) / 1000;
     const psi = this.ekf.x[2]!;
     const v = this.ekf.x[3]!;
+    // 오래 끊겼다 돌아온 첫 점은 이상치 검사 없이 받아들인다 (예측이 멀리 가 있어도 끌어온다)
+    const afterGap = o.t - this.prevGpsT > cfg.noGateAfterGapS * 1000;
+    this.prevGpsT = o.t;
     this.ekf.updatePosition(
       o.x + v * Math.cos(psi) * lead,
       o.y + v * Math.sin(psi) * lead,
       Math.max(cfg.minPosSigmaM, o.hAcc * cfg.hAccToSigma),
+      !afterGap,
     );
     if (o.speed !== null && !o.speedDerived) this.ekf.updateSpeed(o.speed, cfg.speedSigmaMps);
     if (o.psi !== null && (o.speed ?? this.ekf.x[3]!) >= cfg.headingMinSpeedMps) {

@@ -15,7 +15,10 @@ import {
   calibrateSession,
   detectAxisSigns,
   toCar,
+  type MountCalibration,
 } from '../../src/normalize/mount';
+import type { Motion50 } from '../../src/normalize/resample';
+import type { GpsObs } from '../../src/engine/fusion/gpsObs';
 import { angleBetween, rotationAngle, row, type Vec3 } from '../../src/engine/linalg';
 
 const DEG = 180 / Math.PI;
@@ -151,6 +154,118 @@ describe('거치 보정 (사양서 7.2)', () => {
     }
     expect(Math.sqrt(se / n)).toBeLessThan(0.3);
   });
+});
+
+/** 실시간처럼 시간 순서대로 넣는다 */
+function realtime(m50: Motion50, obs: GpsObs[]) {
+  const c = new MountCalibrator(m50);
+  let j = 0;
+  for (let i = 0; i < m50.n; i++) {
+    const t = m50.t0 + i * m50.dt;
+    while (j < obs.length && obs[j]!.t <= t) c.pushGps(obs[j++]!);
+    c.pushMotion(i);
+  }
+  return c;
+}
+
+const segAt = (segs: Array<{ tStart: number; tEnd: number; cal: MountCalibration | null }>, t: number) =>
+  segs.find((s) => t >= s.tStart && t <= s.tEnd)?.cal ?? null;
+
+describe('실제 폰에서 생기는 상황', () => {
+  const parallel = simulateDrive(closeParallelTrack(), {
+    laps: 2,
+    startStopS: 5,
+    endStopS: 3,
+    vMax: 40,
+    aLatMax: 8,
+    aAccel: 3,
+    aBrake: 8,
+  });
+
+  for (const [name, truth] of [
+    ['오벌', circuit],
+    ['평행 코스(긴 코너)', parallel],
+  ] as const) {
+    it(`자이로가 없는 기기: ${name}의 긴 코너에서 재보정하지 않고, 각도 오차 < 2°`, () => {
+      const d = prepare(truth, { seed: 41, noGyro: true });
+      const rt = realtime(d.m50, d.obs);
+      expect(rt.events.filter((e) => e.type === 'recalibration')).toEqual([]);
+      expect(rt.state).toBe('calibrated');
+      const { segments, events } = calibrateSession(d.m50, d.obs);
+      expect(events.filter((e) => e.type === 'recalibration')).toEqual([]);
+      expect(rotationAngle(segments[0]!.cal!.R, d.mount) * DEG).toBeLessThan(2);
+    });
+  }
+
+  it('회전 값이 한 샘플만 비어도 자이로가 있는 기기로 처리하고 재보정하지 않는다', () => {
+    const s = synthesizeSensors(circuit, { ...defaultSensorOpts, seed: 42 });
+    const motion = s.motion.map((m, i) => (i === 3000 ? { ...m, rx: null, ry: null, rz: null } : m));
+    const m50 = resampleMotion(motion);
+    expect(m50.hasGyro).toBe(true);
+    const obs = prepareGps(s.gps, s.origin);
+    expect(realtime(m50, obs).events.filter((e) => e.type === 'recalibration')).toEqual([]);
+  });
+
+  it('GPS 속도 값이 없는 기기도 거치 보정을 끝낸다 (각도 오차 < 3°)', () => {
+    const d = prepare(circuit, { seed: 43, speedNull: true });
+    const { segments } = calibrateSession(d.m50, d.obs);
+    expect(segments[0]!.cal).not.toBeNull();
+    expect(rotationAngle(segments[0]!.cal!.R, d.mount) * DEG).toBeLessThan(3);
+    expect(realtime(d.m50, d.obs).state).toBe('calibrated');
+  });
+
+  it('손에 들고 3초 넘게 있다가 정차 중에 거치하면, 거치한 각도로 보정한다', () => {
+    const truth = simulateDrive(stadiumTrack(), {
+      laps: 1,
+      startStopS: 12,
+      endStopS: 3,
+      vMax: 40,
+      aLatMax: 8,
+      aAccel: 3,
+      aBrake: 6,
+    });
+    const d = prepare(truth, {
+      seed: 44,
+      mountEulerDeg: [0, -40, 30],
+      mountChanges: [{ atS: 5, eulerDeg: [20, -70, 5] }],
+    });
+    const mounted = d.mounts[1]!.R;
+    const rt = realtime(d.m50, d.obs);
+    expect(rt.events.filter((e) => e.type === 'recalibration')).toEqual([]);
+    expect(rotationAngle(rt.current!.R, mounted) * DEG).toBeLessThan(2);
+    const { segments } = calibrateSession(d.m50, d.obs);
+    expect(rotationAngle(segAt(segments, 30_000)!.R, mounted) * DEG).toBeLessThan(2);
+  });
+});
+
+describe('실시간 축 부호 확인', () => {
+  const cases: Array<[1 | -1, 1 | -1]> = [
+    [1, 1],
+    [-1, 1],
+    [1, -1],
+    [-1, -1],
+  ];
+  for (const [accel, gyro] of cases) {
+    it(`가속도 ${accel}, 자이로 ${gyro}: 주행 중에 부호를 확인하고, 그 뒤 좌우 가속도·요레이트 부호가 맞다`, () => {
+      const d = prepare(circuit, { seed: 45, accelSign: accel, gyroSign: gyro });
+      const rt = realtime(d.m50, d.obs);
+      expect(rt.events.filter((e) => e.type === 'recalibration')).toEqual([]);
+      const cal = rt.current!;
+      expect(cal.signsConfirmed).toBe(true);
+      // 왼쪽으로 도는 오벌: 코너에서 좌우 가속도·요레이트가 모두 + 여야 한다
+      let ay = 0;
+      let yaw = 0;
+      for (let i = 0; i < d.m50.n; i++) {
+        const tr = truthAt(circuit, (d.m50.t0 + i * d.m50.dt) / 1000);
+        if (tr.yawRate < 0.2) continue;
+        const c = toCar(cal, [d.m50.fx[i]!, d.m50.fy[i]!, d.m50.fz[i]!], [d.m50.wx[i]!, d.m50.wy[i]!, d.m50.wz[i]!]);
+        ay += c.ay;
+        yaw += c.yawRate;
+      }
+      expect(ay).toBeGreaterThan(0);
+      expect(yaw).toBeGreaterThan(0);
+    });
+  }
 });
 
 describe('플랫폼 축 부호 판별', () => {

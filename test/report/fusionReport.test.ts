@@ -1,4 +1,3 @@
-/// <reference types="node" />
 // 정확도 보고서 (사람이 읽는 용도). 평소 테스트에서는 건너뛰고, REPORT=1일 때만 만든다.
 // 결과: REPORT_DIR(기본 report-out)에 fusion-report.json과 비교 그림 SVG
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -17,8 +16,14 @@ import {
   type Truth,
 } from '../generators';
 import { processSession, type SmoothedTrack } from '../../src/engine/fusion/processSession';
+import { FusionRunner } from '../../src/engine/fusion/forward';
+import { prepareGps } from '../../src/engine/fusion/gpsObs';
+import { MountCalibrator } from '../../src/normalize/mount';
+import { resampleMotion } from '../../src/normalize/resample';
 import { toLocal } from '../../src/engine/geo';
-import { rotationAngle } from '../../src/engine/linalg';
+import { rotationAngle, type Mat3 } from '../../src/engine/linalg';
+
+const flipUpFwd = (m: Mat3): Mat3 => [-m[0], -m[1], -m[2], m[3], m[4], m[5], -m[6], -m[7], -m[8]];
 
 const OUT = process.env.REPORT_DIR ?? 'report-out';
 const drive = (track: Track, laps = 2): Truth =>
@@ -40,7 +45,9 @@ const scenarios: Scenario[] = [
   { name: '아이폰 흉내 (가속도 부호 반대)', truth: oval, opts: { accelSign: -1 } },
   { name: 'GPS 속도 없음', truth: oval, opts: { speedNull: true } },
   { name: '자이로 없음', truth: oval, opts: { noGyro: true } },
-  { name: '모션 권한 없음 (GPS만)', truth: oval, opts: {}, },
+  { name: '모션 권한 없음 (GPS만)', truth: oval, opts: {} },
+  { name: 'GPS 오차가 천천히 흐름 (1 m 잡음 + 3 m 흐름)', truth: oval, opts: { gpsNoiseM: 1, gpsDriftM: 3 } },
+  { name: 'GPS 수신 지연 300 ms', truth: oval, opts: { gpsLatencyMs: 300 } },
   { name: '직선 없는 타원 서킷', truth: drive(ellipseTrack(300, 150)), opts: {} },
 ];
 
@@ -99,6 +106,32 @@ ${lines.map((l) => `<path d="${path(pts(l.track, l.shift))}" fill="none" stroke=
 </g></svg>`;
 }
 
+/** 주행 중과 똑같이: 보정기와 융합을 시간 순서대로 함께 진행한다 (주행 후 보정을 쓰지 않음) */
+function realtimeRms(s: ReturnType<typeof synthesizeSensors>, truth: Truth): number {
+  const m50 = resampleMotion(s.motion);
+  const obs = prepareGps(s.gps, s.origin);
+  const cal = new MountCalibrator(m50);
+  const runner = new FusionRunner({ m50, calibrationAt: () => cal.current });
+  let j = 0;
+  let se = 0;
+  let n = 0;
+  for (let i = 0; i < m50.n; i++) {
+    const t = m50.t0 + i * m50.dt;
+    while (j < obs.length && obs[j]!.t <= t) {
+      cal.pushGps(obs[j]!);
+      runner.pushGps(obs[j++]!);
+    }
+    cal.pushMotion(i);
+    runner.runTo(t);
+    const p = runner.current();
+    if (!p || p.t !== t) continue;
+    const tr = truthAt(truth, t / 1000);
+    se += (p.x - tr.x) ** 2 + (p.y - tr.y) ** 2;
+    n++;
+  }
+  return Math.sqrt(se / Math.max(1, n));
+}
+
 describe.skipIf(!process.env.REPORT)('정확도 보고서', () => {
   it('시나리오별 오차 표와 그림', () => {
     mkdirSync(OUT, { recursive: true });
@@ -116,17 +149,20 @@ describe.skipIf(!process.env.REPORT)('정확도 보고서', () => {
       const sm = errs(r.track, sc.truth, shift);
       const fi = errs(r.filtered, sc.truth, shift);
       const cal = r.calibration.segments[0]?.cal;
+      const live = noMotion ? null : realtimeRms(s, sc.truth);
       const gapMax = (e: typeof sm) =>
         sc.gaps?.map(([a, b]) => r2(Math.max(...e.filter((x) => x.t >= a * 1000 && x.t <= (b + 1) * 1000).map((x) => x.pos))));
       rows.push({
         시나리오: sc.name,
         'GPS 원본 위치 RMS m': r2(rms(raw)),
-        '필터 위치 RMS m': r2(rms(fi.map((e) => e.pos))),
+        '실시간 흉내 위치 RMS m': live === null ? '-' : r2(live),
+        '필터(한 방향) 위치 RMS m': r2(rms(fi.map((e) => e.pos))),
         '스무더 위치 RMS m': r2(rms(sm.map((e) => e.pos))),
         '스무더 최대 위치 오차 m': r2(Math.max(...sm.map((e) => e.pos))),
-        '필터 속도 RMS m/s': r2(rms(fi.map((e) => e.v))),
+        '필터(한 방향) 속도 RMS m/s': r2(rms(fi.map((e) => e.v))),
         '스무더 속도 RMS m/s': r2(rms(sm.map((e) => e.v))),
-        '거치 각도 오차 °': cal && !noMotion ? r2((rotationAngle(cal.R, s.mount) * 180) / Math.PI) : '보정 안 됨',
+        // 가속도 부호가 반대인 기기는 위·앞 축이 뒤집혀 잡히고 그만큼 부호 보정으로 바로잡는다
+        '거치 각도 오차 °': cal && !noMotion ? r2((rotationAngle(cal.R, r.axisSigns.accel === -1 ? flipUpFwd(s.mount) : s.mount) * 180) / Math.PI) : '보정 안 됨',
         '축 부호': `${r.axisSigns.accel}/${r.axisSigns.gyro} (${r.axisSigns.confidence})`,
         'GPS만 모드': r.gpsOnly,
         '속도 품질 낮음': r.speedQualityLow,
@@ -137,7 +173,7 @@ describe.skipIf(!process.env.REPORT)('정확도 보고서', () => {
         writeFileSync(
           `${OUT}/plot-hairpin.svg`,
           svgPlot('헤어핀 구간: 정답 · GPS · 필터 · 스무더', sc.truth, gpsLocal, [
-            { name: '필터(주행 중)', color: '#1971c2', track: r.filtered, shift },
+            { name: '필터(한 방향)', color: '#1971c2', track: r.filtered, shift },
             { name: '스무더(주행 후)', color: '#2f9e44', track: r.track, shift },
           ], [22, 40]),
         );
@@ -147,7 +183,7 @@ describe.skipIf(!process.env.REPORT)('정확도 보고서', () => {
         writeFileSync(
           `${OUT}/plot-gap8s.svg`,
           svgPlot('GPS 8초 끊김 구간 (70~78초)', sc.truth, gpsLocal, [
-            { name: '필터(주행 중)', color: '#1971c2', track: r.filtered, shift },
+            { name: '필터(한 방향)', color: '#1971c2', track: r.filtered, shift },
             { name: '스무더(주행 후)', color: '#2f9e44', track: r.track, shift },
           ], [66, 82]),
         );

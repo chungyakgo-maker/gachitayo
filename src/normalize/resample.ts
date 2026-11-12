@@ -24,6 +24,9 @@ export interface Motion50 {
   wz: Float64Array;
   /** 1이면 유효, 0이면 빈 구간 */
   valid: Uint8Array;
+  /** 1이면 회전 속도도 유효 (앞뒤 샘플 모두 회전 값이 있음) */
+  gyroValid: Uint8Array;
+  /** 회전 값이 있는 샘플이 절반 이상이면 자이로가 있는 기기로 본다 */
   hasGyro: boolean;
 }
 
@@ -34,13 +37,15 @@ export function resampleMotion(
   const dt = 1000 / config.motion.resampleHz;
   const empty = (n: number) => new Float64Array(n);
   if (samples.length === 0) {
-    return { t0: 0, dt, n: 0, fx: empty(0), fy: empty(0), fz: empty(0), wx: empty(0), wy: empty(0), wz: empty(0), valid: new Uint8Array(0), hasGyro: false };
+    return { t0: 0, dt, n: 0, fx: empty(0), fy: empty(0), fz: empty(0), wx: empty(0), wy: empty(0), wz: empty(0), valid: new Uint8Array(0), gyroValid: new Uint8Array(0), hasGyro: false };
   }
   const s = [...samples].sort((a, b) => a.t - b.t);
   const t0 = Math.ceil(s[0]!.t / dt) * dt;
   const n = Math.max(0, Math.floor((s[s.length - 1]!.t - t0) / dt) + 1);
-  const hasGyro = s.every((m) => m.rx !== null && m.ry !== null && m.rz !== null);
-  const out: Motion50 = { t0, dt, n, fx: empty(n), fy: empty(n), fz: empty(n), wx: empty(n), wy: empty(n), wz: empty(n), valid: new Uint8Array(n), hasGyro };
+  const gyroOk = (m: RawMotionSample) => m.rx !== null && m.ry !== null && m.rz !== null;
+  // 회전 값이 가끔 빠지는 기기도 있으므로 샘플 하나하나로 판단한다
+  const hasGyro = s.filter(gyroOk).length >= s.length / 2;
+  const out: Motion50 = { t0, dt, n, fx: empty(n), fy: empty(n), fz: empty(n), wx: empty(n), wy: empty(n), wz: empty(n), valid: new Uint8Array(n), gyroValid: new Uint8Array(n), hasGyro };
   const sa = signs.accel;
   const sg = signs.gyro;
   let j = 0;
@@ -55,10 +60,11 @@ export function resampleMotion(
     out.fx[i] = sa * lerp(a.gax, b.gax);
     out.fy[i] = sa * lerp(a.gay, b.gay);
     out.fz[i] = sa * lerp(a.gaz, b.gaz);
-    if (hasGyro) {
+    if (gyroOk(a) && gyroOk(b)) {
       out.wx[i] = sg * lerp(a.rx!, b.rx!);
       out.wy[i] = sg * lerp(a.ry!, b.ry!);
       out.wz[i] = sg * lerp(a.rz!, b.rz!);
+      out.gyroValid[i] = 1;
     }
     out.valid[i] = 1;
   }

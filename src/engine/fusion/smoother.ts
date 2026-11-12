@@ -118,3 +118,49 @@ function setRow(t: SmoothedTrack, k: number, src: Float64Array, o: number): void
   t.psi[k] = wrapAngle(src[o + 2]!);
   t.v[k] = src[o + 3]!;
 }
+
+/**
+ * 모션 없이(GPS만) 오래 끊긴 구간은 필터·스무더의 선형 근사가 맞지 않아(방향 불확실성이 몇 rad까지 커짐)
+ * 경로가 크게 벗어난다. 이런 구간은 끊기기 전·후의 위치와 속도로 매끄러운 곡선(3차 에르미트)을 그려 잇는다.
+ */
+export function bridgeGpsOnlyGaps(track: SmoothedTrack, gaps: Array<[number, number]>): SmoothedTrack {
+  const GPS_ONLY = 2;
+  for (const [ta, tb] of gaps) {
+    const ka = Math.ceil((ta - track.t0) / track.dt);
+    const kb = Math.floor((tb - track.t0) / track.dt);
+    if (ka < 0 || kb >= track.n || kb - ka < 2) continue;
+    let allGpsOnly = true;
+    for (let k = ka; k <= kb; k++) if (track.mode[k] !== GPS_ONLY) allGpsOnly = false;
+    if (!allGpsOnly) continue;
+    const T = ((kb - ka) * track.dt) / 1000;
+    const p0x = track.x[ka]!;
+    const p0y = track.y[ka]!;
+    const p1x = track.x[kb]!;
+    const p1y = track.y[kb]!;
+    const v0x = track.v[ka]! * Math.cos(track.psi[ka]!) * T;
+    const v0y = track.v[ka]! * Math.sin(track.psi[ka]!) * T;
+    const v1x = track.v[kb]! * Math.cos(track.psi[kb]!) * T;
+    const v1y = track.v[kb]! * Math.sin(track.psi[kb]!) * T;
+    for (let k = ka + 1; k < kb; k++) {
+      const u = (k - ka) / (kb - ka);
+      const u2 = u * u;
+      const u3 = u2 * u;
+      const h00 = 2 * u3 - 3 * u2 + 1;
+      const h10 = u3 - 2 * u2 + u;
+      const h01 = -2 * u3 + 3 * u2;
+      const h11 = u3 - u2;
+      track.x[k] = h00 * p0x + h10 * v0x + h01 * p1x + h11 * v1x;
+      track.y[k] = h00 * p0y + h10 * v0y + h01 * p1y + h11 * v1y;
+      // 미분 (위치/u) → 속도 (÷T)
+      const d00 = 6 * u2 - 6 * u;
+      const d10 = 3 * u2 - 4 * u + 1;
+      const d01 = -6 * u2 + 6 * u;
+      const d11 = 3 * u2 - 2 * u;
+      const dx = (d00 * p0x + d10 * v0x + d01 * p1x + d11 * v1x) / T;
+      const dy = (d00 * p0y + d10 * v0y + d01 * p1y + d11 * v1y) / T;
+      track.v[k] = Math.hypot(dx, dy);
+      track.psi[k] = Math.atan2(dy, dx);
+    }
+  }
+  return track;
+}
