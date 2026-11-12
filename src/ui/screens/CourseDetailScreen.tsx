@@ -13,6 +13,7 @@ import { PickMap } from '../components/PickMap';
 import { Sheet } from '../components/Sheet';
 import { formatLapTime, formatLength } from '../format';
 import { IconBack } from '../icons';
+import { PIN_LABEL } from '../map/courseStyle';
 import type { MapShape } from '../map/leafletMap';
 import { NAV_APP_LABEL, NAV_APP_WITH, navUrl, platformOf, storeUrl, type NavApp } from '../navLinks';
 import { useBestTimes } from './useBestTimes';
@@ -74,8 +75,8 @@ export function courseShapes(c: Course, pending: LatLon | null): { shapes: MapSh
     pins.push({ kind: 'pin', at: [g.lat, g.lon], which, text });
     fit.push([g.lat, g.lon]);
   };
-  gate(c.startGate, 'start', '출발');
-  if (c.kind === 'point_to_point') gate(c.finishGate, 'finish', '도착');
+  gate(c.startGate, 'start', PIN_LABEL.start);
+  if (c.kind === 'point_to_point') gate(c.finishGate, 'finish', PIN_LABEL.finish);
   for (const m of sectorMarks(c)) shapes.push({ kind: 'sector', at: [m.at.lat, m.at.lon], text: m.label });
   shapes.push(...pins);
   if (pending) shapes.push({ kind: 'dot', at: [pending.lat, pending.lon], color: '#aacae6', r: 8 });

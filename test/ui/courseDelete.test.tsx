@@ -86,8 +86,8 @@ describe('코스 상세 지도 모양 (사용자 요청 시안 2)', () => {
     const { shapes } = courseShapes(course, null);
     expect(shapes.map((x) => x.kind)).toEqual(['route', 'gate', 'gate', 'pin', 'pin']);
     expect(shapes.filter((x) => x.kind === 'pin').map((x) => (x.kind === 'pin' ? [x.which, x.text] : null))).toEqual([
-      ['start', '출발'],
-      ['finish', '도착'],
+      ['start', 'START'],
+      ['finish', 'FINISH'],
     ]);
   });
 });

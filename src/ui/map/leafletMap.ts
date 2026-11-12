@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
-import { COURSE_STYLE, PIN_TOP_PX, pinElement, sectorLabelElement, type GateWhich, type PickMapController } from './courseStyle';
+import { COURSE_STYLE, PIN_LABEL, PIN_TOP_PX, pinElement, sectorLabelElement, type GateWhich, type PickMapController } from './courseStyle';
 import { FOLLOW_ZOOM, type AnalysisMapController, type FriendMarker, type MainMapApi, type MapFix, type ReplayMapController } from './mapTypes';
 
 export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -58,8 +58,12 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
   const map = L.map(el, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, fadeAnimation: false });
   map.attributionControl.setPrefix(false);
   const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
+  // 다른 코스는 감지된 코스 아래에 깔리게 먼저 (사용자 요청: 메인 지도에 코스 다 보이게)
+  const otherLayer = L.layerGroup().addTo(map);
   const courseLayer = L.layerGroup().addTo(map);
   const friendLayer = L.layerGroup().addTo(map);
+  let others: Course[] = [];
+  let show = true;
   const meLayer = L.layerGroup().addTo(map);
   let friends: FriendMarker[] = [];
   map.setView([36.5, 127.8], 7); // 처음엔 남한 전체 (위치·코스가 오면 바로 옮긴다)
@@ -109,7 +113,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
 
   function drawCourse(course: Course | null) {
     courseLayer.clearLayers();
-    if (!course) return;
+    if (!course || !show) return;
     const line = (course.centerline ?? []).map(([lat, lon]) => L.latLng(lat, lon));
     if (line.length >= 2) addRoute(courseLayer, course.kind === 'loop' ? [...line, line[0]!] : line);
     const gate = (g: Course['startGate'], which: GateWhich, text: string) => {
@@ -119,8 +123,22 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       addGateLine(courseLayer, [a.lat, a.lon], [b.lat, b.lon], which);
       addPin(courseLayer, [g.lat, g.lon], which, text);
     };
-    gate(course.startGate, 'start', '출발');
-    if (course.kind === 'point_to_point') gate(course.finishGate, 'finish', '도착');
+    gate(course.startGate, 'start', PIN_LABEL.start);
+    if (course.kind === 'point_to_point') gate(course.finishGate, 'finish', PIN_LABEL.finish);
+  }
+
+  function drawOthers() {
+    otherLayer.clearLayers();
+    if (!show) return;
+    for (const c of others) {
+      if (c.id === lastCourse?.id || !c.centerline || c.centerline.length < 2) continue;
+      const pts = c.kind === 'loop' ? [...c.centerline, c.centerline[0]!] : c.centerline;
+      L.polyline(pts, { color: COURSE_STYLE.glow, opacity: 0.2, weight: 7, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
+      L.polyline(pts, { color: COURSE_STYLE.route, opacity: 0.9, weight: 2.4, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
+      const name = document.createElement('span');
+      name.textContent = c.name;
+      L.marker([c.startGate.lat, c.startGate.lon], { icon: L.divIcon({ className: 'map-label course-name', html: name, iconSize: [140, 16], iconAnchor: [-8, 8] }), interactive: false, keyboard: false }).addTo(otherLayer);
+    }
   }
 
   function drawMe(me: MapFix | null) {
@@ -153,6 +171,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       if (courseChanged) {
         courseKey = key;
         drawCourse(course);
+        drawOthers();
       }
       drawMe(me);
       // 코스가 바뀌었거나 처음 위치를 받았을 때만 화면을 맞춘다 (사용자가 옮긴 뒤에는 위치가 바뀌어도 그대로)
@@ -168,6 +187,16 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     },
     setOnline(online) {
       showTiles(online);
+    },
+    setCourses(list) {
+      others = list;
+      drawOthers();
+    },
+    setShowCourses(on) {
+      if (on === show) return;
+      show = on;
+      drawCourse(lastCourse);
+      drawOthers();
     },
     setFriends(list) {
       friends = list;

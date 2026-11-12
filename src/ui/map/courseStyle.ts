@@ -1,20 +1,27 @@
 // 코스 그리기 공통 (사용자 요청 시안 2): 사진 지도(Leaflet)와 선 지도(MapLibre)가 같이 쓴다. Leaflet·MapLibre를 가져오지 않는다.
-// 빨간 선 + 빛 번짐, 출발 파랑 핀·도착 빨강 핀 + 큰 글자, 출발선 파랑 · 도착선 흰 점선, 구간 경계는 큰 노랑 점과 글자.
+// 빨간 선 + 빛 번짐, 출발·도착 핀은 하늘색으로 통일 + 영어 글자(START / FINISH, 사용자 요청), 출발선 하늘색 · 도착선 흰 점선,
+// 구간 경계는 큰 노랑 점과 글자.
 
 export const COURSE_STYLE = {
   glow: '#ff3b30',
   route: '#ff453a',
   highlight: '#ffd2ce',
-  start: '#2f7bff',
-  finish: '#ff3b30',
+  /** 출발·도착 핀과 출발선: 앱 포인트 하늘색으로 통일 (사용자 요청) */
+  start: '#aacae6',
+  finish: '#aacae6',
+  /** 핀 가운데 점 (하늘색 위에서 잘 보이게 어둡게) */
+  pinDot: '#0d1a26',
   sector: '#ffb224',
   outline: '#0b0c0e',
 } as const;
 
 export type GateWhich = 'start' | 'finish';
 
+/** 핀 글자 (사용자 요청: 영어로) */
+export const PIN_LABEL = { start: 'START', finish: 'FINISH' } as const;
+
 /** 핀과 글자가 점 위로 이만큼(px) 올라가 있어, 화면 맞출 때 위쪽을 더 비운다 */
-export const PIN_TOP_PX = 60;
+export const PIN_TOP_PX = 54;
 
 /** 코스 편집 지도에 그리는 모양 ([위도, 경도]) */
 export type MapShape =
@@ -39,9 +46,9 @@ export interface PickMapController {
 }
 
 const PIN_SVG = (color: string) =>
-  `<svg width="26" height="36" viewBox="0 0 26 36" aria-hidden="true"><path d="M13 35C13 35 2 21.5 2 13A11 11 0 1 1 24 13C24 21.5 13 35 13 35Z" fill="${color}" stroke="#ffffff" stroke-width="2.2"/><circle cx="13" cy="13" r="4.6" fill="#ffffff"/></svg>`;
+  `<svg width="26" height="36" viewBox="0 0 26 36" aria-hidden="true"><path d="M13 35C13 35 2 21.5 2 13A11 11 0 1 1 24 13C24 21.5 13 35 13 35Z" fill="${color}" stroke="#ffffff" stroke-width="2.2"/><circle cx="13" cy="13" r="4.6" fill="${COURSE_STYLE.pinDot}"/></svg>`;
 
-/** 출발 파랑 핀 · 도착 빨강 핀 + 위에 큰 글자 (26×36, 끝이 아래 가운데) */
+/** 출발·도착 하늘색 핀 + 위에 글자 START / FINISH (26×36, 끝이 아래 가운데) */
 export function pinElement(which: GateWhich, text: string): HTMLElement {
   const el = document.createElement('div');
   el.innerHTML = PIN_SVG(which === 'start' ? COURSE_STYLE.start : COURSE_STYLE.finish);

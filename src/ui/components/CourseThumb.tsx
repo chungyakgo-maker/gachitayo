@@ -1,7 +1,8 @@
-// 코스 썸네일 (사용자 요청): 작은 1:1 그림에 코스 모양. 코스 지도와 같은 색 (빨간 선 + 빛 번짐, 출발 파랑 · 도착 빨강 점).
+// 코스 썸네일 (사용자 요청): 작은 1:1 그림에 코스 모양. 코스 지도와 같은 색 (빨간 선 + 빛 번짐, 출발·도착 하늘색 점, 사용자 요청).
 // 중심선이 없으면(지도로 만들고 첫 주행 전) 출발 점만.
 import { useMemo } from 'react';
 import type { Course } from '../../types/course';
+import { COURSE_STYLE } from '../map/courseStyle';
 
 const PAD = 9;
 /** 그리는 점 수 상한 (긴 코스도 가볍게) */
@@ -47,11 +48,11 @@ export function CourseThumb({ course, size = 64 }: { course: Course; size?: numb
             <path d={g.d} fill="none" stroke="#ff3b30" strokeOpacity={0.22} strokeWidth={7} strokeLinejoin="round" strokeLinecap="round" />
             <path d={g.d} fill="none" stroke="#ff453a" strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
             <path d={g.d} fill="none" stroke="#ffd2ce" strokeOpacity={0.8} strokeWidth={0.7} strokeLinejoin="round" strokeLinecap="round" />
-            {g.finish && <circle cx={g.finish[0]} cy={g.finish[1]} r={3.4} fill="#ff3b30" stroke="#ffffff" strokeWidth={1.2} />}
-            <circle cx={g.start[0]} cy={g.start[1]} r={3.4} fill="#2f7bff" stroke="#ffffff" strokeWidth={1.2} />
+            {g.finish && <circle cx={g.finish[0]} cy={g.finish[1]} r={3.4} fill={COURSE_STYLE.finish} stroke="#ffffff" strokeWidth={1.2} />}
+            <circle cx={g.start[0]} cy={g.start[1]} r={3.4} fill={COURSE_STYLE.start} stroke="#ffffff" strokeWidth={1.2} />
           </>
         ) : (
-          <circle cx={size / 2} cy={size / 2} r={4} fill="#2f7bff" stroke="#ffffff" strokeWidth={1.2} />
+          <circle cx={size / 2} cy={size / 2} r={4} fill={COURSE_STYLE.start} stroke="#ffffff" strokeWidth={1.2} />
         )}
       </svg>
     </span>

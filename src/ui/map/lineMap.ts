@@ -48,6 +48,11 @@ export function setData(map: MapLibreMap, id: string, data: unknown): void {
 
 const SOURCES = ['routes', 'gates', 'lines', 'dashed', 'dots', 'sectorDots', 'blockers'] as const satisfies ReadonlyArray<keyof LineShapes>;
 
+/** 출발·도착 핀 사이가 이만큼(px)보다 가까우면 FINISH 글자를 숨긴다 (START / FINISH 글자 폭) */
+export const PIN_CROWD_PX = 72;
+/** 이만큼보다 가까우면 도착 핀도 숨긴다 (핀 폭 26 px) */
+export const PIN_STACK_PX = 30;
+
 export interface CourseLayers {
   /** 모양을 바꿔 그린다 (핀·구간 글자는 HTML 표시) */
   apply(shapes: readonly MapShape[]): void;
@@ -90,10 +95,22 @@ export function addCourseLayers(map: MapLibreMap): CourseLayers {
   });
 
   let markers: Marker[] = [];
+  let pins: Array<{ el: HTMLElement; at: [number, number] }> = [];
   const clearMarkers = () => {
     for (const m of markers) m.remove();
     markers = [];
+    pins = [];
   };
+  // 넓게 보면 출발·도착 핀이 겹친다: 가까우면 FINISH 글자를, 아주 가까우면 도착 핀을 숨긴다 (START만 남긴다)
+  const declutter = () => {
+    if (pins.length !== 2) return;
+    const [a, b] = pins.map((p) => map.project(p.at));
+    const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+    const finish = pins[1]!.el;
+    finish.classList.toggle('crowded', d < PIN_CROWD_PX);
+    finish.classList.toggle('stacked', d < PIN_STACK_PX);
+  };
+  map.on('zoom', declutter);
   return {
     apply(shapes) {
       const g = lineShapes(shapes);
@@ -117,9 +134,15 @@ export function addCourseLayers(map: MapLibreMap): CourseLayers {
         e.style.width = '26px';
         e.style.height = '36px';
         markers.push(new Marker({ element: e, anchor: 'bottom' }).setLngLat(p.at).addTo(map));
+        pins.push({ el: e, at: p.at });
       }
+      pins.sort((x, y) => (x.el.classList.contains('start') ? 0 : 1) - (y.el.classList.contains('start') ? 0 : 1));
+      declutter();
     },
-    remove: clearMarkers,
+    remove() {
+      map.off('zoom', declutter);
+      clearMarkers();
+    },
   };
 }
 

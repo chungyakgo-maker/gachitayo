@@ -28,6 +28,8 @@ export interface Settings {
   gMaxG: number;
   /** 주행 지도에 위치를 공유 중인 친구들을 보인다 (사용자 요청: 끌 수 있게) */
   driveFriends: boolean;
+  /** 메인 지도에 저장된 코스들을 보인다 (사용자 요청: 지도 위 칩으로 켜고 끈다) */
+  mainCourses: boolean;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mapTiles: true,
   gMaxG: G_MAX_DEFAULT,
   driveFriends: true,
+  mainCourses: true,
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -89,6 +92,7 @@ function load(): Settings {
       mapTiles: raw.mapTiles !== false,
       gMaxG: (G_MAX_OPTIONS as readonly number[]).includes(raw.gMaxG as number) ? raw.gMaxG! : G_MAX_DEFAULT,
       driveFriends: raw.driveFriends !== false,
+      mainCourses: raw.mainCourses !== false,
     };
   } catch {
     return DEFAULT_SETTINGS;

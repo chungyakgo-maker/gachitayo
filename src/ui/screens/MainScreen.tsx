@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
 import { beginPrepare, loadCourses, useDrive } from '../../app/drive';
+import { updateSettings, useSettings } from '../../app/settings';
 import { useRecording } from '../../app/recording';
 import { useAccount } from '../../app/account';
 import { useSync } from '../../app/sync';
@@ -23,6 +24,7 @@ export function MainScreen() {
   const { needRefresh, update } = usePwaUpdate();
   const rec = useRecording();
   const drive = useDrive();
+  const settings = useSettings();
   const sync = useSync();
   const acc = useAccount();
   const busy = drive.phase !== 'idle' || rec.phase !== 'idle';
@@ -121,6 +123,8 @@ export function MainScreen() {
       </div>
       <MainMap
         course={course}
+        courses={drive.courses}
+        showCourses={settings.mainCourses}
         me={fix}
         label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'}
         friends={friendsOn ? fr.positions : []}
@@ -130,7 +134,14 @@ export function MainScreen() {
         gpsAcc={fix?.hAcc ?? null}
       >
         <div className="map-controls">
-          {friendsOn && <ShareToggle variant="map" />}
+          <div className="map-chip-row">
+            {friendsOn && <ShareToggle variant="map" />}
+            {/* 메인 지도에 코스 보이기·숨기기 (사용자 요청) */}
+            <button type="button" className="map-share" aria-pressed={settings.mainCourses} onClick={() => updateSettings({ mainCourses: !settings.mainCourses })}>
+              <span className="dot" />
+              {settings.mainCourses ? '코스 보기 켜짐' : '코스 보기 꺼짐'}
+            </button>
+          </div>
           {friendsOn && fr.error && fr.sharing && <div className="map-chip">{fr.error}</div>}
         </div>
       </MainMap>

@@ -2,7 +2,7 @@
 // 지도 라이브러리를 가져오지 않는 순수 변환이라 jsdom 테스트로 확인한다.
 import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal } from '../../engine/geo';
-import type { GateWhich, MapShape } from './courseStyle';
+import { PIN_LABEL, type GateWhich, type MapShape } from './courseStyle';
 
 type LngLat = [number, number];
 interface Feature {
@@ -38,8 +38,8 @@ const fc = (features: Feature[]): FC => ({ type: 'FeatureCollection', features }
 const line = (pts: Array<[number, number]>, properties: Feature['properties'] = {}): Feature => ({ type: 'Feature', properties, geometry: { type: 'LineString', coordinates: pts.map(ll) } });
 const point = (at: [number, number], properties: Feature['properties'] = {}): Feature => ({ type: 'Feature', properties, geometry: { type: 'Point', coordinates: ll(at) } });
 
-/** 핀 글자는 핀 위(아래 기준 2.2em 위, 17px), 구간 글자는 점 위 12px(15px 글자 → 0.8em) */
-export const PIN_TEXT = { size: 17, offset: [0, -2.2] } as const;
+/** 핀 글자는 핀 위(핀 36px + 2px, 13px 글자 → 2.9em), 구간 글자는 점 위 12px(15px 글자 → 0.8em) */
+export const PIN_TEXT = { size: 13, offset: [0, -2.9] } as const;
 export const SECTOR_TEXT = { size: 15, offset: [0, -0.8] } as const;
 
 export function lineShapes(shapes: readonly MapShape[]): LineShapes {
@@ -118,8 +118,8 @@ export function mainCourseShapes(course: import('../../types/course').Course): M
     shapes.push({ kind: 'gate', a: [a.lat, a.lon], b: [b.lat, b.lon], which });
     pins.push({ kind: 'pin', at: [g.lat, g.lon], which, text });
   };
-  gate(course.startGate, 'start', '출발');
-  if (course.kind === 'point_to_point') gate(course.finishGate, 'finish', '도착');
+  gate(course.startGate, 'start', PIN_LABEL.start);
+  if (course.kind === 'point_to_point') gate(course.finishGate, 'finish', PIN_LABEL.finish);
   return [...shapes, ...pins];
 }
 

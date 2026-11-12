@@ -72,12 +72,12 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     // 코스 2줄 + 출발선 + 도착선 + 정확도 원 + 내 위치 2개
     expect(paths.length).toBeGreaterThanOrEqual(7);
     const labels = [...el.querySelectorAll('.map-label')].map((n) => n.textContent);
-    expect(labels).toEqual(expect.arrayContaining(['출발', '도착', '나']));
+    expect(labels).toEqual(expect.arrayContaining(['START', 'FINISH', '나']));
     expect(el.querySelector('path[stroke-dasharray="4 3"]')).not.toBeNull();
     m.destroy();
   });
 
-  it('코스 그리기 시안 2 (사용자 요청): 빨간 선 + 빛 번짐, 출발 파랑 핀 · 도착 빨강 핀 + 큰 글자, 출발선 파랑', async () => {
+  it('코스 그리기 (사용자 요청): 빨간 선 + 빛 번짐, 출발·도착 하늘색 핀 + START / FINISH, 출발선 하늘색', async () => {
     const { createMainMap, COURSE_STYLE } = await import('../../src/ui/map/leafletMap');
     const el = host();
     const m = createMainMap(el);
@@ -89,8 +89,34 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     const finish = el.querySelector('.map-pin.finish')!;
     expect(start.querySelector('path')!.getAttribute('fill')).toBe(COURSE_STYLE.start);
     expect(finish.querySelector('path')!.getAttribute('fill')).toBe(COURSE_STYLE.finish);
-    expect(start.querySelector('.map-label.big')!.textContent).toBe('출발');
-    expect(finish.querySelector('.map-label.big')!.textContent).toBe('도착');
+    // 사용자 요청: 출발·도착 핀은 하늘색으로 통일, 글자는 영어
+    expect(COURSE_STYLE.start).toBe('#aacae6');
+    expect(COURSE_STYLE.finish).toBe('#aacae6');
+    expect(start.querySelector('.map-label.big')!.textContent).toBe('START');
+    expect(finish.querySelector('.map-label.big')!.textContent).toBe('FINISH');
+    m.destroy();
+  });
+
+  it('다른 코스들도 이름과 함께 그리고 (사용자 요청), 코스 보기를 끄면 다 숨기되 지도 위치는 그대로', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    const other: Course = { ...course, id: 'c2', name: '다른 코스', startGate: { ...course.startGate, lat: 37.21 }, centerline: [[37.21, 127.1], [37.212, 127.1]] };
+    m.setCourses([course, other]);
+    m.update(course, null);
+    const names = () => [...el.querySelectorAll('.map-label.course-name')].map((n) => n.textContent);
+    // 감지된 코스는 핀으로 그리므로 이름표는 다른 코스만
+    expect(names()).toEqual(['다른 코스']);
+    expect(el.querySelector('.map-pin.start')).not.toBeNull();
+    m.map.setView([37.3, 127.2], 12, { animate: false });
+    m.setShowCourses(false);
+    expect(names()).toEqual([]);
+    expect(el.querySelector('.map-pin.start')).toBeNull();
+    expect(m.map.getCenter().lat).toBeCloseTo(37.3, 5);
+    expect(m.map.getZoom()).toBe(12);
+    m.setShowCourses(true);
+    expect(names()).toEqual(['다른 코스']);
+    expect(el.querySelector('.map-pin.start')).not.toBeNull();
     m.destroy();
   });
 

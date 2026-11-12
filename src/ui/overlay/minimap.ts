@@ -155,6 +155,9 @@ function gateLine(ctx: Ctx, g: Gate, v: MapView, dashed: boolean): void {
   ctx.setLineDash([]);
 }
 
+/** 지나온 길 색 (코스 지도의 빨간 선과 같게) */
+export const PATH_STYLE = { glow: '#ff3b30', line: '#ff453a', highlight: '#ffd2ce' } as const;
+
 /** 미니맵 그리기. 바탕은 호출하는 쪽이 칠한다 */
 export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: OverlayFrame, th: OverlayTheme, opts: MiniMapOpts = {}): MapView | null {
   const v = opts.view ?? fitView(model, f, w, h, opts);
@@ -172,10 +175,22 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     ctx.stroke();
   }
   if (f.path && f.path.length >= 2) {
+    // 지나온 길: 코스 지도와 같은 빨간 선 + 빛 번짐 (사용자 요청 "너무 옅어서 안 보인다")
     polyline(ctx, f.path, v, false);
-    ctx.globalAlpha = 0.55;
-    ctx.strokeStyle = th.accent;
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = PATH_STYLE.glow;
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = 14;
+    ctx.stroke();
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = PATH_STYLE.line;
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+    ctx.strokeStyle = PATH_STYLE.highlight;
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.globalAlpha = 1;
   }

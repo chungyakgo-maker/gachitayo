@@ -11,6 +11,10 @@ import { CourseMap } from './CourseMap';
 
 export interface MainMapProps {
   course: Course | null;
+  /** 다른 저장된 코스들 (가는 선 + 이름, 사용자 요청) */
+  courses?: Course[];
+  /** 코스 보이기 (메인 화면의 코스 보기 칩). 꺼도 지도 위치는 그대로 */
+  showCourses?: boolean;
   me: MapFix | null;
   label: string;
   /** 위치 공유 중인 친구 */
@@ -28,7 +32,9 @@ const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLi
 
 const insetVars = (t: number, b: number) => ({ '--inset-t': `${t}px`, '--inset-b': `${b}px` }) as CSSProperties;
 
-export function MainMap({ course, me, label, friends = [], insetTop = 0, insetBottom = 0, gps, gpsAcc, children }: MainMapProps) {
+const NO_COURSES: Course[] = [];
+
+export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, label, friends = [], insetTop = 0, insetBottom = 0, gps, gpsAcc, children }: MainMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<MainMapApi | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -79,12 +85,18 @@ export function MainMap({ course, me, label, friends = [], insetTop = 0, insetBo
   useEffect(() => {
     if (state === 'ready') ctl.current?.setFriends(friends);
   }, [state, friends]);
+  useEffect(() => {
+    if (state === 'ready') ctl.current?.setCourses(courses);
+  }, [state, courses]);
+  useEffect(() => {
+    if (state === 'ready') ctl.current?.setShowCourses(showCourses);
+  }, [state, showCourses]);
 
   if (state === 'failed') {
     const local = me ? toLocal(course?.origin ?? { lat: me.lat, lon: me.lon }, me.lat, me.lon) : null;
     return (
       <div className="main-map" style={insetVars(insetTop, insetBottom)}>
-        <CourseMap variant="main" course={course} me={local} label={label} insetTop={insetTop} insetBottom={insetBottom} />
+        <CourseMap variant="main" course={showCourses ? course : null} me={local} label={label} insetTop={insetTop} insetBottom={insetBottom} />
         {gps && <GpsIcon className="gps-icon map-gps main" state={gps} hAcc={gpsAcc} />}
         {children}
       </div>

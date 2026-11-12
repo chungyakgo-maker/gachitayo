@@ -8,6 +8,7 @@ import { PickMap } from '../components/PickMap';
 import { useLocationPreview } from '../hooks/useLocationPreview';
 import { IconBack } from '../icons';
 import type { MapShape } from '../map/leafletMap';
+import { PIN_LABEL } from '../map/courseStyle';
 
 const STEPS = ['출발선 위치', '출발 방향', '도착선 위치', '도착 방향'] as const;
 
@@ -31,7 +32,7 @@ export function NewCourseScreen() {
       }
     });
     picks.forEach((p, i) => {
-      if (i % 2 === 0) s.push({ kind: 'pin', at: [p.lat, p.lon], which: i === 0 ? 'start' : 'finish', text: i === 0 ? '출발' : '도착' });
+      if (i % 2 === 0) s.push({ kind: 'pin', at: [p.lat, p.lon], which: i === 0 ? 'start' : 'finish', text: i === 0 ? PIN_LABEL.start : PIN_LABEL.finish });
     });
     if (fix) s.push({ kind: 'dot', at: [fix.lat, fix.lon], color: '#eceef0', r: 5 });
     return s;

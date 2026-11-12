@@ -43,7 +43,7 @@ describe('코스 모양 → 선 지도 데이터', () => {
     { kind: 'gate', a: [37.1, 128.89], b: [37.1, 128.91], which: 'start' },
     { kind: 'gate', a: [37.2, 128.99], b: [37.2, 129.01], which: 'finish' },
     { kind: 'sector', at: [37.15, 128.95], text: '1|2' },
-    { kind: 'pin', at: [37.1, 128.9], which: 'start', text: '출발' },
+    { kind: 'pin', at: [37.1, 128.9], which: 'start', text: 'START' },
     { kind: 'line', pts: [[37.1, 128.9], [37.11, 128.9]], color: '#eceef0', weight: 3, dash: '6 4' },
     { kind: 'dot', at: [37.3, 129.1], color: '#aacae6', r: 8 },
     { kind: 'label', at: [37.3, 129.1], text: '여기' },
@@ -60,15 +60,17 @@ describe('코스 모양 → 선 지도 데이터', () => {
     expect(g.lines.features).toHaveLength(0);
     expect(g.dots.features[0]!.properties).toEqual({ color: '#aacae6', r: 8 });
     expect(g.sectors).toEqual([{ at: [128.95, 37.15], text: '1|2' }]);
-    expect(g.pins).toEqual([{ at: [128.9, 37.1], which: 'start', text: '출발' }]);
+    expect(g.pins).toEqual([{ at: [128.9, 37.1], which: 'start', text: 'START' }]);
     expect(g.labels).toEqual([{ at: [129.1, 37.3], text: '여기' }]);
   });
 
   it('핀·구간 글자 자리를 지명이 피해 가도록 알려 준다', () => {
     expect(g.blockers.features.map((f) => f.properties)).toEqual([
       { t: '1|2', s: 15, a: 'bottom', o: [0, -0.8] },
-      { t: '출발', s: PIN_TEXT.size, a: 'bottom', o: [0, -2.2] },
+      { t: 'START', s: PIN_TEXT.size, a: 'bottom', o: [...PIN_TEXT.offset] },
     ]);
+    // 사용자 요청: START / FINISH 글자는 작게 (화면 글자와 같은 13 px)
+    expect(PIN_TEXT.size).toBe(13);
   });
 });
 

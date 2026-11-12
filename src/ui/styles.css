@@ -804,12 +804,20 @@ html.app-h .modal-backdrop {
   white-space: nowrap;
 }
 
-.map-pin.start .pin-label {
-  color: #4c95ff;
+.map-pin .pin-label {
+  font-size: 13px;
+  line-height: 16px;
+  letter-spacing: 0.6px;
+  color: var(--accent);
 }
 
-.map-pin.finish .pin-label {
-  color: #ff5148;
+/* 넓게 볼 때 출발·도착 핀이 겹치면 START만 (lineMap.ts declutter) */
+.map-pin.crowded .pin-label {
+  display: none;
+}
+
+.map-pin.stacked {
+  visibility: hidden;
 }
 
 .map-label.me {
@@ -1831,6 +1839,21 @@ html.app-h .modal-backdrop {
 
 .map-controls .map-chip {
   position: static;
+}
+
+/* 위치 공유 · 코스 보기 칩을 옆으로 나란히 */
+.map-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.map-label.course-name {
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
 }
 
 .map-share {

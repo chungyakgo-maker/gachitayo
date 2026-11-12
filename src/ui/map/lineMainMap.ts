@@ -3,7 +3,8 @@
 // 사용자가 지도를 옮기면 멈춘다 (GPS 아이콘을 누르면 다시). 내 위치는 위·아래 칸에 가려지지 않은 영역의 가운데.
 import { Marker } from 'maplibre-gl';
 import type { Course } from '../../types/course';
-import { PIN_TOP_PX } from './courseStyle';
+import { COURSE_STYLE, PIN_TOP_PX } from './courseStyle';
+import { LINE_MAP_FONTS } from './lineStyle';
 import { addCourseLayers, boundsOf, emptyFC, newLineMap, setData, type CourseLayers } from './lineMap';
 import { circlePolygon, lineZoom, mainCourseShapes } from './lineShapes';
 import type { LineMapConfig } from './lineMapSupport';
@@ -21,6 +22,8 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
   let lastCourse: Course | null = null;
   let lastMe: MapFix | null = null;
   let friends: FriendMarker[] = [];
+  let others: Course[] = [];
+  let show = true;
   let inset = { top: 0, bottom: 0 };
   let haveMe = false;
   let userMoved = false;
@@ -39,6 +42,19 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
 
   map.on('load', () => {
     loaded = true;
+    // 다른 코스 (사용자 요청: 메인 지도에 코스 다 보이게): 가는 빨간 선 + 이름. 감지된 코스 아래에 깔리게 먼저
+    map.addSource('others', { type: 'geojson', data: emptyFC() });
+    map.addSource('others-name', { type: 'geojson', data: emptyFC() });
+    const round = { 'line-join': 'round', 'line-cap': 'round' } as const;
+    map.addLayer({ id: 'others-glow', type: 'line', source: 'others', layout: round, paint: { 'line-color': COURSE_STYLE.glow, 'line-width': 8, 'line-opacity': 0.3, 'line-blur': 4 } });
+    map.addLayer({ id: 'others-line', type: 'line', source: 'others', layout: round, paint: { 'line-color': COURSE_STYLE.route, 'line-width': 2.4, 'line-opacity': 0.9 } });
+    map.addLayer({
+      id: 'others-name',
+      type: 'symbol',
+      source: 'others-name',
+      layout: { 'text-field': ['get', 'name'], 'text-font': [LINE_MAP_FONTS.bold], 'text-size': 12, 'text-anchor': 'left', 'text-offset': [0.7, 0], 'text-padding': 4 },
+      paint: { 'text-color': '#eceef0', 'text-halo-color': '#0b0c0e', 'text-halo-width': 1.6 },
+    });
     course = addCourseLayers(map);
     // 내 위치: 오차 원, 둘레 빛, 점
     map.addSource('me-acc', { type: 'geojson', data: emptyFC() });
@@ -50,6 +66,7 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
     map.addLayer({ id: 'me-halo', type: 'circle', source: 'me', paint: { 'circle-radius': 16, 'circle-color': ACCENT, 'circle-opacity': 0.16 } });
     map.addLayer({ id: 'me-dot', type: 'circle', source: 'me', paint: { 'circle-radius': 6.5, 'circle-color': '#eceef0', 'circle-stroke-color': ACCENT, 'circle-stroke-width': 3 } });
     onTiles?.(true);
+    drawOthers();
     drawCourse(lastCourse);
     drawMe(lastMe);
     drawFriends();
@@ -58,7 +75,23 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
 
   function drawCourse(c: Course | null) {
     if (!course) return;
-    course.apply(c ? mainCourseShapes(c) : []);
+    course.apply(c && show ? mainCourseShapes(c) : []);
+  }
+
+  function drawOthers() {
+    if (!loaded) return;
+    const list = show ? others.filter((c) => c.id !== lastCourse?.id && c.centerline && c.centerline.length >= 2) : [];
+    setData(map, 'others', {
+      type: 'FeatureCollection',
+      features: list.map((c) => {
+        const line = c.kind === 'loop' ? [...c.centerline!, c.centerline![0]!] : c.centerline!;
+        return { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.map(([lat, lon]) => [lon, lat]) } };
+      }),
+    });
+    setData(map, 'others-name', {
+      type: 'FeatureCollection',
+      features: list.map((c) => ({ type: 'Feature', properties: { name: c.name }, geometry: { type: 'Point', coordinates: [c.startGate.lon, c.startGate.lat] } })),
+    });
   }
 
   function drawMe(me: MapFix | null) {
@@ -114,6 +147,7 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       if (courseChanged) {
         courseKey = key;
         drawCourse(c);
+        drawOthers();
       }
       drawMe(me);
       // 코스가 바뀌었거나 처음 위치를 받았을 때만 화면을 맞춘다 (사용자가 옮긴 뒤에는 위치가 바뀌어도 그대로)
@@ -133,6 +167,16 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
     setFriends(list) {
       friends = list;
       drawFriends();
+    },
+    setCourses(list) {
+      others = list;
+      drawOthers();
+    },
+    setShowCourses(on) {
+      if (on === show) return;
+      show = on;
+      drawCourse(lastCourse);
+      drawOthers();
     },
     fitFriends(me) {
       const pts: Array<[number, number]> = friends.map((f) => [f.lat, f.lon]);
