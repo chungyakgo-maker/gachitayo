@@ -13,7 +13,11 @@ const ENT: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apo
 
 function decode(s: string): string {
   return s.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (m, e: string) => {
-    if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+    if (e[0] === '#') {
+      const cp = e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      if (!(cp >= 0 && cp <= 0x10ffff)) fail(`잘못된 문자 번호 ${m}`);
+      return String.fromCodePoint(cp);
+    }
     return ENT[e] ?? m;
   });
 }

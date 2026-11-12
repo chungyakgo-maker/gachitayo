@@ -9,17 +9,22 @@ export function smoothG(ax: ArrayLike<number>, ay: ArrayLike<number>, hz: number
   const half = Math.max(0, Math.round((config.gforce.avgWindowS * hz) / 2));
   const gx = new Float64Array(n);
   const gy = new Float64Array(n);
+  // 값이 없는 칸(보정 전, 모션 끊김: NaN)은 빼고 남은 값으로 평균한다. 창 전체가 비면 NaN
   const cx = new Float64Array(n + 1);
   const cy = new Float64Array(n + 1);
+  const cn = new Float64Array(n + 1);
   for (let i = 0; i < n; i++) {
-    cx[i + 1] = cx[i]! + ax[i]!;
-    cy[i + 1] = cy[i]! + ay[i]!;
+    const ok = Number.isFinite(ax[i]!) && Number.isFinite(ay[i]!);
+    cx[i + 1] = cx[i]! + (ok ? ax[i]! : 0);
+    cy[i + 1] = cy[i]! + (ok ? ay[i]! : 0);
+    cn[i + 1] = cn[i]! + (ok ? 1 : 0);
   }
   for (let i = 0; i < n; i++) {
     const a = Math.max(0, i - half);
     const b = Math.min(n, i + half + 1);
-    gx[i] = (cx[b]! - cx[a]!) / (b - a) / G;
-    gy[i] = (cy[b]! - cy[a]!) / (b - a) / G;
+    const c = cn[b]! - cn[a]!;
+    gx[i] = c > 0 ? (cx[b]! - cx[a]!) / c / G : Number.NaN;
+    gy[i] = c > 0 ? (cy[b]! - cy[a]!) / c / G : Number.NaN;
   }
   return { gx, gy };
 }

@@ -50,3 +50,37 @@ describe('고도 (사양서 7.13)', () => {
     expect(smoothAltitude([], new Float64Array(3))).toBeNull();
   });
 });
+
+describe('M4 검토 수정: G·고도', () => {
+  it('중간에 값이 없는(NaN) 칸이 있어도 그 밖의 G값은 그대로 계산한다', () => {
+    const n = 500;
+    const ax = Float64Array.from({ length: n }, (_, i) => (i >= 200 && i < 250 ? Number.NaN : 9.80665));
+    const ay = new Float64Array(n);
+    const g = smoothG(ax, ay, 50);
+    expect(g.gx[100]).toBeCloseTo(1, 9);
+    expect(g.gx[400]).toBeCloseTo(1, 9);
+    // 끊김 바로 옆도 남은 값으로 평균
+    expect(g.gx[198]).toBeCloseTo(1, 9);
+    // 창 전체가 비면 값 없음
+    expect(Number.isNaN(g.gx[225]!)).toBe(true);
+  });
+
+  it('고도 평활은 점이 많아도 빠르다 (25 Hz 30분 = 45,000점)', () => {
+    const gps: GpsSample[] = Array.from({ length: 45_000 }, (_, k) => ({
+      tRecv: k * 40,
+      tFix: k * 40,
+      lat: 0,
+      lon: 0,
+      alt: 100 + Math.sin(k / 500) * 10,
+      altAcc: 6,
+      hAcc: 5,
+      speed: 0,
+      heading: null,
+    }));
+    const times = Float64Array.from({ length: 18_000 }, (_, i) => i * 100);
+    const t0 = performance.now();
+    const alt = smoothAltitude(gps, times)!;
+    expect(performance.now() - t0).toBeLessThan(500);
+    expect(alt[9000]!).toBeCloseTo(100 + Math.sin(22_500 / 500) * 10, 0);
+  });
+});

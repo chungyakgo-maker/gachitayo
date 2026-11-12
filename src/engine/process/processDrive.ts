@@ -10,7 +10,7 @@ import { buildTrace, type LapTrace } from '../delta/trace';
 import { smoothAltitude } from '../derive/altitude';
 import { smoothG } from '../derive/gforce';
 import { processSession, type SessionProcessResult } from '../fusion/processSession';
-import type { Course } from '../../types/course';
+import type { Course, CourseKind } from '../../types/course';
 import type { GpsSample, RawMotionSample, SessionEvent } from '../../types/samples';
 
 export interface DriveLap extends LapResult {
@@ -58,8 +58,8 @@ export interface DriveInput {
   motion: RawMotionSample[];
   events: SessionEvent[];
   course: Course | null;
-  /** 코스를 자동으로 만들 때 쓸 id·이름 */
-  newCourse?: { id: string; name: string };
+  /** 코스를 자동으로 만들 때 쓸 id·이름, 사용자가 고른 종류 (주행 종료 확인, 사양서 8.5. 없으면 자동 판정) */
+  newCourse?: { id: string; name: string; kind?: CourseKind };
 }
 
 /** 앱이 멈췄던 구간: pause → resume, 또는 강제 종료 뒤 이어서 하기 */
@@ -97,11 +97,18 @@ export function processDrive(input: DriveInput): DriveResult {
     v: tr.v,
   };
 
+  const pauses = pausesFromEvents(input.events, gps);
+  const gpsTimes = gps.map((g) => g.tRecv);
+  // 중심선으로 쓰면 안 되는 구간: 앱 중단, GPS가 5초 넘게 끊긴 곳
+  const broken: Array<[number, number]> = [...pauses];
+  for (let i = 1; i < gpsTimes.length; i++)
+    if (gpsTimes[i]! - gpsTimes[i - 1]! > config.laps.maxGpsGapS * 1000) broken.push([gpsTimes[i - 1]!, gpsTimes[i]!]);
+
   let course = input.course;
   let courseCreated = false;
   let courseUpdated = false;
   if (!course) {
-    const det = detectCourse(tr, origin);
+    const det = detectCourse(tr, origin, { kind: input.newCourse?.kind, exclude: broken });
     if (det) {
       course = withCenterline(
         {
@@ -123,13 +130,12 @@ export function processDrive(input: DriveInput): DriveResult {
     }
   }
 
-  const pauses = pausesFromEvents(input.events, gps);
-  const gpsTimes = gps.map((g) => g.tRecv);
   let split = course ? splitLaps({ geom: buildGeometry(course), track: frames, gpsTimes, pauses }) : null;
 
-  // 지도로 등록한 코스(중심선 없음): 첫 랩 경로로 중심선을 만들고 다시 계산한다
-  if (course && !course.centerline && split && split.laps.length > 0) {
-    const l = split.laps[0]!;
+  // 지도로 등록한 코스(중심선 없음): 앱 중단·GPS 끊김이 없는 첫 랩 경로로 중심선을 만들고 다시 계산한다 (사양서 7.5 "첫 유효 랩")
+  const cleanLap = split?.laps.find((l) => l.invalidReason !== 'interrupted' && l.invalidReason !== 'gps_lost');
+  if (course && !course.centerline && split && cleanLap) {
+    const l = cleanLap;
     const xs: number[] = [];
     const ys: number[] = [];
     for (let k = 0; k < frames.n; k++) {

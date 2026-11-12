@@ -222,3 +222,40 @@ export function joinTracks(a: Track, b: Track): Track {
     pointAt: (s) => (s <= a.length ? a.pointAt(s) : b.pointAt(s - a.length)),
   };
 }
+
+/** b를 a의 끝 위치·방향에 이어 붙인다 (b를 돌리고 옮긴다) */
+export function appendTrack(a: Track, b: Track): Track {
+  const e = a.pointAt(a.length);
+  const s0 = b.pointAt(0);
+  const rot = e.psi - s0.psi;
+  const c = Math.cos(rot);
+  const sn = Math.sin(rot);
+  return {
+    length: a.length + b.length,
+    closed: false,
+    pointAt(s) {
+      if (s <= a.length) return a.pointAt(s);
+      const p = b.pointAt(s - a.length);
+      const dx = p.x - s0.x;
+      const dy = p.y - s0.y;
+      return { x: e.x + c * dx - sn * dy, y: e.y + sn * dx + c * dy, psi: p.psi + rot, curvature: p.curvature };
+    },
+  };
+}
+
+/**
+ * 물방울 모양 U턴: 오른쪽 a°, 왼쪽 180+2a°, 오른쪽 a° (반지름 r). 끝나면 방향이 반대이고 왼쪽으로 약간 옮겨져 있다
+ * (r 6 m, a 50°면 3.4 m: 반대 차로).
+ */
+export function uTurn(r = 6, a = 50): Track {
+  return segmentTrack([
+    { arc: -r, angleDeg: a },
+    { arc: r, angleDeg: 180 + 2 * a },
+    { arc: -r, angleDeg: a },
+  ]);
+}
+
+/** 편도를 올라갔다(U턴) 내려와(U턴) 다시 올라가는 경로 */
+export function upDownUp(w: Track): Track {
+  return appendTrack(appendTrack(appendTrack(appendTrack(w, uTurn()), reversedTrack(w)), uTurn()), w);
+}

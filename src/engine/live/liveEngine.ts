@@ -3,6 +3,7 @@
 import { config } from '../config';
 import type { CourseGeometry } from '../course/geometry';
 import { GateDetector } from '../course/gates';
+import { LapProgress } from '../course/lapProgress';
 import { STracker } from '../course/sTracker';
 import { DeltaFilter, rawDelta } from '../delta/delta';
 import type { LapTrace } from '../delta/trace';
@@ -55,40 +56,14 @@ export interface LiveState {
   status: { gpsWeak: boolean; offCourse: boolean; gNotCalibrated: boolean; courseRecording: boolean };
 }
 
-/**
- * 랩 안에서의 코스 거리. 출발선과 중심선의 시작·끝이 조금 어긋나 있으면 코스 거리가 출발선보다 먼저(또는 늦게) 넘어간다.
- * - 출발선을 막 지났는데 아직 둘레 끝으로 읽히면 0
- * - 랩의 절반을 넘게 달린 뒤 0 근처로 읽히면(출발선을 지나기 직전) 둘레 끝
- * 그대로 두면 델타가 한 바퀴만큼 튄다.
- */
-export class LapProgress {
-  private maxS = 0;
-
-  constructor(private readonly length: number | null) {}
-
-  reset(): void {
-    this.maxS = 0;
-  }
-
-  map(s: number | null, lapElapsedMs: number | null): number | null {
-    const L = this.length;
-    if (s === null || L === null || lapElapsedMs === null) return s;
-    let r = s;
-    if (this.maxS < L / 2 && s > L - WRAP_M && lapElapsedMs < LAP_START_MS) r = 0;
-    else if (this.maxS > L / 2 && s < WRAP_M) r = L;
-    this.maxS = Math.max(this.maxS, r);
-    return r;
-  }
-}
-const WRAP_M = 50;
-const LAP_START_MS = 10_000;
-
 export class LiveEngine {
   private readonly det: GateDetector | null;
   private readonly st: STracker | null;
   private readonly filter = new DeltaFilter();
   private readonly g = new GForceSmoother();
   private lapNo = 0;
+  /** 완주한 랩 수. 랩 번호는 완주 순서 (편도에서 출발했다 그만둔 주행은 번호를 쓰지 않는다. 주행 후 처리와 같음) */
+  private completed = 0;
   private lapStartT: number | null = null;
   private lapValid = true;
   private lastLap: CompletedLap | null = null;
@@ -133,7 +108,7 @@ export class LiveEngine {
     }
 
     const tr = this.st ? this.st.update(p.x, p.y, p.v, p.t) : { s: null as number | null, onCourse: true };
-    tr.s = this.progress.map(tr.s, this.lapStartT === null ? null : p.t - this.lapStartT);
+    tr.s = this.progress.map(tr.s, this.lapStartT !== null);
     status.offCourse = !tr.onCourse;
 
     // GPS 5초 넘게 끊기거나 코스를 벗어나면 이 랩은 무효
@@ -173,7 +148,7 @@ export class LiveEngine {
   }
 
   private startLap(t: number): void {
-    this.lapNo += 1;
+    this.lapNo = this.completed + 1;
     this.lapStartT = t;
     this.lapValid = true;
     this.sectorCross = [null, null];
@@ -185,6 +160,7 @@ export class LiveEngine {
   }
 
   private completeLap(t: number): void {
+    this.completed += 1;
     const timeMs = t - this.lapStartT!;
     const [s1, s2] = this.sectorCross;
     const sectors: [number | null, number | null, number | null] = [

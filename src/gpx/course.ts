@@ -11,8 +11,13 @@ import type { GpxData } from './parse';
 /** 이 앱이 내보낸 GPX의 creator. 이미 다듬은 1 m 중심선이라 다시 평활하지 않는다 (왕복해도 같은 코스) */
 export const GPX_CREATOR = '같이타요';
 
+/** 자동 코스와 같은 최소 길이 */
+const MIN_COURSE_M = 50;
+
 /** 평활 후 1 m 재샘플. 양 끝이 30 m 이내면 랩 코스, 아니면 편도. 게이트는 양 끝점과 그곳의 진행 방향 */
 export function courseFromGpx(gpx: GpxData, opts: { id: string; name: string }): Course {
+  const tooShort = () => new Error(`코스가 너무 짧습니다 (${MIN_COURSE_M} m 이상이어야 합니다)`);
+  if (gpx.points.length < 2) throw tooShort();
   const first = gpx.points[0]!;
   const origin = { lat: first.lat, lon: first.lon };
   const xy = gpx.points.map((p) => toLocal(origin, p.lat, p.lon));
@@ -27,6 +32,7 @@ export function courseFromGpx(gpx: GpxData, opts: { id: string; name: string }):
     loop,
     gpx.creator !== GPX_CREATOR,
   );
+  if (!(cl.length >= MIN_COURSE_M)) throw tooShort();
   const s0 = polylinePoint(cl, 0);
   const s1 = polylinePoint(cl, cl.length);
   const start = gateFromPoint(s0.x, s0.y, polylinePoint(cl, Math.min(1, cl.length)).psi, origin);

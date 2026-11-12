@@ -119,6 +119,8 @@ export const config = {
       loopMatchM: 8,
       /** 처음 돌아온 곳에서 겹치는 지점을 찾는 범위 */
       loopRefineM: 100,
+      /** 편도 출발선·도착선을 주행 양 끝에서 이만큼 안쪽에 둔다 (M4 검토 결정) */
+      p2pGateInsetM: 20,
     },
     /** 코스 다듬기에 필요한 유효 랩 수 */
     refineMinLaps: 3,

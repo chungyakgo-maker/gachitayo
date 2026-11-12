@@ -113,3 +113,30 @@ describe('GPX 왕복 (사양서 10.1)', () => {
     expect(r2.processed.lat).toEqual(r1.processed.lat);
   });
 });
+
+describe('M4 검토 수정: GPX 예외 입력', () => {
+  const gpxOf = (pts: string) => `<?xml version="1.0"?><gpx version="1.1" creator="x"><trk><trkseg>${pts}</trkseg></trk></gpx>`;
+
+  it('점이 하나뿐이거나 너무 짧은 GPX는 코스로 만들지 않고 알려준다', () => {
+    expect(() => courseFromGpx(parseGpx(gpxOf('<trkpt lat="37.2" lon="127.1"/>')), { id: 'a', name: 'a' })).toThrow(/짧/);
+    expect(() =>
+      courseFromGpx(parseGpx(gpxOf('<trkpt lat="37.2" lon="127.1"/><trkpt lat="37.2" lon="127.1"/>')), { id: 'a', name: 'a' }),
+    ).toThrow(/짧/);
+  });
+
+  it('시간대 표시가 없는 시각은 UTC로 읽는다 (폰 시간대와 상관없이 같은 결과)', () => {
+    const prev = process.env.TZ;
+    process.env.TZ = 'Asia/Seoul';
+    try {
+      const g = parseGpx(gpxOf('<trkpt lat="37.2" lon="127.1"><time>2024-05-01T10:00:00</time></trkpt>'));
+      expect(g.points[0]!.time).toBe(Date.UTC(2024, 4, 1, 10));
+    } finally {
+      if (prev === undefined) delete process.env.TZ;
+      else process.env.TZ = prev;
+    }
+  });
+
+  it('잘못된 숫자 엔티티는 XML 형식 오류', () => {
+    expect(() => parseXml('<a>&#x110000;</a>')).toThrow(/XML 형식 오류/);
+  });
+});

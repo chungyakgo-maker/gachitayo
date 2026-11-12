@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { defaultSensorOpts, simulateDrive, stadiumTrack, synthesizeSensors, type DriveOpts } from '../generators';
+import {
+  defaultSensorOpts,
+  segmentTrack,
+  simulateDrive,
+  stadiumTrack,
+  synthesizeSensors,
+  upDownUp,
+  windingWithHairpins,
+  type DriveOpts,
+  type SensorOpts,
+} from '../generators';
 import { processDrive, type DriveResult } from '../../src/engine/process/processDrive';
 import { LiveEngine } from '../../src/engine/live/liveEngine';
 import { buildGeometry } from '../../src/engine/course/geometry';
@@ -14,9 +24,9 @@ const base: DriveOpts = { laps: 3, startStopS: 5, endStopS: 3, vMax: 40, aLatMax
 const scaled = (k: number): DriveOpts => ({ ...base, vMax: 40 * k, aLatMax: 8 * k * k, aAccel: 3 * k * k, aBrake: 6 * k * k });
 const startEvent: SessionEvent[] = [{ t: 0, type: 'start' }];
 
-function session(opts: DriveOpts, seed: number) {
-  const truth = simulateDrive(oval, opts);
-  const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed });
+function session(opts: DriveOpts, seed: number, sensor: Partial<SensorOpts> = {}, track = oval) {
+  const truth = simulateDrive(track, opts);
+  const s = synthesizeSensors(truth, { ...defaultSensorOpts, ...sensor, seed });
   return { truth, ...s };
 }
 
@@ -124,5 +134,103 @@ describe('주행 중 엔진 (사양서 8.4)', () => {
     const st = live.push({ t: 0, x: 0, y: -60, v: 10, sigmaPos: 12, ax: 1, ay: 0, gpsOk: false, gCalibrated: false });
     expect(st.gx).toBeNull();
     expect(st.status).toMatchObject({ gNotCalibrated: true, gpsWeak: true, offCourse: true });
+  });
+});
+
+describe('M4 검토 수정', () => {
+  it('모션이 1초 끊겨도, 늦게 시작해도 처리된 궤적의 G값은 대부분 남는다', () => {
+    for (const gaps of [[[60, 61]], [[0, 1.5]]] as Array<Array<[number, number]>>) {
+      const s = session(base, 84, { motionGaps: gaps });
+      const r = processDrive({ gps: s.gps, motion: s.motion, events: startEvent, course: null });
+      const p = r.processed;
+      const ok = p.ax.filter((v, i) => v !== null && p.ay[i] !== null).length;
+      expect(ok / p.n).toBeGreaterThan(0.9);
+    }
+  });
+
+  it('지도 등록 코스: 첫 랩에 앱 중단이 있으면 중단 없는 다음 랩으로 중심선을 만든다', () => {
+    const course = { ...courseFromTrack(oval, { gateAtS: 100 }), centerline: null, lengthM: null, sectorBoundsM: null, source: 'map' as const };
+    // 한 바퀴 약 45초: 첫 랩(출발선 통과 약 13초 뒤) 안에서 10초 중단
+    const gap: [number, number] = [25, 35];
+    const s = session({ ...base, laps: 4 }, 85, { dropouts: [gap], motionGaps: [gap] });
+    const events: SessionEvent[] = [
+      { t: 0, type: 'start' },
+      { t: gap[0] * 1000, type: 'pause' },
+      { t: gap[1] * 1000, type: 'resume' },
+    ];
+    const r = processDrive({ gps: s.gps, motion: s.motion, events, course });
+    expect(Math.abs(r.course!.lengthM! - oval.length) / oval.length).toBeLessThan(0.02);
+    expect(r.laps[0]!.invalidReason).toBe('interrupted');
+    expect(r.laps.slice(1).every((l) => l.valid)).toBe(true);
+  });
+
+  it('첫 주행으로 자동 생성한 편도 코스: 다른 날 같은 길을 달리면 매번 랩이 잡힌다', () => {
+    const w = windingWithHairpins();
+    const p2p: DriveOpts = { ...base, laps: 1, vMax: 30, aLatMax: 6 };
+    const first = session(p2p, 21, {}, w);
+    const made = processDrive({ gps: first.gps, motion: first.motion, events: startEvent, course: null });
+    expect(made.course!.kind).toBe('point_to_point');
+    expect(made.laps).toHaveLength(1);
+    for (const seed of [21, 22, 23]) {
+      const s = session(p2p, seed + 100, {}, w);
+      const r = processDrive({ gps: s.gps, motion: s.motion, events: startEvent, course: made.course });
+      expect(r.laps, `seed ${seed}`).toHaveLength(1);
+      expect(r.laps[0]!.valid).toBe(true);
+    }
+  });
+
+  it('첫 주행에 편도를 두 번(올라감→U턴→내려옴→U턴→올라감): 편도 코스 하나, 랩 2개. 내려오는 길의 코스 거리는 없음', () => {
+    const w = windingWithHairpins();
+    const opts: DriveOpts = { ...base, laps: 1, vMax: 30, aLatMax: 6 };
+    const s = session(opts, 31, {}, upDownUp(w));
+    const r = processDrive({ gps: s.gps, motion: s.motion, events: startEvent, course: null });
+    expect(r.course!.kind).toBe('point_to_point');
+    expect(r.laps).toHaveLength(2);
+    expect(r.laps.map((l) => l.lapNo)).toEqual([1, 2]);
+    expect(r.laps.every((l) => l.valid)).toBe(true);
+    // 첫 랩이 끝난 뒤 내려오는 동안(랩 밖)은 코스 거리를 모른다
+    const between = r.processed.t
+      .map((t, i) => ({ t, s: r.processed.s[i] }))
+      .filter((p) => p.t > r.laps[0]!.endT + 5000 && p.t < r.laps[1]!.startT - 5000);
+    expect(between.length).toBeGreaterThan(50);
+    expect(between.every((p) => p.s === null)).toBe(true);
+  });
+
+  it('사용자가 종료 화면에서 편도를 고르면 편도로 다시 만든다', () => {
+    const s = session(base, 86);
+    const r = processDrive({ gps: s.gps, motion: s.motion, events: startEvent, course: null, newCourse: { id: 'n', name: 'n', kind: 'point_to_point' } });
+    expect(r.course!.kind).toBe('point_to_point');
+  });
+});
+
+describe('주행 중 엔진: 편도 랩 번호', () => {
+  it('완주 → 출발했다 되돌아감 → 완주: 랩 번호는 완주한 순서대로 1, 2 (주행 후 처리와 같다)', () => {
+    const line = segmentTrack([{ straight: 400 }]);
+    const geom = buildGeometry(courseFromTrack(line, { startInsetM: 20, finishInsetM: 20 }));
+    const live = new LiveEngine(geom, null);
+    let t = 0;
+    const done: number[] = [];
+    const go = (x0: number, x1: number, v = 20) => {
+      const step = (Math.sign(x1 - x0) * v) / 10;
+      for (let x = x0; Math.sign(x1 - x0) * (x1 - x) > 0; x += step) {
+        t += 100;
+        const st = live.push({ t, x, y: 0, v, sigmaPos: 2, ax: null, ay: null, gpsOk: true, gCalibrated: false });
+        if (st.lastLap && !done.includes(st.lastLap.lapNo) && st.lastLap.t > t - 200) done.push(st.lastLap.lapNo);
+      }
+    };
+    const wait = (s: number) => {
+      for (let i = 0; i < s * 10; i++) {
+        t += 100;
+        live.push({ t, x: 0, y: 0, v: 0, sigmaPos: 2, ax: null, ay: null, gpsOk: true, gCalibrated: false });
+      }
+    };
+    go(0, 400);
+    t += 20_000;
+    wait(3);
+    go(0, 100);
+    go(100, 0);
+    wait(12);
+    go(0, 400);
+    expect(done).toEqual([1, 2]);
   });
 });

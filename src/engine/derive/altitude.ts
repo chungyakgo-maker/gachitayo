@@ -10,18 +10,16 @@ export function smoothAltitude(gps: GpsSample[], times: ArrayLike<number>): Floa
     .sort((a, b) => a.t - b.t);
   if (pts.length < 2) return null;
   const half = (config.altitude.smoothWindowS * 1000) / 2;
-  // 점마다 창 평균
-  const sm = pts.map((p) => {
-    let s = 0;
-    let c = 0;
-    for (const q of pts) {
-      if (Math.abs(q.t - p.t) <= half) {
-        s += q.a;
-        c++;
-      }
-    }
-    return { t: p.t, a: s / c };
-  });
+  // 점마다 창 평균 (시각순이라 창의 앞뒤 끝만 옮기면 된다)
+  const sm: Array<{ t: number; a: number }> = [];
+  let lo = 0;
+  let hi = 0;
+  let sum = 0;
+  for (const p of pts) {
+    while (hi < pts.length && pts[hi]!.t <= p.t + half) sum += pts[hi++]!.a;
+    while (pts[lo]!.t < p.t - half) sum -= pts[lo++]!.a;
+    sm.push({ t: p.t, a: sum / (hi - lo) });
+  }
   const out = new Float64Array(times.length);
   let j = 0;
   for (let i = 0; i < times.length; i++) {

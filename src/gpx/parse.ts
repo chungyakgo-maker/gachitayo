@@ -29,12 +29,19 @@ const num = (s: string | null): number | null => {
   return Number.isFinite(v) ? v : null;
 };
 
+/** GPX 시각은 UTC다. 시간대 표시가 없으면 Z를 붙여 읽는다 (Date.parse는 기기 시간대로 읽어서 폰마다 결과가 달라진다) */
+function parseTime(t: string): number {
+  const s = t.trim();
+  const hasZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(s);
+  return Date.parse(hasZone || !s.includes('T') ? s : `${s}Z`);
+}
+
 function readPoint(n: XmlNode): GpxPoint | null {
   const lat = num(n.attrs.lat ?? null);
   const lon = num(n.attrs.lon ?? null);
   if (lat === null || lon === null) return null;
   const t = childText(n, 'time');
-  const parsed = t ? Date.parse(t) : Number.NaN;
+  const parsed = t ? parseTime(t) : Number.NaN;
   const ext = childrenNamed(n, 'extensions')[0];
   const speedNode = childrenNamed(n, 'speed')[0] ?? (ext ? findDescendant(ext, 'speed') : null);
   return {

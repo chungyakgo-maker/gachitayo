@@ -4,7 +4,7 @@ import { config } from '../config';
 import type { CourseGeometry } from './geometry';
 import { GateDetector, type GateCrossing } from './gates';
 import { STracker } from './sTracker';
-import { LapProgress } from '../live/liveEngine';
+import { LapProgress } from './lapProgress';
 
 export interface FrameTrack {
   n: number;
@@ -59,7 +59,9 @@ export function splitLaps(input: {
   const offCourse = new Uint8Array(n);
   const crossings: GateCrossing[] = [];
 
-  let lastStart: number | null = null;
+  // 랩 안인지: 랩 코스는 첫 출발선 통과 뒤 계속, 편도는 출발선부터 도착선까지
+  const p2p = geom.course.kind !== 'loop';
+  let inLap = false;
   const progress = new LapProgress(geom.centerline?.length ?? null);
   for (let k = 0; k < n; k++) {
     for (const c of det.push(track.t[k]!, track.x[k]!, track.y[k]!)) {
@@ -67,12 +69,15 @@ export function splitLaps(input: {
       if (c.gate === 'start') {
         st.resetAtStart();
         progress.reset();
-        lastStart = c.t;
+        inLap = true;
+      } else if (p2p) {
+        inLap = false;
       }
     }
     const r = st.update(track.x[k]!, track.y[k]!, track.v[k]!, track.t[k]!);
-    const s = progress.map(r.s, lastStart === null ? null : track.t[k]! - lastStart);
-    frameS[k] = s ?? Number.NaN;
+    const s = progress.map(r.s, inLap);
+    // 편도: 랩 밖(출발 전, 도착 뒤 돌아오는 길)의 코스 거리는 의미가 없다
+    frameS[k] = p2p && !inLap ? Number.NaN : (s ?? Number.NaN);
     offCourse[k] = r.onCourse ? 0 : 1;
   }
 
