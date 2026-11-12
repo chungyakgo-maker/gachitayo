@@ -34,10 +34,19 @@ export interface SessionRecord {
 }
 
 /** 5초 단위로 저장하는 원본 덩어리 */
+/** 추가 센서 채널 (사양서 13.2 OBD 확장 지점). 이름 예: obd_rpm. t는 세션 시계 ms */
+export interface ChannelSeries {
+  t: number[];
+  v: number[];
+}
+export type Channels = Record<string, ChannelSeries>;
+
 export interface ChunkRecord {
   sessionId: string;
   seq: number;
   gps: GpsSample[];
   rawMotion: RawMotionSample[];
   events: SessionEvent[];
+  /** 1단계에서는 비어 있다 (OBD는 13.2) */
+  channels?: Channels;
 }

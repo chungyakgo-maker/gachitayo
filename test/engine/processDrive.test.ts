@@ -52,9 +52,35 @@ describe('주행 후 처리 (사양서 5.4)', () => {
     const p = first.processed;
     expect(p.hz).toBe(10);
     for (let i = 1; i < 20; i++) expect(p.t[i]! - p.t[i - 1]!).toBe(100);
-    for (const col of [p.lat, p.lon, p.speed, p.heading, p.ax, p.ay, p.s, p.lapNo, p.alt]) expect(col.length).toBe(p.n);
+    for (const col of [p.lat, p.lon, p.speed, p.heading, p.ax, p.ay, p.s, p.lapNo, p.alt, p.utc!, p.hAcc!]) expect(col.length).toBe(p.n);
     expect(Math.abs(p.lat[0]! - ORIGIN.lat)).toBeLessThan(0.01);
     expect(Math.max(...p.lapNo)).toBe(first.laps.length);
+  });
+
+  it('처리된 궤적에 GPS 기준 UTC 시각과 수평 정확도 열이 있다 (사양서 6.7, 13.1 확장 지점)', () => {
+    const lat = 180;
+    const s = session(base, 82, { gpsLatencyMs: lat });
+    const r = processDrive({ gps: s.gps, motion: s.motion, events: startEvent, course: null, startedAtEpochMs: s.startedAtEpochMs });
+    const p = r.processed;
+    const utc = p.utc!;
+    const hAcc = p.hAcc!;
+    expect(utc.length).toBe(p.n);
+    expect(hAcc.length).toBe(p.n);
+    // 융합 시각은 수신 시각 기준이라, 그 위치에 실제로 있던 절대 시각은 GPS 지연만큼 앞이다
+    for (let k = 0; k < p.n; k += 37) expect(Math.abs(utc[k]! - (s.startedAtEpochMs + p.t[k]! - lat))).toBeLessThanOrEqual(40);
+    for (let k = 1; k < p.n; k++) expect(utc[k]!).toBeGreaterThan(utc[k - 1]!);
+    const accs = s.gps.map((g) => g.hAcc);
+    for (const a of hAcc) {
+      expect(a).toBeGreaterThanOrEqual(Math.min(...accs) - 0.05);
+      expect(a).toBeLessThanOrEqual(Math.max(...accs) + 0.05);
+    }
+  });
+
+  it('GPS 시각이 이상하면(기기 시계 오류) 세션 시작 시각 기준으로 UTC를 정한다', () => {
+    const s = session(base, 83);
+    const broken = s.gps.map((g) => ({ ...g, tFix: 1000 + g.tRecv }));
+    const r = processDrive({ gps: broken, motion: s.motion, events: startEvent, course: null, startedAtEpochMs: s.startedAtEpochMs });
+    expect(r.processed.utc![0]).toBe(s.startedAtEpochMs + r.processed.t[0]!);
   });
 
   it('두 번째 주행(3% 느림): 같은 코스로 처리하고, 주행 중 델타가 정답과 RMS < 0.15초', () => {

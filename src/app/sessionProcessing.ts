@@ -39,7 +39,7 @@ export async function processStoredSession(deps: ProcessDeps, sessionId: string,
   const course = session.courseId ? ((await deps.drive.getCourse(session.courseId)) ?? null) : null;
   const run = deps.run ?? runProcessDrive;
   const newId = deps.newId ?? (() => crypto.randomUUID());
-  const r = await run({ ...raw, course, newCourse: course ? undefined : { id: newId(), name: '', kind } });
+  const r = await run({ ...raw, course, newCourse: course ? undefined : { id: newId(), name: '', kind }, startedAtEpochMs: session.startedAt });
 
   const proposed = r.courseCreated ? r.course : null;
   const used = proposed ? null : r.course;

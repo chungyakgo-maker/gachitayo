@@ -36,6 +36,20 @@ const chunk = (seq: number, t: number): ChunkRecord => ({
   events: [{ t, type: 'pause' }],
 });
 
+describe('센서 채널 자리 (사양서 13.2 OBD 확장 지점)', () => {
+  it('덩어리의 채널을 이름별로 seq 순서대로 이어 붙이고, 없으면 빈 객체', () => {
+    const a = { ...chunk(1, 5000), channels: { obd_rpm: { t: [5000.123, 5100], v: [3200.4, 3300] } } };
+    const b = { ...chunk(0, 0), channels: { obd_rpm: { t: [10], v: [900] }, obd_throttle: { t: [20], v: [12.345] } } };
+    const f = buildRawFile(session, [a, b]);
+    expect(f.channels).toEqual({ obd_rpm: { t: [10, 5000.12, 5100], v: [900, 3200.4, 3300] }, obd_throttle: { t: [20], v: [12.35] } });
+    expect(buildRawFile(session, [chunk(0, 0)]).channels).toEqual({});
+    // 읽기: 채널이 없는 예전 파일도 읽힌다
+    const { channels } = readRawFile({ ...buildRawFile(session, [chunk(0, 0)]), channels: undefined });
+    expect(channels).toEqual({});
+    expect(readRawFile(f).channels.obd_rpm!.v).toEqual([900, 3200.4, 3300]);
+  });
+});
+
 describe('buildRawFile', () => {
   it('덩어리 순서가 섞여 있어도 seq 순서로 이어 붙인다', () => {
     const f = buildRawFile(session, [chunk(1, 5000), chunk(0, 0)]);

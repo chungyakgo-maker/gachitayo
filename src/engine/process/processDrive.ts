@@ -23,6 +23,8 @@ export interface ProcessedTrack {
   n: number;
   /** 세션 시계 ms */
   t: number[];
+  /** GPS 기준 절대 시각 epoch ms (사양서 6.7, 6.9 utc_time, 13.1 영상 싱크). M7 전에 처리해 폰에 저장된 결과에는 없다 */
+  utc?: number[];
   lat: number[];
   lon: number[];
   alt: Array<number | null>;
@@ -37,6 +39,8 @@ export interface ProcessedTrack {
   s: Array<number | null>;
   /** 랩 번호 (랩 밖이면 0) */
   lapNo: number[];
+  /** GPS 수평 정확도 m (그 시각 앞뒤 GPS 점에서 보간, 6.9 gps_acc_m). M7 전 결과에는 없다 */
+  hAcc?: number[];
 }
 
 export interface DriveResult {
@@ -60,6 +64,29 @@ export interface DriveInput {
   course: Course | null;
   /** 코스를 자동으로 만들 때 쓸 id·이름, 사용자가 고른 종류 (주행 종료 확인, 사양서 8.5. 없으면 자동 판정) */
   newCourse?: { id: string; name: string; kind?: CourseKind };
+  /** 세션 시작 벽시계 epoch ms. GPS 시각을 믿을 수 없을 때 UTC 열의 기준 */
+  startedAtEpochMs?: number;
+}
+
+/** 세션 시계 → GPS 기준 절대 시각의 차이 (ms). 융합은 수신 시각 기준이라 tFix − tRecv의 중앙값을 쓴다.
+ *  GPS 시각이 세션 시작과 하루 넘게 어긋나면(기기 시계 오류) 세션 시작 시각을 쓴다 */
+export function utcOffsetMs(gps: GpsSample[], startedAtEpochMs: number | undefined): number {
+  const d = gps.map((g) => g.tFix - g.tRecv).filter(Number.isFinite).sort((a, b) => a - b);
+  const median = d.length ? d[Math.floor(d.length / 2)]! : Number.NaN;
+  if (startedAtEpochMs === undefined) return Number.isFinite(median) ? median : 0;
+  return Number.isFinite(median) && Math.abs(median - startedAtEpochMs) < 86_400_000 ? median : startedAtEpochMs;
+}
+
+/** 수신 시각 순으로 정렬된 GPS 점에서 시각 t의 수평 정확도 (선형 보간, 양 끝은 가까운 값) */
+function hAccAt(gps: GpsSample[], t: number, from: { i: number }): number {
+  let i = from.i;
+  while (i + 1 < gps.length && gps[i + 1]!.tRecv <= t) i++;
+  from.i = i;
+  const a = gps[i]!;
+  const b = gps[i + 1];
+  if (!b || t <= a.tRecv) return a.hAcc;
+  const f = (t - a.tRecv) / (b.tRecv - a.tRecv);
+  return a.hAcc + (b.hAcc - a.hAcc) * f;
 }
 
 /** 앱이 멈췄던 구간: pause → resume, 또는 강제 종료 뒤 이어서 하기 */
@@ -181,12 +208,17 @@ export function processDrive(input: DriveInput): DriveResult {
   const step = Math.max(1, Math.round(1000 / config.processed.hz / tr.dt));
   const g = smoothG(fusion.carMotion.ax, fusion.carMotion.ay, 1000 / tr.dt);
   const G = config.gforce.g;
-  const p: ProcessedTrack = { hz: config.processed.hz, n: 0, t: [], lat: [], lon: [], alt: [], speed: [], heading: [], ax: [], ay: [], s: [], lapNo: [] };
+  const utc: number[] = [];
+  const hAcc: number[] = [];
+  const p: ProcessedTrack = { hz: config.processed.hz, n: 0, t: [], utc, lat: [], lon: [], alt: [], speed: [], heading: [], ax: [], ay: [], s: [], lapNo: [], hAcc };
+  const utcOffset = utcOffsetMs(gps, input.startedAtEpochMs);
+  const accCursor = { i: 0 };
   for (let k = 0; k < tr.n; k += step) {
     const ll = fromLocal(origin, tr.x[k]!, tr.y[k]!);
     const deg = (tr.psi[k]! * 180) / Math.PI;
     const s = split ? split.frameS[k]! : Number.NaN;
     p.t.push(frames.t[k]!);
+    utc.push(Math.round(frames.t[k]! + utcOffset));
     p.lat.push(r7(ll.lat));
     p.lon.push(r7(ll.lon));
     p.alt.push(alt ? r2(alt[k]!) : null);
@@ -196,6 +228,7 @@ export function processDrive(input: DriveInput): DriveResult {
     p.ay.push(Number.isNaN(g.gy[k]!) ? null : r2(g.gy[k]! * G));
     p.s.push(Number.isNaN(s) ? null : r2(s));
     p.lapNo.push(split ? split.frameLap[k]! : 0);
+    hAcc.push(Math.round(hAccAt(gps, frames.t[k]!, accCursor) * 10) / 10);
   }
   p.n = p.t.length;
 
