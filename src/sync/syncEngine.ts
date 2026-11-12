@@ -21,6 +21,8 @@ export interface Remote {
   headFile(key: string, token: string): Promise<number | null>;
   /** 기록 지우기: 랩·세션 행과 원본·처리된 파일 (없어도 성공) */
   deleteSession(sessionId: string): Promise<void>;
+  /** 코스 지우기: 코스 행 (없어도 성공, 그 코스의 기록이 서버에 남아 있으면 실패해 나중에 다시) */
+  deleteCourse(courseId: string): Promise<void>;
 }
 
 export interface SyncDeps {
@@ -52,6 +54,7 @@ export async function syncOnce(deps: SyncDeps): Promise<{ done: number; failed: 
   for (const item of due) {
     try {
       if (item.kind === 'session-delete') await deps.remote.deleteSession(item.targetId);
+      else if (item.kind === 'course-delete') await deps.remote.deleteCourse(item.targetId);
       else if (item.kind === 'course') {
         const c = await deps.drive.getCourse(item.targetId);
         if (c) await deps.remote.upsertCourse(courseRow(c));

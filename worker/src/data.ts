@@ -172,6 +172,18 @@ export async function deleteSession(env: Cloudflare.Env, userId: string, id: str
   return { ok: true, existed: owner !== null };
 }
 
+/** 코스 지우기 (사용자 요청): 내 코스 행. 이 코스를 가리키는 세션이 남아 있으면 409 (폰이 기록을 먼저 지우고 다시 보낸다).
+ *  서버에 없는 코스여도 성공(같은 요청을 다시 보내도 됨) */
+export async function deleteCourse(env: Cloudflare.Env, userId: string, id: string) {
+  const owner = await ownerOf(env, 'courses', id);
+  if (owner !== null && owner !== userId) throw new HttpError(403, '다른 사람의 코스');
+  if (owner === null) return { ok: true, existed: false };
+  const used = await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE course_id = ?').bind(id).first<number>('n');
+  if (used) throw new HttpError(409, '이 코스의 기록을 먼저 지워 주세요');
+  await env.DB.prepare('DELETE FROM courses WHERE id = ? AND owner_id = ?').bind(id, userId).run();
+  return { ok: true, existed: true };
+}
+
 // ── 랩 ───────────────────────────────────────────────
 
 const MAX_LAPS = 500;

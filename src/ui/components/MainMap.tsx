@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 import type { FriendMarker, MainMapController, MapFix } from '../map/leafletMap';
-import { IconLocate } from '../icons';
 import { GpsIcon, type GpsState } from './GpsIcon';
 import { CourseMap } from './CourseMap';
 
@@ -18,7 +17,7 @@ export interface MainMapProps {
   /** 위에 얹은 카드·아래 탭이 가리는 높이 (px). 내 위치는 가려지지 않은 영역 가운데 (사용자 요청) */
   insetTop?: number;
   insetBottom?: number;
-  /** 오른쪽 위 GPS 아이콘 색 (사용자 요청) */
+  /** 오른쪽 위 GPS 아이콘 색 (사용자 요청). 누르면 내 위치로 (아래쪽 "내 위치" 버튼 대신, 사용자 요청) */
   gps?: GpsState;
   gpsAcc?: number | null;
   children?: ReactNode;
@@ -80,17 +79,12 @@ export function MainMap({ course, me, label, friends = [], insetTop = 0, insetBo
   return (
     <div className={`main-map${tiles ? ' has-tiles' : ''}`} style={insetVars(insetTop, insetBottom)}>
       <div ref={el} className="leaflet-host" role="region" aria-label={`${label}${tiles ? ' (지도: OpenStreetMap)' : ' (지도 그림 없음)'}`} />
-      {state === 'ready' && (
-        <button type="button" className="map-locate" aria-label="내 위치" disabled={!me} onClick={() => me && ctl.current?.locate(me)}>
-          <IconLocate size={18} />
-        </button>
-      )}
       {state === 'ready' && friends.length > 0 && (
         <button type="button" className="map-friends" onClick={() => ctl.current?.fitFriends(me)}>
           위치 공유 중인 친구 {friends.length}명
         </button>
       )}
-      {gps && <GpsIcon className="gps-icon map-gps main" state={gps} hAcc={gpsAcc} />}
+      {gps && <GpsIcon className="gps-icon map-gps main" state={gps} hAcc={gpsAcc} onClick={() => me && ctl.current?.locate(me)} />}
       {children}
     </div>
   );

@@ -93,6 +93,16 @@ export async function deleteSessionRecord(sessionId: string): Promise<void> {
   void kickSync();
 }
 
+/** 코스 지우기 (사용자 요청): 그 코스를 올리려던 것은 빼고, 서버에서 코스 행을 지우도록 대기열에 넣는다.
+ *  그 코스의 기록 지우기(deleteSessionRecord)보다 뒤에 넣어야 서버가 받아 준다 (기록이 남아 있으면 409 → 나중에 다시) */
+export async function enqueueCourseDelete(courseId: string): Promise<void> {
+  const q = getQueueRepo();
+  await q.remove(`course:${courseId}`);
+  if (state.enabled) await q.enqueue('course-delete', courseId, Date.now() + 1);
+  await refreshPending();
+  void kickSync();
+}
+
 /** 설정의 "다시 시도": 기다리는 것을 모두 지금 시도한다 */
 export async function retryNow(): Promise<void> {
   const q = getQueueRepo();

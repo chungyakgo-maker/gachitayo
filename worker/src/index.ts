@@ -3,6 +3,7 @@
 //   GET/PUT /api/me {nickname}           닉네임
 //   GET /api/courses                     내 코스 목록
 //   PUT /api/courses/{id}                코스 올리기 (같은 id면 덮어씀)
+//   DELETE /api/courses/{id}             코스 지우기 (이 코스의 기록이 남아 있으면 409)
 //   PUT /api/sessions/{id}               세션 올리기
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
 //   DELETE /api/sessions/{id}            기록 지우기 (랩·세션 행, 원본·처리된 파일) (M10)
@@ -14,9 +15,9 @@
 //   PUT /api/presence {lat, lon, …}      내 위치 공유 (마지막 하나만 저장)
 //   DELETE /api/presence                 공유 끄기 (지운다)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
-// 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 413 너무 큼, 429 가입 제한
+// 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
 import { authenticate, signup, validNickname } from './auth';
-import { deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
+import { deleteCourse, deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
@@ -93,10 +94,11 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers): Promi
 
   const course = /^\/api\/courses\/([^/]+)$/.exec(path);
   if (course) {
-    if (method !== 'PUT') throw new HttpError(405);
+    if (method !== 'PUT' && method !== 'DELETE') throw new HttpError(405);
     const id = course[1]!;
     if (!UUID_RE.test(id)) throw new HttpError(400, '잘못된 코스 id');
     const userId = await authenticate(req, env);
+    if (method === 'DELETE') return json(200, headers, await deleteCourse(env, userId, id.toLowerCase()));
     return json(200, headers, await putCourse(env, userId, id.toLowerCase(), await readJson(req, MAX_JSON_BYTES)));
   }
 

@@ -15,6 +15,8 @@ export interface DriveRepo {
   bestRefLap(courseId: string, courseVersion: number): Promise<RefLapRecord | null>;
   /** 세션과 그 덩어리·결과·비교 랩을 지운다 */
   deleteSession(sessionId: string): Promise<void>;
+  /** 코스와 그 코스의 비교 랩을 지운다 (기록은 따로 먼저 지운다) */
+  deleteCourse(courseId: string): Promise<void>;
 }
 
 export function createDriveRepo(db: GachitayoDb): DriveRepo {
@@ -38,6 +40,12 @@ export function createDriveRepo(db: GachitayoDb): DriveRepo {
     refLaps,
     async bestRefLap(courseId, courseVersion) {
       return (await refLaps(courseId, courseVersion))[0] ?? null;
+    },
+    async deleteCourse(courseId) {
+      await db.transaction('rw', [db.courses, db.refLaps], async () => {
+        await db.refLaps.filter((r) => r.courseId === courseId).delete();
+        await db.courses.delete(courseId);
+      });
     },
     async deleteSession(sessionId) {
       await db.transaction('rw', [db.sessions, db.chunks, db.results, db.refLaps], async () => {

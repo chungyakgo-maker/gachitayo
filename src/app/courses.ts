@@ -15,9 +15,9 @@ import type { Course, CourseKind } from '../types/course';
 import type { SessionRecord } from '../types/session';
 import { getAuth } from './account';
 import { loadCourses, processSession } from './drive';
-import { getDriveRepo, getQueueRepo, getRepo, refreshSessions } from './recording';
+import { getDriveRepo, getQueueRepo, getRecordingState, getRepo, refreshSessions } from './recording';
 import { getSettings } from './settings';
-import { kickSync } from './sync';
+import { deleteSessionRecord, enqueueCourseDelete, kickSync } from './sync';
 
 /** 코스를 서버에 올리도록 대기열에 (이름·선이 바뀌었을 때) */
 async function queueCourse(id: string): Promise<void> {
@@ -62,6 +62,23 @@ export async function renameCourse(id: string, name: string): Promise<void> {
   const c = await getDriveRepo().getCourse(id);
   if (!c) throw new Error('코스를 찾을 수 없어요');
   await saveCourseRecord({ ...c, name: n.slice(0, 40) });
+}
+
+/** 코스 지우기 (사용자 요청): 이 코스로 달린 기록을 모두 지우고(폰·서버), 코스와 비교 랩을 지운다.
+ *  기본 코스(7.5)와 기록 중인 코스는 지울 수 없다. 지운 기록 수를 돌려준다 */
+export async function deleteCourse(courseId: string): Promise<number> {
+  const drive = getDriveRepo();
+  const c = await drive.getCourse(courseId);
+  if (!c) throw new Error('코스를 찾을 수 없어요');
+  if (c.builtin) throw new Error('기본 코스는 지울 수 없어요');
+  const rec = getRecordingState().sessionId;
+  if (rec && (await getRepo().get(rec))?.courseId === courseId) throw new Error('기록 중인 코스는 지울 수 없어요');
+  const list = await sessionsOfCourse(courseId);
+  for (const s of list) await deleteSessionRecord(s.id);
+  await drive.deleteCourse(courseId);
+  await enqueueCourseDelete(courseId);
+  await loadCourses();
+  return list.length;
 }
 
 /** 이 코스의 기록 (최근 순) */

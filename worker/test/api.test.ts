@@ -172,6 +172,22 @@ describe('기록 표 (사양서 6.5): 본인 행만, 같은 id는 덮어쓰기',
     expect(await (await call('DELETE', `/api/sessions/${SESSION}`, { token: a.token })).json()).toEqual({ ok: true, existed: false });
     expect((await call('DELETE', `/api/sessions/${SESSION}/laps`, { token: a.token })).status).toBe(405);
   });
+
+  it('코스 지우기 (사용자 요청): 기록이 남아 있으면 409, 기록을 지운 뒤 지운다. 남의 것은 403, 없는 것도 성공', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    expect((await call('PUT', `/api/courses/${COURSE}`, { token: a.token, body: course() })).status).toBe(200);
+    expect((await call('PUT', `/api/sessions/${SESSION}`, { token: a.token, body: session(a.userId, { course_id: COURSE, course_version: 1 }) })).status).toBe(200);
+    expect((await call('DELETE', `/api/courses/${COURSE}`, { token: b.token })).status).toBe(403);
+    expect((await call('DELETE', `/api/courses/${COURSE}`, { token: a.token })).status).toBe(409);
+    expect((await call('DELETE', `/api/sessions/${SESSION}`, { token: a.token })).status).toBe(200);
+    const r = await call('DELETE', `/api/courses/${COURSE}`, { token: a.token });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ ok: true, existed: true });
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM courses WHERE id = ?').bind(COURSE).first('n')).toBe(0);
+    expect(await (await call('DELETE', `/api/courses/${COURSE}`, { token: a.token })).json()).toEqual({ ok: true, existed: false });
+    expect((await call('DELETE', `/api/courses/not-a-uuid`, { token: a.token })).status).toBe(400);
+  });
 });
 
 describe('파일 게이트웨이 (사양서 6.6, 10.1)', () => {

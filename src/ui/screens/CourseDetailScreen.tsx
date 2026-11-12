@@ -1,13 +1,14 @@
 // 코스 상세 (사양서 8.7): 지도(중심선·출발선·도착선·구간 경계), 이름 바꾸기, 출발선·도착선 옮기기(지도에서 누르기),
-// 코스 다듬기, GPX 내보내기. 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
+// 코스 다듬기, GPX 내보내기, 코스 지우기(내 코스만). 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
 import { useEffect, useMemo, useState } from 'react';
-import { courseGpxFile, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
+import { courseGpxFile, deleteCourse, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
 import { loadCourses, useDrive } from '../../app/drive';
 import { config } from '../../engine/config';
 import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal, type LatLon } from '../../engine/geo';
 import { shareOrDownload } from '../../storage/exportFile';
 import type { Course } from '../../types/course';
+import { Overlay } from '../components/Overlay';
 import { PickMap } from '../components/PickMap';
 import { Sheet } from '../components/Sheet';
 import { formatLapTime, formatLength } from '../format';
@@ -59,6 +60,9 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null);
   const [counts, setCounts] = useState<{ sessions: number; laps: number }>({ sessions: 0, laps: 0 });
   const [refineAsk, setRefineAsk] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!course) return;
@@ -172,6 +176,11 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
           GPX 내보내기
         </button>
       </div>
+      {!course.builtin && (
+        <button type="button" className="btn danger" disabled={!!busy} onClick={() => (setDeleteError(null), setDeleteAsk(true))}>
+          코스 지우기
+        </button>
+      )}
 
       {pending && mode && (
         <Sheet title={`${mode === 'start' ? '출발선' : '도착선'}을 여기로 옮길까요?`} onClose={() => setPending(null)}>
@@ -209,6 +218,43 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
             다듬기
           </button>
         </Sheet>
+      )}
+      {deleteAsk && (
+        <Overlay>
+          <div className="modal-backdrop">
+            <div className="modal" role="dialog" aria-modal="true" aria-labelledby="course-delete-title">
+              <h2 id="course-delete-title">코스를 지울까요?</h2>
+              <p>
+                {counts.sessions > 0
+                  ? `${course.name} 코스와 이 코스로 달린 기록 ${counts.sessions}개를 폰과 서버에서 모두 지워요. 되돌릴 수 없어요.`
+                  : `${course.name} 코스를 폰과 서버에서 지워요. 되돌릴 수 없어요.`}
+              </p>
+              {deleteError && <div className="notice warn">{deleteError}</div>}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn danger"
+                  disabled={deleting}
+                  onClick={() => {
+                    setDeleting(true);
+                    void deleteCourse(course.id)
+                      .then(() => {
+                        setDeleteAsk(false);
+                        window.location.hash = '#/courses';
+                      })
+                      .catch((e: Error) => setDeleteError(e.message))
+                      .finally(() => setDeleting(false));
+                  }}
+                >
+                  지우기
+                </button>
+                <button type="button" className="btn" disabled={deleting} onClick={() => setDeleteAsk(false)}>
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </Overlay>
       )}
     </main>
   );

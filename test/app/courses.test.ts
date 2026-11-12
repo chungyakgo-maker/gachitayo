@@ -3,10 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultSensorOpts, simulateDrive, stadiumTrack, synthesizeSensors } from '../generators';
 import { processDrive } from '../../src/engine/process/processDrive';
 import { courseToGpx, sessionToGpx } from '../../src/gpx/export';
+import type { RefLapRecord } from '../../src/types/drive';
 
 vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => []), processSession: vi.fn(async () => null) }));
 
-const { createMapCourse, importGpx, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses } = await import('../../src/app/courses');
+const { createMapCourse, deleteCourse, importGpx, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses } = await import('../../src/app/courses');
 const rec = await import('../../src/app/recording');
 const drive = await import('../../src/app/drive');
 
@@ -25,6 +26,35 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     expect(drive.loadCourses).toHaveBeenCalled();
     await seedBuiltinCourses();
     expect((await rec.getDriveRepo().listCourses()).filter((c) => c.builtin)).toHaveLength(5);
+  });
+
+  it('코스 지우기: 이 코스로 달린 기록·비교 랩도 함께 지운다. 다른 코스 기록은 남는다. 기본 코스는 못 지운다', async () => {
+    const drive = rec.getDriveRepo();
+    const repo = rec.getRepo();
+    const c = { ...r.course!, id: crypto.randomUUID(), name: '지울 코스' };
+    const other = { ...r.course!, id: crypto.randomUUID(), name: '남길 코스' };
+    await drive.putCourse(c);
+    await drive.putCourse(other);
+    const base = { courseVersion: 1, status: 'processed' as const, startedAt: 1, endedAt: 2, device: { os: 'x', browser: 'y', userAgent: 'z', standalone: false }, calibration: null, summary: null };
+    const s1 = crypto.randomUUID();
+    const s2 = crypto.randomUUID();
+    const s3 = crypto.randomUUID();
+    await repo.create({ id: s1, courseId: c.id, ...base });
+    await repo.create({ id: s2, courseId: c.id, ...base });
+    await repo.create({ id: s3, courseId: other.id, ...base });
+    const ref = (sessionId: string, courseId: string): RefLapRecord => ({ id: `${sessionId}:1`, sessionId, courseId, courseVersion: 1, lapNo: 1, startedAt: 1, lapTimeMs: 60_000, sectorTimesMs: [1, 2, 3], trace: r.laps[0]!.trace });
+    await drive.putRefLaps([ref(s1, c.id), ref(s3, other.id)]);
+    expect(await deleteCourse(c.id)).toBe(2);
+    expect(await drive.getCourse(c.id)).toBeUndefined();
+    expect(await repo.get(s1)).toBeUndefined();
+    expect(await repo.get(s2)).toBeUndefined();
+    expect(await drive.refLaps(c.id, 1)).toEqual([]);
+    expect(await repo.get(s3)).toBeDefined();
+    expect(await drive.refLaps(other.id, 1)).toHaveLength(1);
+    await expect(deleteCourse(c.id)).rejects.toThrow('찾을 수 없어요');
+    await seedBuiltinCourses();
+    const b = (await drive.listCourses()).find((x) => x.builtin === 'baehuryeong')!;
+    await expect(deleteCourse(b.id)).rejects.toThrow('기본 코스는 지울 수 없어요');
   });
 
   it('이름 바꾸기는 저장하고 서버에 코스를 올리도록 대기열에 넣는다', async () => {

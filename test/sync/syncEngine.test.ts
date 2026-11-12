@@ -90,6 +90,9 @@ async function setup(remoteOverride: Partial<Remote> = {}) {
     deleteSession: async (sid) => {
       calls.push(`delete ${sid}`);
     },
+    deleteCourse: async (cid) => {
+      calls.push(`delete course ${cid}`);
+    },
     ...remoteOverride,
   };
   let now = 1_800_000_000_000;
@@ -162,6 +165,16 @@ describe('업로드 (사양서 5.4-4, 6.6, 9장)', () => {
     expect(r).toMatchObject({ done: 1, failed: 0 });
     expect(s.calls).toEqual([`delete ${SID}`]);
     expect(await s.queue.count()).toBe(0);
+  });
+
+  it('코스 지우기: 그 코스의 기록 지우기 뒤에 서버 코스 행을 지운다 (넣은 순서)', async () => {
+    const s = await setup();
+    const CID = '0b0b0b0b-0000-4000-8000-000000000001';
+    await s.queue.enqueue('session-delete', SID, s.getNow());
+    await s.queue.enqueue('course-delete', CID, s.getNow() + 1);
+    s.advance(10);
+    expect(await syncOnce(s.deps)).toMatchObject({ done: 2, failed: 0 });
+    expect(s.calls).toEqual([`delete ${SID}`, `delete course ${CID}`]);
   });
 
   it('백오프: 10초부터 두 배씩, 최대 30분', () => {

@@ -100,6 +100,8 @@ export async function loadCourses(): Promise<Course[]> {
   try {
     const courses = sortCourses(await getDriveRepo().listCourses());
     set({ courses });
+    // 고른 코스를 지웠으면 코스 없이 (코스 지우기)
+    if (state.course && !courses.some((c) => c.id === state.course!.id)) await applyCourse(null, false);
     return courses;
   } catch (e) {
     set({ error: `코스를 불러오지 못했습니다: ${message(e)}` });
