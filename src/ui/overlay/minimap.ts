@@ -84,6 +84,8 @@ export interface MiniMapOpts {
   view?: MapView;
   /** 함께 그릴 앞 친구 위치 (같은 평면 좌표) */
   friend?: { x: number; y: number; label: string } | null;
+  /** 돌린 지도에서 왼쪽 위 작은 나침반 (주행 화면은 나침반 버튼이 대신하므로 끈다) */
+  north?: boolean;
 }
 
 /** 화면에 맞추기: 코스가 있으면 코스 전체, 없으면 지나온 경로와 내 위치 (너무 작으면 200 m 범위) */
@@ -225,7 +227,7 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     ctx.fillText(opts.friend.label, x, y - 16);
   }
 
-  if (v.rot !== 0) drawNorth(ctx, w, opts.top ?? 24, v, th);
+  if (v.rot !== 0 && opts.north !== false) drawNorth(ctx, w, opts.top ?? 24, v, th);
 
   if (f.me) {
     const [x, y] = v.P(f.me.x, f.me.y);

@@ -6,7 +6,7 @@ import { useFollow, type FollowState } from '../../app/liveLink';
 import { toLocal } from '../../engine/geo';
 import { GapTracker } from '../../engine/live/gap';
 import { cycleDriveMode, endDrive, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { MAP_VIEW_LABEL, updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId } from '../../app/settings';
+import { updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { LiveState } from '../../engine/live/liveEngine';
 import type { Course } from '../../types/course';
@@ -15,6 +15,7 @@ import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { ReplayMap } from '../components/ReplayMap';
+import { MapViewButton } from '../components/MapViewButton';
 import { formatDelta, formatLapTime } from '../format';
 import { IconGps } from '../icons';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
@@ -114,7 +115,7 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
   const spanM = useSpanM(st?.speedKmh);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('.end-btn, .map-view-toggle')) return;
+    if ((e.target as HTMLElement).closest('.end-btn, .map-compass')) return;
     const now = Date.now();
     const prev = lastTap.current;
     if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 40) {
@@ -287,6 +288,8 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
   const mapLabel = frame.ghost ? '코스 지도: 내 위치와 베스트 고스트' : '코스 지도: 내 위치';
   const me = frame.me;
   const mapView = settings.mapView;
+  const headPsi = headSm ?? me?.psi ?? null;
+  const mapRot = mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
   const viewFor = (w: number, hh: number) =>
     mapView === 'fit' || !me ? undefined : followView(me, w, hh, { spanM, insetBottom: 120, top: 0, headingUp: mapView === 'heading' ? (headSm ?? me.psi ?? null) : null });
   return (
@@ -305,20 +308,12 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
       <div className="drive-map">
         {replay || settings.mapTiles ? (
           // 바탕 지도(OSM) 위에 그린다 (사용자 요청). 통신이 없거나 타일이 안 오면 타일 없이 그린다
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} initialView={mapView} heading={headSm} viewToggle={replay !== null} view={replay ? undefined : mapView} />
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} heading={headSm} view={mapView} />
         ) : (
-          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, view: viewFor(w, hh) })} />
+          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, view: viewFor(w, hh), north: false })} />
         )}
-        {!replay && (
-          // 주행 중 지도 보기 (사용자 요청 "주행 중 지도 정렬"): 설정에도 저장해 다음 주행에 그대로
-          <div className="segmented small map-view-toggle" role="group" aria-label="지도 보기">
-            {(['fit', 'follow', 'heading'] as const).map((k) => (
-              <button key={k} type="button" aria-pressed={mapView === k} onClick={() => onMapView(k)}>
-                {MAP_VIEW_LABEL[k]}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* 지도 보기 나침반 버튼 (사용자 요청): 누를 때마다 전체 코스 → 나를 가운데 → 진행 방향 위. 재생·주행 같음, 설정에 저장 */}
+        <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} />
         <div className="drive-bottom">
           <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
           {end(false)}

@@ -95,18 +95,26 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByRole('img', { name: '코스 지도: 내 위치와 베스트 고스트' })).toBeInTheDocument();
   });
 
-  it('주행 중 지도 보기 버튼: 누르면 그 보기로 (사용자 요청), 두 번 탭으로 치지 않는다', () => {
+  it('지도 보기 나침반 버튼: 누를 때마다 전체 코스 → 나를 가운데 → 진행 방향 위 (사용자 요청), 두 번 탭으로 치지 않는다', () => {
     const onMapView = vi.fn();
     const onCycle = vi.fn();
-    render(<DriveView {...props({ onMapView, onCycle, settings: { ...DEFAULT_SETTINGS, mapTiles: false } })} />);
-    const group = screen.getByRole('group', { name: '지도 보기' });
-    expect(group.querySelector('[aria-pressed="true"]')).toHaveTextContent('전체 코스');
-    const btn = screen.getByRole('button', { name: '진행 방향 위' });
+    const r = render(<DriveView {...props({ onMapView, onCycle, settings: { ...DEFAULT_SETTINGS, mapTiles: false } })} />);
+    const btn = screen.getByRole('button', { name: '지도 보기: 전체 코스 (누르면 나를 가운데)' });
+    expect(btn).toHaveTextContent('전체 코스');
     fireEvent.pointerDown(btn);
     fireEvent.pointerDown(btn);
     fireEvent.click(btn);
-    expect(onMapView).toHaveBeenCalledWith('heading');
+    expect(onMapView).toHaveBeenLastCalledWith('follow');
     expect(onCycle).not.toHaveBeenCalled();
+    r.rerender(<DriveView {...props({ onMapView, onCycle, settings: { ...DEFAULT_SETTINGS, mapTiles: false, mapView: 'heading' } })} />);
+    fireEvent.click(screen.getByRole('button', { name: '지도 보기: 진행 방향 위 (누르면 전체 코스)' }));
+    expect(onMapView).toHaveBeenLastCalledWith('fit');
+    expect(screen.queryByRole('group', { name: '지도 보기' })).toBeNull();
+  });
+
+  it('재생 중에도 같은 나침반 버튼 (재생·주행 같은 지도)', () => {
+    render(<DriveView {...props({ replay: { label: '가상', speed: 5, ended: false } })} />);
+    expect(screen.getByRole('button', { name: /^지도 보기: 전체 코스/ })).toBeInTheDocument();
   });
 
   it('보정 전 추정 G: G 칸에 "추정"이 붙는다 (대시보드 글자)', () => {

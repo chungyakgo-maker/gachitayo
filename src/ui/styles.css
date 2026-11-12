@@ -720,19 +720,6 @@ html.app-h .modal-backdrop {
   z-index: 500;
 }
 
-.map-view-toggle {
-  position: absolute;
-  z-index: 1000;
-  top: 10px;
-  right: calc(10px + var(--safe-r));
-  width: 270px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.map-view-toggle button {
-  font-size: 12px;
-}
-
 .replay-map .leaflet-host {
   transform-origin: 50% 50%;
 }
@@ -1994,3 +1981,51 @@ html.app-h .modal-backdrop {
 .cal-diag .diag-lines dt { color: var(--fg-2); }
 .cal-diag .diag-lines dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
 .cal-diag .diag-lines > div.bad dd { color: var(--warn); }
+
+/* 지도 보기 나침반 버튼 (주행·재생 지도 왼쪽 위, 사용자 요청) */
+.map-compass {
+  position: absolute;
+  z-index: 1000;
+  top: 12px;
+  left: calc(12px + var(--safe-l, 0px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.map-compass .dial {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(16, 17, 20, 0.9);
+  border: 1px solid #3a3f45;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.map-compass .dial svg { transition: transform 0.2s linear; }
+.map-compass .dial .n {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--fg);
+  transition: transform 0.2s linear;
+}
+.map-compass .name {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(16, 17, 20, 0.85);
+  border: 1px solid #2a2e33;
+  white-space: nowrap;
+}
+.map-compass:active .dial { transform: scale(0.94); }

@@ -233,7 +233,7 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     keyboard: false,
   });
   map.attributionControl.setPrefix(false);
-  map.attributionControl.setPosition('topleft');
+  map.attributionControl.setPosition('topright');
   const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
   map.setView([36.5, 127.8], 7);
   let shown = false;

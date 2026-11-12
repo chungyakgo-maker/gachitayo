@@ -1,8 +1,9 @@
 // 지도 모드 지도 (사용자 요청): OpenStreetMap 지도 위에 코스·고스트·내 위치를 그린다. 재생과 주행(설정에서 켰을 때) 모두 쓴다.
 // 보기 세 가지: 전체 코스(화면을 꽉 채우게) / 나를 가운데(북쪽 위, 가깝게) / 진행 방향 위(지도판을 돌려 내비처럼).
+// 보기는 주행 화면 왼쪽 위 나침반 버튼으로 바꾼다 (재생·주행 같음).
 // 지도를 불러오지 못하면 타일 없는 미니맵으로 그린다.
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { MAP_VIEW_LABEL, type MapViewMode } from '../../app/settings';
+import type { MapViewMode } from '../../app/settings';
 import { useElementSize } from '../hooks/useElementSize';
 import { fromLocal, type LatLon } from '../../engine/geo';
 import type { ReplayMapController } from '../map/leafletMap';
@@ -21,24 +22,18 @@ export interface ReplayMapProps {
   insetBottom: number;
   label: string;
   friend?: MiniMapOpts['friend'];
-  /** 처음 보기 (설정의 주행 지도 보기) */
-  initialView?: MapViewMode;
   /** 부드럽게 한 진행 방향 (진행 방향 위 보기) */
   heading?: number | null;
-  /** 보기 고르는 버튼 (재생). 주행 중에는 주행 화면이 버튼을 그리고 view로 넘긴다 */
-  viewToggle?: boolean;
-  /** 밖에서 정한 보기 (주게 되면 안쪽 버튼 대신 이것을 따른다) */
-  view?: MapViewMode;
+  /** 보기 (주행 화면의 나침반 버튼이 정한다) */
+  view: MapViewMode;
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
 
-export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, initialView = 'fit', heading = null, viewToggle = true, view: viewProp }: ReplayMapProps) {
+export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, heading = null, view }: ReplayMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<ReplayMapController | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
-  const [viewState, setView] = useState<ReplayView>(initialView);
-  const view = viewProp ?? viewState;
   const box = useElementSize<HTMLDivElement>();
 
   useEffect(() => {
@@ -130,17 +125,8 @@ export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend
         className="overlay-layer"
         style={{ position: 'absolute', inset: 0 }}
         label={label}
-        draw={(ctx, w, h) => drawMiniMap(ctx, w, h, model, frame, th, { insetBottom, margin: 28, view: mapView, friend })}
+        draw={(ctx, w, h) => drawMiniMap(ctx, w, h, model, frame, th, { insetBottom, margin: 28, view: mapView, friend, north: false })}
       />
-      {state === 'ready' && viewToggle && (
-        <div className="segmented small map-view-toggle" role="group" aria-label="지도 보기">
-          {(['fit', 'follow', 'heading'] as const).map((k) => (
-            <button key={k} type="button" aria-pressed={view === k} onClick={() => setView(k)}>
-              {MAP_VIEW_LABEL[k]}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
