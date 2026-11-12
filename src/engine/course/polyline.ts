@@ -64,8 +64,10 @@ export function smoothPath(
   const outY: number[] = [];
   for (let i = 0; i < n; i++) {
     const si = p.s[i]!;
-    const a = lower(si - half);
-    const b = lower(si + half + 1e-12);
+    // 열린 경로의 끝 근처는 창을 양쪽 같은 폭으로 줄인다 (한쪽만 평균하면 끝점이 안쪽으로 끌려 들어간다)
+    const h = closed ? half : Math.min(half, si, L - si);
+    const a = lower(si - h - 1e-12);
+    const b = lower(si + h + 1e-12);
     const c = Math.max(1, b - a);
     outX.push((cx[b]! - cx[a]!) / c);
     outY.push((cy[b]! - cy[a]!) / c);

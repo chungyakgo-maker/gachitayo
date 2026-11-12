@@ -1,9 +1,9 @@
 {
-  // 정확도 보고서 생성(test/report): Node 기능(fs, process)을 쓰므로 Node 타입으로 따로 검사한다
+  // Node 기능(fs, process)을 쓰는 테스트(test/report, test/gpx)는 Node 타입으로 따로 검사한다
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM"],
     "types": ["node", "vite/client"]
   },
-  "include": ["test/report", "src/vite-env.d.ts"]
+  "include": ["test/report", "test/gpx", "src/vite-env.d.ts"]
 }

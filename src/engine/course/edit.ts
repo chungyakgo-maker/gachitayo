@@ -17,15 +17,20 @@ import {
 
 const cfg = config.course;
 
-/** 평면 경로 → 매끄럽게 다듬은 1 m 중심선 */
-export function centerlineFromPath(xs: ArrayLike<number>, ys: ArrayLike<number>, closed: boolean): Polyline {
+/** 평면 경로 → 매끄럽게 다듬은 1 m 중심선 (smooth=false면 간격만 맞춘다: 이미 다듬은 중심선) */
+export function centerlineFromPath(
+  xs: ArrayLike<number>,
+  ys: ArrayLike<number>,
+  closed: boolean,
+  smooth = true,
+): Polyline {
   const x = Array.from(xs);
   const y = Array.from(ys);
   if (closed && x.length > 1) {
     x.push(x[0]!);
     y.push(y[0]!);
   }
-  const sm = smoothPath(x, y, cfg.centerlineSmoothM, closed);
+  const sm = smooth ? smoothPath(x, y, cfg.centerlineSmoothM, closed) : { x, y };
   return resamplePolyline(makePolyline(sm.x, sm.y), cfg.centerlineSpacingM);
 }
 

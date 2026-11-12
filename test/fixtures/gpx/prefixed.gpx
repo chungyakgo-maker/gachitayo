@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 다른 이름공간 접두사 -->
+<g:gpx version="1.1" xmlns:g="http://www.topografix.com/GPX/1/1" xmlns:ns3="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+  <g:trk><g:trkseg>
+    <g:trkpt lat='37.2' lon='127.1'><g:time>2026-11-12T01:00:00Z</g:time><g:extensions><ns3:TrackPointExtension><ns3:speed>5</ns3:speed></ns3:TrackPointExtension></g:extensions></g:trkpt>
+    <g:trkpt lat='37.2001' lon='127.1'><g:time>2026-11-12T01:00:01Z</g:time></g:trkpt>
+  </g:trkseg></g:trk>
+</g:gpx>

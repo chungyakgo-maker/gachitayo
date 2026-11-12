@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<gpx version="1.0" creator="old app" xmlns="http://www.topografix.com/GPX/1/0">
+  <trk><trkseg>
+    <trkpt lat="37.2" lon="127.1"><time>2026-11-12T01:00:00Z</time><speed>8.25</speed></trkpt>
+    <trkpt lat="37.2001" lon="127.1"><time>2026-11-12T01:00:01Z</time><speed>8.5</speed></trkpt>
+  </trkseg></trk>
+</gpx>
