@@ -2,6 +2,7 @@
 // → 코스 엔진·델타 엔진 → 주행 화면 스냅숏.
 // 기록기와 같은 샘플을 받는다. 화면은 tick(지금 시각)을 100 ms마다 불러 스냅숏을 그린다.
 import { GpsAccelEstimator } from '../derive/gpsAccel';
+import { SensorGEstimator } from '../derive/sensorG';
 import { fromLocal, toLocal, type LatLon } from '../geo';
 import { buildGeometry, type CourseGeometry } from '../course/geometry';
 import { polylinePoint } from '../course/polyline';
@@ -81,6 +82,7 @@ export class LivePipeline {
   private lastGps: GpsSample | null = null;
   private stillSince: number | null = null;
   private readonly gpsAccel = new GpsAccelEstimator();
+  private readonly sensorG = new SensorGEstimator();
   private state: LiveState | null = null;
   private pos: LiveSnapshot['pos'] = null;
   private path: Array<[number, number]> = [];
@@ -197,12 +199,20 @@ export class LivePipeline {
       ax = c.ax;
       ay = c.ay;
     }
-    // 보정 전에는 융합 속도·진행 방향 변화로 G를 추정해 보여준다 (사용자 요청). 추정기는 늘 채워 둔다
+    // 보정 전 임시 G (사용자 요청 "흔들면 움직이게"): 모션이 있으면 폰 센서 그대로(sensorG), 없으면 GPS 추정.
+    // GPS 추정은 센서 쪽 부호 맞추기에도 쓰므로 늘 채워 둔다
     const est = this.gpsAccel.push(p.t, Math.max(0, p.v), p.psi);
     const estimated = !cal?.signsConfirmed;
     if (estimated) {
-      ax = est.ax;
-      ay = est.ay;
+      if (i >= 0 && i < m.n && m.valid[i]) {
+        const su = this.cal.stationaryUp();
+        const s = this.sensorG.push(p.t, [m.fx[i]!, m.fy[i]!, m.fz[i]!], { up: su?.up, gravity: su?.gravity, fwd: cal?.fwd, left: cal?.left }, est);
+        ax = s.ax;
+        ay = s.ay;
+      } else {
+        ax = est.ax;
+        ay = est.ay;
+      }
     }
     const g = this.lastGps;
     const gpsOk = g !== null && p.t - g.tRecv <= GPS_OK_AGE_MS && g.hAcc <= GPS_OK_HACC_M;

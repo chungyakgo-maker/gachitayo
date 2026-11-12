@@ -147,3 +147,25 @@ describe('GPS가 속도·진행 방향 값을 주지 않는 기기 (일부 안�
     });
   }
 });
+
+describe('보정 전 임시 G (사용자 요청: 손으로 흔들어도 움직이게)', () => {
+  it('정차 중 폰을 흔들면 주행 화면 G가 바로 움직이고 "추정"이다', () => {
+    const gps: GpsSample[] = [];
+    for (let t = 0; t <= 12_000; t += 1000) gps.push({ tRecv: t, tFix: 1_800_000_000_000 + t, lat: 37.2, lon: 127.1, alt: null, altAcc: null, hAcc: 3, speed: 0, heading: null });
+    const motion: RawMotionSample[] = [];
+    for (let t = 0; t <= 12_000; t += 20) {
+      // 6초부터 손으로 흔든다 (3 Hz, 0.3 g 남짓)
+      const s = t >= 6000 ? 3 * Math.sin((2 * Math.PI * 3 * t) / 1000) : 0;
+      motion.push({ t, gax: s, gay: 9.81, gaz: 0.5 * s, rx: 0, ry: 0, rz: 0 });
+    }
+    const p = new LivePipeline({ course: null, ref: null });
+    const snaps = replay(p, gps, motion, 12_000);
+    const still = snaps.filter((x) => x.t < 5500 && x.state);
+    const shaking = snaps.filter((x) => x.t > 7000 && x.state);
+    expect(still.length).toBeGreaterThan(0);
+    expect(shaking.length).toBeGreaterThan(0);
+    expect(Math.max(...still.map((x) => Math.hypot(x.state!.gx!, x.state!.gy!)))).toBeLessThan(0.02);
+    expect(Math.max(...shaking.map((x) => Math.hypot(x.state!.gx!, x.state!.gy!)))).toBeGreaterThan(0.1);
+    expect(shaking.every((x) => x.state!.gEstimated)).toBe(true);
+  });
+});

@@ -525,6 +525,11 @@ export class MountCalibrator {
     if (this.state === 'calibrated' && i % cfg.recalCheckEvery === 0) this.checkMount(t);
   }
 
+  /** 정차로 잡은 위 방향과 중력 크기 (보정 전 임시 G용). 아직 정차를 못 잡았으면 null */
+  stationaryUp(): { up: Vec3; gravity: number } | null {
+    return this.state === 'need_stationary' ? null : { up: this.current?.up ?? this.up, gravity: this.current?.gravity ?? this.gravity };
+  }
+
   /** G 보정이 어디까지 왔는지 (주행 화면 상태 줄): 정차 → 직진 가감속 → 가감속·코너 확인 → 끝 */
   progress(): CalProgress {
     if (this.state === 'need_stationary') return { stage: 'stationary', fwd: 0, fwdNeed: cfg.forwardMinIntervals, turns: 0, turnsNeed: cfg.axisSignMinTurns };
