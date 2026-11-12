@@ -35,7 +35,15 @@ function AccountSection() {
           저장
         </button>
       </div>
-      {acc.status === 'none' && acc.onboarded && (
+      {acc.status === 'none' && acc.onboarded && !acc.lost && (
+        <div className="notice" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+          <span>아직 서버 계정을 만들지 못했어요. 통신이 연결되면 자동으로 만들고 기록을 올려요.</span>
+          <button type="button" className="btn" disabled={acc.busy} onClick={() => void recreateAccount()}>
+            지금 계정 만들기
+          </button>
+        </div>
+      )}
+      {acc.status === 'none' && acc.lost && (
         <div className="notice warn" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
           <span>계정 연결이 끊겼어요. 새 계정으로 다시 시작하면 이 폰의 기록은 다시 올라가지만, 예전 계정의 서버 기록은 볼 수 없어요.</span>
           <button type="button" className="btn" disabled={acc.busy} onClick={() => void recreateAccount()}>

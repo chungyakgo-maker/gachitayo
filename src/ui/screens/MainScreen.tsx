@@ -89,7 +89,7 @@ export function MainScreen() {
             GPS <span className="mono">{fix ? `${Math.round(fix.hAcc)}m` : '—'}</span>
           </span>
         </div>
-        {acc.status === 'none' && acc.onboarded && (
+        {acc.status === 'none' && acc.lost && (
           <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>
             <IconWarn size={20} />
             계정 연결이 끊겨 업로드할 수 없어요 · 설정에서 확인

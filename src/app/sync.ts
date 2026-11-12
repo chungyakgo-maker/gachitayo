@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { createRemote } from '../server/remote';
 import { uploadEnabled } from '../server/config';
 import { cleanupUploaded, syncOnce, type SyncDeps } from '../sync/syncEngine';
-import { getAccountState, subscribeAccount } from './account';
+import { ensureAccount, getAccountState, subscribeAccount } from './account';
 import { getDriveRepo, getQueueRepo, getRepo, refreshSessions } from './recording';
 
 export interface SyncState {
@@ -56,7 +56,9 @@ let running: Promise<void> | null = null;
 
 /** 지금 올릴 수 있는 것을 올린다 (이미 도는 중이면 그것을 기다린다) */
 export function kickSync(): Promise<void> {
-  if (!state.enabled || getAccountState().status !== 'ready') return Promise.resolve();
+  if (!state.enabled) return Promise.resolve();
+  // 계정이 아직 없으면 먼저 만든다 (만들어지면 아래 구독이 다시 올린다)
+  if (getAccountState().status !== 'ready') return ensureAccount();
   running ??= (async () => {
     set({ running: true });
     try {

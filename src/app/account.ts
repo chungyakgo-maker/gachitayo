@@ -13,6 +13,8 @@ export interface AccountState {
   nickname: string | null;
   /** 첫 실행 안내를 마쳤는지 */
   onboarded: boolean;
+  /** 있던 계정의 열쇠를 서버가 모른다고 함 (자동으로 새로 만들지 않고 사용자가 설정에서 고른다) */
+  lost: boolean;
   busy: boolean;
   error: string | null;
 }
@@ -45,6 +47,8 @@ let state: AccountState = {
   userId: read(USER_KEY),
   nickname: read(NICKNAME_KEY),
   onboarded: read(ONBOARDED_KEY) === '1',
+  // 열쇠는 지우고 사용자 ID만 남아 있으면 끊긴 계정
+  lost: accountEnabled() && !token && read(USER_KEY) !== null,
   busy: false,
   error: null,
 };
@@ -72,7 +76,7 @@ export function markAccountLost(): void {
   if (state.status !== 'ready') return;
   token = null;
   write(TOKEN_KEY, null);
-  set({ status: 'none' });
+  set({ status: 'none', lost: true });
 }
 
 /** 서버 오류를 사용자에게 보여줄 말로 */
@@ -88,9 +92,11 @@ export function friendlyServerError(e: unknown): string {
 
 let initPromise: Promise<void> | undefined;
 
-/** 앱 시작 때 한 번. 폰에 있는 열쇠가 아직 유효한지 확인한다 (통신이 없으면 그대로 둔다) */
+/** 앱 시작 때 한 번. 폰에 있는 열쇠가 아직 유효한지 확인한다 (통신이 없으면 그대로 둔다).
+ *  서버 연결 전에 첫 실행을 마친 사람은 여기서 계정을 만든다 */
 export function initAccount(): Promise<void> {
   initPromise ??= (async () => {
+    if (state.status === 'none') return ensureAccount();
     if (state.status !== 'ready' || !token) return;
     try {
       const me = await apiFetch<{ userId: string; nickname: string }>('GET', '/api/me', { token });
@@ -110,7 +116,25 @@ async function signUp(nickname: string): Promise<void> {
   token = r.token;
   write(TOKEN_KEY, r.token);
   write(USER_KEY, r.userId);
-  set({ status: 'ready', userId: r.userId });
+  set({ status: 'ready', userId: r.userId, lost: false });
+}
+
+let ensuring: Promise<void> | null = null;
+
+/** 첫 실행은 마쳤는데 계정이 없으면(서버 연결 전에 시작한 경우) 저장된 닉네임으로 조용히 만든다.
+ *  통신이 없으면 그대로 두고 다음 기회(통신 복구·화면 복귀·1분마다)에 다시 한다. 끊긴 계정은 건드리지 않는다 */
+export function ensureAccount(): Promise<void> {
+  if (!accountEnabled() || state.status !== 'none' || !state.onboarded || state.lost || state.busy) return ensuring ?? Promise.resolve();
+  ensuring ??= (async () => {
+    try {
+      await signUp(state.nickname ?? '드라이버');
+    } catch {
+      // 다음 기회에
+    } finally {
+      ensuring = null;
+    }
+  })();
+  return ensuring;
 }
 
 export const validNickname = (n: string): boolean => {
