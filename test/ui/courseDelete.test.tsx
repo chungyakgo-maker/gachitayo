@@ -21,11 +21,14 @@ const course: Course = {
 };
 let courses: Course[] = [];
 const deleteCourse = vi.fn(async () => 2);
-vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => courses), useDrive: () => ({ courses }) }));
+const prepareWithCourse = vi.fn();
+vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => courses), useDrive: () => ({ courses }), prepareWithCourse }));
+const makeReverseCourse = vi.fn(async () => ({ course: { id: 'rev1' }, created: true }));
 vi.mock('../../src/ui/screens/useBestTimes', () => ({ useBestTimes: () => ({}) }));
 vi.mock('../../src/app/courses', () => ({
   courseGpxFile: vi.fn(),
   deleteCourse,
+  makeReverseCourse,
   moveCourseGate: vi.fn(),
   recomputeCourse: vi.fn(),
   refineCourseFromLaps: vi.fn(),
@@ -86,6 +89,23 @@ describe('코스 상세 지도 모양 (사용자 요청 시안 2)', () => {
       ['start', '출발'],
       ['finish', '도착'],
     ]);
+  });
+});
+
+describe('이 코스로 주행 · 역방향 코스 (사용자 요청)', () => {
+  it('"이 코스로 주행"은 이 코스를 고른 주행 준비로', () => {
+    courses = [course];
+    render(<CourseDetailScreen courseId="c1" />);
+    fireEvent.click(screen.getByRole('button', { name: '이 코스로 주행' }));
+    expect(prepareWithCourse).toHaveBeenCalledWith(course);
+  });
+
+  it('"역방향 코스"는 만들고 그 코스 상세로 (기본 코스도 된다)', async () => {
+    courses = [{ ...course, builtin: 'manhangjae', name: '만항재' }];
+    render(<CourseDetailScreen courseId="c1" />);
+    fireEvent.click(screen.getByRole('button', { name: '역방향 코스' }));
+    await waitFor(() => expect(makeReverseCourse).toHaveBeenCalledWith('c1'));
+    await waitFor(() => expect(window.location.hash).toBe('#/course/rev1'));
   });
 });
 

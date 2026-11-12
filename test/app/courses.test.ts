@@ -7,7 +7,7 @@ import type { RefLapRecord } from '../../src/types/drive';
 
 vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => []), processSession: vi.fn(async () => null) }));
 
-const { createMapCourse, deleteCourse, importGpx, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses } = await import('../../src/app/courses');
+const { createMapCourse, deleteCourse, importGpx, makeReverseCourse, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses } = await import('../../src/app/courses');
 const rec = await import('../../src/app/recording');
 const drive = await import('../../src/app/drive');
 
@@ -26,6 +26,22 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     expect(drive.loadCourses).toHaveBeenCalled();
     await seedBuiltinCourses();
     expect((await rec.getDriveRepo().listCourses()).filter((c) => c.builtin)).toHaveLength(5);
+  });
+
+  it('역방향 코스: 내 코스로 만들고, 다시 누르면 있는 것을 돌려준다. 역방향의 역방향은 원래 코스', async () => {
+    await seedBuiltinCourses();
+    const drive = rec.getDriveRepo();
+    const mh = (await drive.listCourses()).find((x) => x.builtin === 'manhangjae')!;
+    const a = await makeReverseCourse(mh.id);
+    expect(a.created).toBe(true);
+    expect(a.course).toMatchObject({ name: '만항재 역방향', kind: 'point_to_point', version: 1 });
+    expect(a.course.builtin).toBeUndefined();
+    expect(await drive.getCourse(a.course.id)).toBeDefined();
+    const again = await makeReverseCourse(mh.id);
+    expect(again).toEqual({ course: expect.objectContaining({ id: a.course.id }), created: false });
+    const back = await makeReverseCourse(a.course.id);
+    expect(back.created).toBe(false);
+    expect(back.course.id).toBe(mh.id);
   });
 
   it('코스 지우기: 이 코스로 달린 기록·비교 랩도 함께 지운다. 다른 코스 기록은 남는다. 기본 코스는 못 지운다', async () => {

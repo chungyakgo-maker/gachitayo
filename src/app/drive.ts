@@ -111,6 +111,8 @@ export async function loadCourses(): Promise<Course[]> {
 
 async function applyCourse(course: Course | null, chosen: boolean): Promise<void> {
   const refs = course ? await getDriveRepo().refLaps(course.id, course.version) : [];
+  // 자동 감지가 늦게 끝났는데 그 사이 사용자가 코스를 골랐으면 버린다
+  if (!chosen && state.courseChosen) return;
   const ref = refs[0] ?? null;
   set({ course, courseChosen: chosen || state.courseChosen, refs, ref });
   pipeline?.setCourse(course, toLiveRef(ref));
@@ -167,7 +169,15 @@ export function beginPrepare(): void {
 }
 
 export function chooseCourse(course: Course | null): void {
+  // 바로 고른 것으로 표시해, 그 사이 위치로 자동 감지한 코스가 덮어쓰지 않게 한다
+  set({ course, courseChosen: true });
   void applyCourse(course, true);
+}
+
+/** 코스 상세의 "이 코스로 주행" (사용자 요청): 주행 준비를 열고 이 코스를 고른다 (이미 기록 중이면 준비 화면으로만) */
+export function prepareWithCourse(course: Course): void {
+  beginPrepare();
+  if (state.phase === 'preparing') chooseCourse(course);
 }
 
 export function chooseRef(ref: RefLapRecord): void {

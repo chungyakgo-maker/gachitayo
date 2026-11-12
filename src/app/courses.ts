@@ -2,7 +2,7 @@
 // 선을 옮기거나 다듬으면 version +1이고 이 코스의 내 기록을 모두 원본에서 다시 계산한다 (질문 5 결정).
 // 폰에서 원본을 정리한 기록은 서버에서 원본을 받아 다시 계산한다.
 import { builtinCourse, missingBuiltins } from '../courses/builtin';
-import { refineCourse, moveGate } from '../engine/course/edit';
+import { refineCourse, moveGate, reverseCourse, reverseName, sameCourse } from '../engine/course/edit';
 import { gateFromPoint } from '../engine/course/geometry';
 import { fromLocal, toLocal, type LatLon } from '../engine/geo';
 import { courseFromGpx, gpsSamplesFromGpx } from '../gpx/course';
@@ -79,6 +79,19 @@ export async function deleteCourse(courseId: string): Promise<number> {
   await enqueueCourseDelete(courseId);
   await loadCourses();
   return list.length;
+}
+
+/** 역방향 코스 (사용자 요청): 같은 길을 반대로 달리는 코스를 내 코스로 만든다. 기록은 방향마다 따로.
+ *  이미 같은 코스(예: 역방향의 역방향 = 원래 코스)가 있으면 만들지 않고 그 코스를 돌려준다 */
+export async function makeReverseCourse(courseId: string): Promise<{ course: Course; created: boolean }> {
+  const drive = getDriveRepo();
+  const c = await drive.getCourse(courseId);
+  if (!c) throw new Error('코스를 찾을 수 없어요');
+  const rev = reverseCourse(c, { id: crypto.randomUUID(), name: reverseName(c.name) });
+  const same = (await drive.listCourses()).find((x) => x.id !== c.id && sameCourse(x, rev));
+  if (same) return { course: same, created: false };
+  await saveCourseRecord(rev);
+  return { course: rev, created: true };
 }
 
 /** 이 코스의 기록 (최근 순) */

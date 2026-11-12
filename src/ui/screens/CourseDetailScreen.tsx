@@ -1,8 +1,8 @@
 // 코스 상세 (사양서 8.7): 지도(중심선·출발선·도착선·구간 경계), 이름 바꾸기, 출발선·도착선 옮기기(지도에서 누르기),
 // 코스 다듬기, GPX 내보내기, 코스 지우기(내 코스만), 출발점·도착점을 내비 앱으로 열기. 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
 import { useEffect, useMemo, useState } from 'react';
-import { courseGpxFile, deleteCourse, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
-import { loadCourses, useDrive } from '../../app/drive';
+import { courseGpxFile, deleteCourse, makeReverseCourse, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
+import { loadCourses, prepareWithCourse, useDrive } from '../../app/drive';
 import { config } from '../../engine/config';
 import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal, type LatLon } from '../../engine/geo';
@@ -161,6 +161,11 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
           if (mode) setPending({ lat, lon });
         }}
       />
+      {!mode && (
+        <button type="button" className="primary-btn" disabled={!!busy} onClick={() => prepareWithCourse(course)}>
+          이 코스로 주행
+        </button>
+      )}
       {!mode && <NavOpen course={course} />}
       {mode ? (
         <div className="notice">
@@ -211,6 +216,21 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
         </button>
         <button type="button" className="btn" onClick={() => void shareOrDownload(courseGpxFile(course))}>
           GPX 내보내기
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!!busy}
+          onClick={() =>
+            void makeReverseCourse(course.id)
+              .then((r) => {
+                setMsg({ text: r.created ? `${course.name}의 역방향 코스를 만들었어요. 기록은 방향마다 따로 쌓여요.` : '이미 있는 역방향 코스로 왔어요.' });
+                window.location.hash = `#/course/${r.course.id}`;
+              })
+              .catch((e: Error) => setMsg({ text: e.message, warn: true }))
+          }
+        >
+          역방향 코스
         </button>
       </div>
       {!course.builtin && (

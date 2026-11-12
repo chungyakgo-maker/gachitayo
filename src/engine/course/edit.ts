@@ -106,3 +106,50 @@ export function moveGate(course: Course, which: 'start' | 'finish', x: number, y
 }
 
 export const headingDiff = (a: number, b: number) => Math.abs(wrapAngle(a - b));
+
+/** 역방향 코스 이름: "만항재" ↔ "만항재 역방향" (40자 이내) */
+export const REVERSE_SUFFIX = ' 역방향';
+export function reverseName(name: string): string {
+  if (name.endsWith(REVERSE_SUFFIX)) return name.slice(0, -REVERSE_SUFFIX.length).trim() || name;
+  return `${name.slice(0, 40 - REVERSE_SUFFIX.length)}${REVERSE_SUFFIX}`;
+}
+
+/**
+ * 역방향 코스 (사용자 요청): 같은 길을 반대로 달리는 새 코스. 원래 코스와 그 기록은 그대로 둔다.
+ * 편도는 출발·도착을 맞바꾸고, 랩은 출발선 자리는 그대로 방향만 반대. 선의 진행 방향도 반대로. version 1
+ */
+export function reverseCourse(course: Course, opts: { id: string; name: string }): Course {
+  const flip = (g: Gate): Gate => ({ ...g, bearingDeg: (g.bearingDeg + 180) % 360 });
+  const loop = course.kind === 'loop';
+  const startGate = loop ? flip(course.startGate) : flip(course.finishGate);
+  const base: Course = {
+    id: opts.id,
+    name: opts.name,
+    kind: course.kind,
+    source: course.source,
+    origin: course.origin,
+    startGate,
+    finishGate: loop ? startGate : flip(course.startGate),
+    centerline: null,
+    lengthM: null,
+    sectorBoundsM: null,
+    version: 1,
+  };
+  const cl = buildGeometry(course).centerline;
+  if (!cl) return base;
+  const n = cl.x.length;
+  // 랩은 첫 점(출발선)을 그대로 두고 나머지를 거꾸로, 편도는 통째로 거꾸로
+  const idx = loop ? [0, ...Array.from({ length: n - 1 }, (_, k) => n - 1 - k)] : Array.from({ length: n }, (_, k) => n - 1 - k);
+  return withCenterline(base, makePolyline(idx.map((i) => cl.x[i]!), idx.map((i) => cl.y[i]!)));
+}
+
+/** 같은 코스인지 (종류가 같고 출발선·도착선이 30 m 안, 방향 차이 60° 안). 역방향을 두 번 만들지 않으려고 */
+export function sameCourse(a: Course, b: Course): boolean {
+  if (a.kind !== b.kind) return false;
+  const near = (g: Gate, h: Gate) => {
+    const p = toLocal(g, h.lat, h.lon);
+    const d = Math.abs(((g.bearingDeg - h.bearingDeg + 540) % 360) - 180);
+    return Math.hypot(p.x, p.y) <= 30 && d <= 60;
+  };
+  return near(a.startGate, b.startGate) && near(a.finishGate, b.finishGate);
+}
