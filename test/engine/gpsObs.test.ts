@@ -27,7 +27,7 @@ describe('GPS 관측 준비', () => {
     expect(obs[0]!.speedDerived).toBe(false);
   });
 
-  it('GPS 속도가 null이면 위치 차이로 계산하고 표시한다 (사양서 6.3)', () => {
+  it('GPS 속도·방향이 null이면 위치 차이로 계산하고 표시한다 (사양서 6.3)', () => {
     const obs = prepareGps(
       [0, 1, 2, 3].map((k) => fix(k * 1000, k * 12, 0, { speed: null, heading: null })),
       origin,
@@ -35,13 +35,23 @@ describe('GPS 관측 준비', () => {
     for (const o of obs) {
       expect(o.speedDerived).toBe(true);
       expect(o.speed).toBeCloseTo(12, 6);
-      expect(o.psi).toBeNull();
+      // 동쪽으로 이동 → ψ = 0 (방향 값이 없으면 융합이 방향을 잃고 발산한다)
+      expect(o.psi).toBeCloseTo(0, 6);
+      expect(o.psiDerived).toBe(true);
     }
+  });
+
+  it('제자리(6 m 미만 이동)에서는 방향을 만들지 않는다', () => {
+    const obs = prepareGps(
+      [0, 1, 2].map((k) => fix(k * 1000, k * 1.5, 0, { speed: null, heading: null })),
+      origin,
+    );
+    expect(obs.every((o) => o.psi === null)).toBe(true);
   });
 });
 
 describe('주행 중 GPS 관측 (과거 점만 사용)', () => {
-  it('속도 값이 있으면 일괄 변환과 같고, 없으면 뒤쪽 2점 위치 차이로 속도를 계산한다', () => {
+  it('속도 값이 있으면 일괄 변환과 같고, 없으면 바로 앞 점과의 위치 차이로 속도를 계산한다', () => {
     const origin = { lat: 37.2, lon: 127.1 };
     const pts = Array.from({ length: 10 }, (_, i) => {
       const ll = fromLocal(origin, i * 20, 0);

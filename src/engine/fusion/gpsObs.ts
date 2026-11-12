@@ -13,8 +13,22 @@ export interface GpsObs {
   speed: number | null;
   /** 속도를 위치 차이로 계산했는지 (속도 품질 낮음, 사양서 6.3) */
   speedDerived: boolean;
-  /** 동쪽 기준 반시계 rad. 방향 값이 없으면 null */
+  /** 동쪽 기준 반시계 rad. 방향 값이 없으면 위치 이동으로 구하고(psiDerived), 그것도 못 하면 null */
   psi: number | null;
+  /** 방향을 GPS 값이 아니라 위치 이동으로 구했다 (정확도 낮음) */
+  psiDerived?: boolean;
+}
+
+/** 위치 이동으로 진행 방향을 구할 때 필요한 최소 이동 거리 (이보다 짧으면 위치 잡음이 방향을 정해 버린다) */
+const DERIVED_HEADING_MIN_STEP_M = 6;
+/** 위치 이동으로 진행 방향을 구할 때 두 점 간격 상한 */
+const DERIVED_HEADING_MAX_SPAN_MS = 4500;
+
+/** a → b 이동 방향 (rad). 너무 짧거나 오래 떨어져 있으면 null */
+function chordHeading(a: GpsObs, b: GpsObs): number | null {
+  if (b.t - a.t <= 0 || b.t - a.t > DERIVED_HEADING_MAX_SPAN_MS) return null;
+  if (Math.hypot(b.x - a.x, b.y - a.y) < DERIVED_HEADING_MIN_STEP_M) return null;
+  return Math.atan2(b.y - a.y, b.x - a.x);
 }
 
 /** 나침반 방향(북 0°, 시계 방향, 도) → ψ(동 0, 반시계, rad) */
@@ -46,12 +60,24 @@ export function prepareGps(gps: GpsSample[], origin: LatLon): GpsObs[] {
     o.speed = dt > 0 ? Math.hypot(b.x - a.x, b.y - a.y) / dt : 0;
     o.speedDerived = true;
   }
+  // 방향 값이 없는 점: 앞뒤 점의 이동 방향 (값이 없으면 융합이 방향을 잃고 발산한다)
+  const heading = obs.map((o, i) => {
+    if (o.psi !== null) return null;
+    const a = obs[i - 1];
+    const b = obs[i + 1];
+    return (a && b ? chordHeading(a, b) : null) ?? (a ? chordHeading(a, o) : null) ?? (b ? chordHeading(o, b) : null);
+  });
+  heading.forEach((h, i) => {
+    if (h === null) return;
+    obs[i]!.psi = h;
+    obs[i]!.psiDerived = true;
+  });
   return obs;
 }
 
 /**
- * 주행 중 GPS 관측: 한 점씩 변환한다. 속도 값이 없는 점은 뒤쪽 2점(약 2초) 전 위치와의 차이로 속도를 계산한다
- * (주행 후 처리는 앞뒤 2점씩을 쓰지만 주행 중에는 미래 점이 없다).
+ * 주행 중 GPS 관측: 한 점씩 변환한다. 속도·방향 값이 없는 점은 바로 앞 점과의 위치 차이로 구한다
+ * (주행 후 처리는 앞뒤 점을 쓰지만 주행 중에는 미래 점이 없다. 2점 전을 쓰면 더 늦어서 코너에서 위치가 밀린다).
  */
 export class LiveGpsObs {
   private readonly recent: GpsObs[] = [];
@@ -70,10 +96,19 @@ export class LiveGpsObs {
       psi: g.heading === null ? null : gpsPsiFromHeading(g.heading),
     };
     if (o.speed === null) {
-      const a = this.recent[Math.max(0, this.recent.length - 2)];
+      const a = this.recent[this.recent.length - 1];
       const dt = a ? (o.t - a.t) / 1000 : 0;
       o.speed = a && dt > 0 ? Math.hypot(o.x - a.x, o.y - a.y) / dt : 0;
       o.speedDerived = true;
+    }
+    if (o.psi === null) {
+      // 방향 값이 없으면 바로 앞 점에서 온 방향 (약 0.5초 늦은 값)
+      const prev = this.recent[this.recent.length - 1];
+      const h = prev ? chordHeading(prev, o) : null;
+      if (h !== null) {
+        o.psi = h;
+        o.psiDerived = true;
+      }
     }
     this.recent.push(o);
     if (this.recent.length > 2) this.recent.shift();
@@ -87,7 +122,7 @@ const MIN_STEP_FOR_HEADING_M = 2;
 function yawFrom(a: GpsObs, c: GpsObs, b: GpsObs): number | null {
   const span = (b.t - a.t) / 1000;
   if (span <= 0) return null;
-  if (a.psi !== null && b.psi !== null) return wrapAngle(b.psi - a.psi) / span;
+  if (a.psi !== null && b.psi !== null && !a.psiDerived && !b.psiDerived) return wrapAngle(b.psi - a.psi) / span;
   if (Math.hypot(c.x - a.x, c.y - a.y) < MIN_STEP_FOR_HEADING_M) return null;
   if (Math.hypot(b.x - c.x, b.y - c.y) < MIN_STEP_FOR_HEADING_M) return null;
   const p1 = Math.atan2(c.y - a.y, c.x - a.x);

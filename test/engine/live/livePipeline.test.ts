@@ -77,3 +77,28 @@ describe('주행 중 계산 묶음 (사양서 5.3)', () => {
     expect(snaps.some((x) => x.state?.sectorDeltas[0] != null)).toBe(true);
   });
 });
+
+describe('GPS가 속도·진행 방향 값을 주지 않는 기기 (일부 안드로이드, PC 브라우저)', () => {
+  for (const [name, useMotion] of [
+    ['모션 없음', false],
+    ['모션 있음', true],
+  ] as const) {
+    it(`${name}: 위치 이동으로 방향을 구해 주행 중 위치가 발산하지 않는다 (RMS < 10 m, 값이 있으면 약 4 m)`, async () => {
+      const { truthAt } = await import('../../generators');
+      const { toLocal } = await import('../../../src/engine/geo');
+      const truth = simulateDrive(oval, { ...base, laps: 2 });
+      const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed: 5, speedNull: true, headingNull: true });
+      const p = new LivePipeline({ course: null, ref: null });
+      const snaps = replay(p, s.gps, useMotion ? s.motion : [], truth.t.at(-1)! * 1000);
+      const o = toLocal(s.origin, s.gps[0]!.lat, s.gps[0]!.lon);
+      const errs = snaps
+        .filter((x) => x.pos && x.state && x.t > 3000)
+        .map((x) => {
+          const tr = truthAt(truth, x.state!.t / 1000);
+          return Math.hypot(x.pos!.x + o.x - tr.x, x.pos!.y + o.y - tr.y);
+        });
+      // 고치기 전에는 방향을 잃고 RMS 77 m로 발산했다
+      expect(Math.sqrt(errs.reduce((a, e) => a + e * e, 0) / errs.length)).toBeLessThan(10);
+    });
+  }
+});

@@ -234,3 +234,13 @@ describe('주행 중 엔진: 편도 랩 번호', () => {
     expect(done).toEqual([1, 2]);
   });
 });
+
+describe('GPS 속도·진행 방향 값이 없는 기기의 주행 후 처리', () => {
+  it('모션도 없을 때 첫 주행 코스 길이가 둘레의 3% 안, 랩이 유효', () => {
+    const s = session(base, 87, { speedNull: true, headingNull: true });
+    const r = processDrive({ gps: s.gps, motion: [], events: startEvent, course: null });
+    expect(r.course!.kind).toBe('loop');
+    expect(Math.abs(r.course!.lengthM! - oval.length) / oval.length).toBeLessThan(0.03);
+    expect(r.laps.filter((l) => l.valid).length).toBeGreaterThanOrEqual(1);
+  });
+});

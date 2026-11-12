@@ -81,6 +81,8 @@ export const config = {
     /** GPS 속도 표준편차 (높은 가중치) */
     speedSigmaMps: 0.3,
     headingSigmaDeg: 3,
+    /** GPS 방향 값이 없어 위치 이동으로 구한 방향의 표준편차 (코너에서 약 0.5초 늦음) */
+    derivedHeadingSigmaDeg: 15,
     /** 이 속도 이상일 때만 GPS 방향을 쓴다 */
     headingMinSpeedMps: 5,
     /** 예측 위치와의 마할라노비스 거리가 이보다 크면 GPS 점을 버린다 */

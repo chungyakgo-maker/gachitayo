@@ -194,7 +194,7 @@ export class FusionRunner {
     );
     if (o.speed !== null && !o.speedDerived) this.ekf.updateSpeed(o.speed, cfg.speedSigmaMps);
     if (o.psi !== null && (o.speed ?? this.ekf.x[3]!) >= cfg.headingMinSpeedMps) {
-      this.ekf.updateHeading(o.psi, (cfg.headingSigmaDeg * Math.PI) / 180);
+      this.ekf.updateHeading(o.psi, ((o.psiDerived ? cfg.derivedHeadingSigmaDeg : cfg.headingSigmaDeg) * Math.PI) / 180);
     }
   }
 

@@ -45,8 +45,12 @@ export function MainScreen() {
           </a>
         </header>
         {busy && (
-          <a className="notice warn" href={drive.phase === 'preparing' ? '#/prepare' : '#/drive'} style={{ textDecoration: 'none' }}>
-            진행 중인 주행이 있어요 · 돌아가기
+          <a
+            className="notice warn"
+            href={drive.phase === 'preparing' ? '#/prepare' : drive.phase === 'idle' ? '#/dev/recorder' : '#/drive'}
+            style={{ textDecoration: 'none' }}
+          >
+            {drive.phase === 'idle' ? '센서 기록 테스트가 진행 중이에요 · 돌아가기' : drive.replay ? '재생 중이에요 · 돌아가기' : '진행 중인 주행이 있어요 · 돌아가기'}
           </a>
         )}
         <div className="card card-row">
