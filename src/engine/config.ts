@@ -31,6 +31,8 @@ export const config = {
     forwardMinSpeedMps: 2,
     /** 앞 방향: 직진 판단 요레이트 상한 rad/s (약 2.9°/s) */
     forwardMaxYawRate: 0.05,
+    /** 앞 방향: 자이로 직진 판단을 이 길이 조각마다 한다 (코너에 걸친 구간 제외) */
+    forwardYawPieceS: 0.5,
     /** 앞 방향을 정하는 데 필요한 조건 만족 GPS 구간 수 */
     forwardMinIntervals: 3,
     /** 앞 방향 계산에 쓰는 GPS 앞뒤 간격 상한 (속도 없는 기기는 앞뒤 2점씩이라 2배) */
@@ -47,6 +49,14 @@ export const config = {
     recalMaxGpsStepMs: 2500,
     /** 재보정 판단 주기 (Motion50 샘플 수, 50 Hz에서 5 = 10 Hz) */
     recalCheckEvery: 5,
+    /** 주행 중 재보정 뒤 위 방향: 직선 등속 3초도 정차처럼 쓴다 (M3 결정 '나'). 속도 하한 */
+    cruiseMinSpeedMps: 5,
+    /** 직선 등속: 연속 GPS 점 사이 속도 변화율 상한 */
+    cruiseMaxAccelMps2: 0.3,
+    /** 직선 등속: 회전 속도 상한 rad/s (약 1.7°/s) */
+    cruiseMaxYawRate: 0.03,
+    /** 직선 등속: 가속도 벡터 표준편차 상한 (노면 진동 포함) */
+    cruiseAccStdMax: 1.5,
     /** 축 부호 판별: 필요한 회전 구간 수 */
     axisSignMinTurns: 5,
     /** 축 부호 판별: 정규화한 일치도(−1~1)의 절댓값이 이 이상이어야 확정 */

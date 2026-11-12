@@ -284,3 +284,26 @@ describe('플랫폼 축 부호 판별', () => {
     });
   }
 });
+
+describe('주행 중 재보정: 직선 등속도 정차처럼 (M3 결정 나)', () => {
+  it('서킷에서 멈추지 않고 달리는 중에 거치가 20° 돌아가도, 직선 등속 구간으로 다시 보정한다', () => {
+    // 직선에서 최고 속도에 닿아 몇 초 등속으로 달리고, 코너 앞에서는 감속한다 (앞 방향은 가감속 구간에서 구한다)
+    const truth = simulateDrive(stadiumTrack(), { laps: 4, startStopS: 5, endStopS: 3, vMax: 22, aLatMax: 3, aAccel: 3, aBrake: 6 });
+    const changeAt = 60;
+    const d = prepare(truth, { seed: 16, mountEulerDeg: [20, -70, 5], mountChanges: [{ atS: changeAt, eulerDeg: [40, -70, 5] }] });
+    const rt = realtime(d.m50, d.obs);
+    const recal = rt.events.filter((e) => e.type === 'recalibration');
+    expect(recal.length).toBeGreaterThanOrEqual(1);
+    const after = rt.events.filter((e) => e.type === 'calibration' && e.t > recal[0]!.t);
+    expect(after.length).toBeGreaterThanOrEqual(1);
+    expect(rt.current).not.toBeNull();
+    expect(rotationAngle(rt.current!.R, d.mounts[1]!.R) * DEG).toBeLessThan(3);
+  });
+
+  it('처음 보정은 여전히 정차가 있어야 한다 (등속만으로 시작하지 않는다)', () => {
+    const truth = simulateDrive(stadiumTrack(), { laps: 2, startStopS: 0.5, endStopS: 0, vMax: 22, aLatMax: 8, aAccel: 3, aBrake: 6 });
+    const d = prepare(truth, { seed: 17 });
+    const rt = realtime(d.m50, d.obs);
+    expect(rt.events.filter((e) => e.type === 'calibration')).toEqual([]);
+  });
+});

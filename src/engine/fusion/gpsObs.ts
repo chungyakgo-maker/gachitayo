@@ -49,6 +49,38 @@ export function prepareGps(gps: GpsSample[], origin: LatLon): GpsObs[] {
   return obs;
 }
 
+/**
+ * 주행 중 GPS 관측: 한 점씩 변환한다. 속도 값이 없는 점은 뒤쪽 2점(약 2초) 전 위치와의 차이로 속도를 계산한다
+ * (주행 후 처리는 앞뒤 2점씩을 쓰지만 주행 중에는 미래 점이 없다).
+ */
+export class LiveGpsObs {
+  private readonly recent: GpsObs[] = [];
+
+  constructor(readonly origin: LatLon) {}
+
+  push(g: GpsSample): GpsObs {
+    const p = toLocal(this.origin, g.lat, g.lon);
+    const o: GpsObs = {
+      t: g.tRecv,
+      x: p.x,
+      y: p.y,
+      hAcc: g.hAcc,
+      speed: g.speed,
+      speedDerived: false,
+      psi: g.heading === null ? null : gpsPsiFromHeading(g.heading),
+    };
+    if (o.speed === null) {
+      const a = this.recent[Math.max(0, this.recent.length - 2)];
+      const dt = a ? (o.t - a.t) / 1000 : 0;
+      o.speed = a && dt > 0 ? Math.hypot(o.x - a.x, o.y - a.y) / dt : 0;
+      o.speedDerived = true;
+    }
+    this.recent.push(o);
+    if (this.recent.length > 2) this.recent.shift();
+    return o;
+  }
+}
+
 /** 진행 방향을 구하는 데 필요한 최소 이동 거리 (이보다 짧으면 위치 잡음이 방향을 정해 버린다) */
 const MIN_STEP_FOR_HEADING_M = 2;
 

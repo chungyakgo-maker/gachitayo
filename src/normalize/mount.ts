@@ -11,6 +11,7 @@
 //    2초 이상 어긋나면 재보정 이벤트를 남기고 1~3을 다시 한다. 요레이트는 부호를 확인한 자이로 값을 쓴다
 //    (GPS 진행 방향은 1초쯤 늦어서 헤어핀에서 거치 변화로 착각한다). 자이로가 없거나 부호 확인 전에는
 //    좌우 성분을 빼고 앞·위 평면에서만 비교한다.
+//    주행 중 재보정 뒤 위 방향은 정차 3초 또는 직선 등속 3초로 구한다 (서킷에서는 멈출 일이 거의 없다).
 // 5. 확인: 보정 뒤 (a) 앞뒤 가속도가 GPS 속도 변화와 같은 방향인지(아니면 앞 방향을 뒤집는다),
 //    (b) 코너에서 자이로 요레이트와 좌우 가속도가 GPS 진행 방향 변화율과 같은 부호인지 확인한다.
 //    플랫폼마다 가속도·자이로 부호가 다를 수 있기 때문이다 (사양서 6.3). 확인 전에는 융합에 모션을 쓰지 않는다.
@@ -89,10 +90,14 @@ export function toCar(cal: MountCalibration, f: Vec3, w: Vec3): CarMotion {
 
 class MotionWindows {
   private done = 0;
-  private readonly s: Float64Array[];
-  private readonly sff: Float64Array;
-  private readonly sv: Float64Array;
-  private readonly sgv: Float64Array;
+  private s: Float64Array[];
+  private sff: Float64Array;
+  private sv: Float64Array;
+  private sgv: Float64Array;
+
+  get dt(): number {
+    return this.m.dt;
+  }
 
   constructor(private readonly m: Motion50) {
     this.s = Array.from({ length: 6 }, () => new Float64Array(m.n + 1));
@@ -101,8 +106,25 @@ class MotionWindows {
     this.sgv = new Float64Array(m.n + 1);
   }
 
+  /** 주행 중에는 Motion50이 늘어난다: 누적합 배열도 늘린다 */
+  private ensure(size: number): void {
+    if (size <= this.sv.length) return;
+    let cap = Math.max(16, this.sv.length);
+    while (cap < size) cap *= 2;
+    const grow = (a: Float64Array) => {
+      const b = new Float64Array(cap);
+      b.set(a.subarray(0, this.done + 1));
+      return b;
+    };
+    this.s = this.s.map(grow);
+    this.sff = grow(this.sff);
+    this.sv = grow(this.sv);
+    this.sgv = grow(this.sgv);
+  }
+
   extendTo(i: number): void {
     const m = this.m;
+    this.ensure(Math.min(i, m.n - 1) + 2);
     const cols = [m.fx, m.fy, m.fz, m.wx, m.wy, m.wz];
     for (let k = this.done; k <= Math.min(i, m.n - 1); k++) {
       const v = m.valid[k]!;
@@ -191,6 +213,8 @@ interface StationaryStats {
   meanF: Vec3;
   /** 자이로가 유효하지 않으면 null */
   meanW: Vec3 | null;
+  /** 정차가 아니라 직선 등속 창 (회전 평균을 자이로 바이어스로 쓰지 않는다) */
+  cruise?: boolean;
 }
 
 /** 시각 tEnd에서 끝나는 3초 창이 정차 조건을 만족하면 평균을 돌려준다 */
@@ -209,6 +233,34 @@ function stationaryAt(w: MotionWindows, gps: GpsObs[], tEnd: number): Stationary
     return null;
   }
   return { meanF: w.meanF(r), meanW: w.gyroAllValid(r) ? w.meanW(r) : null };
+}
+
+/**
+ * 시각 tEnd에서 끝나는 3초 창이 직선 등속(속도 5 m/s 이상, 속도·방향 변화가 작음)이면 평균을 돌려준다.
+ * 이때 가속도 평균은 중력뿐이라 정차처럼 위 방향을 구할 수 있다. 주행 중 재보정에만 쓴다 (M3 결정 '나').
+ */
+function cruiseAt(w: MotionWindows, gps: GpsObs[], tEnd: number, gyroBias: Vec3 | null): StationaryStats | null {
+  const ta = tEnd - cfg.stationaryWindowS * 1000;
+  const r = w.range(ta, tEnd);
+  if (!r || !w.allValid(r)) return null;
+  if (w.vecStd(r) >= cfg.cruiseAccStdMax) return null;
+  const fixes = fixesIn(gps, ta, tEnd);
+  if (fixes.length < 3 || fixes.some((g) => g.speed === null || g.speedDerived || g.speed < cfg.cruiseMinSpeedMps)) return null;
+  for (let i = 1; i < fixes.length; i++) {
+    const dt = (fixes[i]!.t - fixes[i - 1]!.t) / 1000;
+    if (dt <= 0 || Math.abs(fixes[i]!.speed! - fixes[i - 1]!.speed!) / dt > cfg.cruiseMaxAccelMps2) return null;
+  }
+  // 직진: 자이로가 있으면 회전 속도 크기(위 방향을 아직 모르므로 전체 크기), 없으면 GPS 진행 방향 변화
+  if (gyroBias && w.gyroAllValid(r)) {
+    if (norm(sub(w.meanW(r), gyroBias)) >= cfg.cruiseMaxYawRate) return null;
+  } else {
+    const a = fixes[0]!;
+    const b = fixes[fixes.length - 1]!;
+    if (a.psi === null || b.psi === null) return null;
+    const dpsi = Math.atan2(Math.sin(b.psi - a.psi), Math.cos(b.psi - a.psi));
+    if (Math.abs(dpsi) / ((b.t - a.t) / 1000) >= cfg.cruiseMaxYawRate) return null;
+  }
+  return { meanF: w.meanF(r), meanW: null, cruise: true };
 }
 
 /** GPS 점 k 앞뒤로 속도 변화율을 구하는 간격 (속도 없는 기기는 잡음이 커서 2점씩) */
@@ -236,10 +288,17 @@ function forwardSample(
   if (Math.abs(A) < cfg.forwardMinAccelMps2) return null;
   const r = w.range(a.t, b.t);
   if (!r || !w.allValid(r)) return null;
-  // 직진 판단: 자이로가 있으면 자이로(부호와 무관), 없으면 GPS 진행 방향 변화율
+  // 직진 판단: 자이로가 있으면 자이로(부호와 무관), 없으면 GPS 진행 방향 변화율.
+  // 자이로는 0.5초 조각마다 본다: 창 평균만 보면 코너에 걸친 구간(코너 출구 가속, 진입 제동)이 섞여 앞 방향이 틀어진다
   let yaw: number | null;
-  if (gyroBias && w.gyroAllValid(r)) yaw = dot(sub(w.meanW(r), gyroBias), up);
-  else yaw = gpsYawRateAt(gps, k, cfg.forwardMaxGpsSpanMs);
+  if (gyroBias && w.gyroAllValid(r)) {
+    yaw = 0;
+    const piece = Math.max(1, Math.round(cfg.forwardYawPieceS * 1000 / w.dt));
+    for (let ia = r[0]; ia <= r[1]; ia += piece) {
+      const y = dot(sub(w.meanW([ia, Math.min(r[1], ia + piece - 1)]), gyroBias), up);
+      if (Math.abs(y) > Math.abs(yaw)) yaw = y;
+    }
+  } else yaw = gpsYawRateAt(gps, k, cfg.forwardMaxGpsSpanMs);
   if (yaw === null || Math.abs(yaw) >= cfg.forwardMaxYawRate) return null;
   const f = w.meanF(r);
   return { A, h: sub(f, scale(up, dot(f, up))) };
@@ -381,6 +440,8 @@ export class MountCalibrator {
   private checkV = 0;
   private lastGpsT = -Infinity;
   private signStats = new SignStats();
+  /** 주행 중 재보정을 기다리는 중 (직선 등속도 정차처럼 쓴다) */
+  private afterRecal = false;
 
   constructor(private readonly m: Motion50) {
     this.w = new MotionWindows(m);
@@ -401,7 +462,9 @@ export class MountCalibrator {
     this.w.extendTo(i);
     const t = this.m.t0 + i * this.m.dt;
     if (this.state !== 'calibrated') {
-      const st = stationaryAt(this.w, this.gps, t);
+      const st =
+        stationaryAt(this.w, this.gps, t) ??
+        (this.afterRecal && this.state === 'need_stationary' ? cruiseAt(this.w, this.gps, t, this.gyroBias) : null);
       if (st) this.onStationary(st);
     }
     // GPS 점 k: 그 다음 점까지 모션이 들어오면 평가한다 (앞 방향, 축 부호)
@@ -419,7 +482,7 @@ export class MountCalibrator {
     if (this.state === 'need_stationary' || angleBetween(up, this.up) * DEG > cfg.recalAngleDeg) {
       this.up = up;
       this.gravity = norm(st.meanF);
-      this.gyroBias = st.meanW;
+      if (!st.cruise) this.gyroBias = st.meanW;
       this.fwdSum = [0, 0, 0];
       this.fwdCount = 0;
       this.state = 'need_forward';
@@ -436,6 +499,7 @@ export class MountCalibrator {
       this.signStats = new SignStats();
       this.state = 'calibrated';
       this.mismatchSince = null;
+      this.afterRecal = false;
       this.events.push({ t, type: 'calibration' });
     }
   }
@@ -473,6 +537,7 @@ export class MountCalibrator {
     this.mismatchSince ??= t;
     if (t - this.mismatchSince >= cfg.recalHoldS * 1000) {
       this.events.push({ t, type: 'recalibration' });
+      this.afterRecal = true;
       this.state = 'need_stationary';
       this.current = null;
       this.mismatchSince = null;

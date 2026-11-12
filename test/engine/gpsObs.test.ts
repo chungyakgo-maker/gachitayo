@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gpsPsiFromHeading, prepareGps } from '../../src/engine/fusion/gpsObs';
+import { LiveGpsObs, gpsPsiFromHeading, prepareGps } from '../../src/engine/fusion/gpsObs';
 import { fromLocal } from '../../src/engine/geo';
 import type { GpsSample } from '../../src/types/samples';
 
@@ -37,5 +37,24 @@ describe('GPS 관측 준비', () => {
       expect(o.speed).toBeCloseTo(12, 6);
       expect(o.psi).toBeNull();
     }
+  });
+});
+
+describe('주행 중 GPS 관측 (과거 점만 사용)', () => {
+  it('속도 값이 있으면 일괄 변환과 같고, 없으면 뒤쪽 2점 위치 차이로 속도를 계산한다', () => {
+    const origin = { lat: 37.2, lon: 127.1 };
+    const pts = Array.from({ length: 10 }, (_, i) => {
+      const ll = fromLocal(origin, i * 20, 0);
+      return { tRecv: i * 1000, tFix: i * 1000, lat: ll.lat, lon: ll.lon, alt: null, altAcc: null, hAcc: 5, speed: null, heading: 90 };
+    });
+    const live = new LiveGpsObs(origin);
+    const out = pts.map((p) => live.push(p));
+    expect(out[0]!.speed).toBe(0);
+    expect(out[1]!.speed).toBeCloseTo(20, 6);
+    expect(out[5]!.speed).toBeCloseTo(20, 6);
+    expect(out.every((o) => o.speedDerived)).toBe(true);
+    const withSpeed = pts.map((p) => ({ ...p, speed: 19.5 }));
+    const live2 = new LiveGpsObs(origin);
+    expect(withSpeed.map((p) => live2.push(p))).toEqual(prepareGps(withSpeed, origin));
   });
 });
