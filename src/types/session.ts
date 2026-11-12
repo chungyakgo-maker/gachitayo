@@ -29,6 +29,8 @@ export interface SessionRecord {
   calibration: null;
   /** 요약 (주행 후 처리 뒤) */
   summary: SessionSummary | null;
+  /** 서버에 다 올린 시각 epoch ms (원본 정리 기준, 사양서 6.4) */
+  uploadedAt?: number | null;
 }
 
 /** 5초 단위로 저장하는 원본 덩어리 */

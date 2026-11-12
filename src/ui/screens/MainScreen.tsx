@@ -3,6 +3,8 @@
 import { useEffect, useMemo } from 'react';
 import { beginPrepare, loadCourses, useDrive } from '../../app/drive';
 import { useRecording } from '../../app/recording';
+import { useAccount } from '../../app/account';
+import { useSync } from '../../app/sync';
 import { nearestCourse } from '../../engine/course/nearest';
 import { toLocal } from '../../engine/geo';
 import { buildInfo } from '../buildInfo';
@@ -11,7 +13,7 @@ import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { formatKst, formatLapTime, formatLength } from '../format';
 import { useLocationPreview } from '../hooks/useLocationPreview';
-import { IconArrowRight, IconGps, IconPin, IconSettings } from '../icons';
+import { IconArrowRight, IconCloud, IconGps, IconPin, IconSettings, IconWarn } from '../icons';
 import { usePwaUpdate } from '../pwa/usePwaUpdate';
 import { useBestTimes } from './useBestTimes';
 
@@ -19,6 +21,8 @@ export function MainScreen() {
   const { needRefresh, update } = usePwaUpdate();
   const rec = useRecording();
   const drive = useDrive();
+  const sync = useSync();
+  const acc = useAccount();
   const busy = drive.phase !== 'idle' || rec.phase !== 'idle';
   const { fix, permission } = useLocationPreview(!busy);
   useEffect(() => {
@@ -85,6 +89,18 @@ export function MainScreen() {
             GPS <span className="mono">{fix ? `${Math.round(fix.hAcc)}m` : '—'}</span>
           </span>
         </div>
+        {acc.status === 'none' && acc.onboarded && (
+          <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>
+            <IconWarn size={20} />
+            계정 연결이 끊겨 업로드할 수 없어요 · 설정에서 확인
+          </a>
+        )}
+        {sync.enabled && sync.pending > 0 && (
+          <a className="notice" href="#/settings" style={{ textDecoration: 'none' }}>
+            <IconCloud size={20} color="#FFB224" />
+            업로드 대기 {sync.pending}건 · 통신이 연결되면 자동으로 올라갑니다
+          </a>
+        )}
         <button type="button" className="primary-btn start" onClick={beginPrepare}>
           <span>주행 시작</span>
           <IconArrowRight size={26} />

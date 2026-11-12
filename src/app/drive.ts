@@ -22,6 +22,7 @@ import {
   subscribeSamples,
 } from './recording';
 import { getSettings, type DriveMode } from './settings';
+import { enqueueSessionUpload } from './sync';
 import { changeProposedKind, loadRaw, processStoredSession, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
@@ -263,16 +264,22 @@ async function track<T>(sessionId: string, work: () => Promise<T>): Promise<T | 
   }
 }
 
-export function processSession(sessionId: string, kind?: CourseKind): Promise<DriveResultRecord | null> {
-  return track(sessionId, () => processStoredSession(deps(), sessionId, kind));
+/** 처리·코스 저장이 끝나면 서버에 올릴 차례에 넣는다 (사양서 5.4-4) */
+async function andUpload<T>(sessionId: string, r: T | null): Promise<T | null> {
+  if (r) void enqueueSessionUpload(sessionId);
+  return r;
 }
 
-export function changeKind(sessionId: string, kind: CourseKind): Promise<DriveResultRecord | null> {
-  return track(sessionId, () => changeProposedKind(deps(), sessionId, kind));
+export async function processSession(sessionId: string, kind?: CourseKind): Promise<DriveResultRecord | null> {
+  return andUpload(sessionId, await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
+}
+
+export async function changeKind(sessionId: string, kind: CourseKind): Promise<DriveResultRecord | null> {
+  return andUpload(sessionId, await track(sessionId, () => changeProposedKind(deps(), sessionId, kind)));
 }
 
 export async function saveCourse(sessionId: string, name: string): Promise<boolean> {
-  const r = await track(sessionId, () => saveProposedCourse(deps(), sessionId, name));
+  const r = await andUpload(sessionId, await track(sessionId, () => saveProposedCourse(deps(), sessionId, name)));
   if (r) await loadCourses();
   return r !== null;
 }

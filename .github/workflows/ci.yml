@@ -1,5 +1,6 @@
-# 푸시·PR마다 타입 검사와 테스트를 하고, main이면 웹앱을 빌드해 GitHub Pages에 배포한다.
-# 테스트가 실패하면 배포 단계는 실행되지 않는다 (needs: test).
+# 푸시·PR마다 웹앱과 파일 게이트웨이(Worker)의 타입 검사·테스트를 하고, main이면
+# 웹앱을 GitHub Pages에, Worker를 Cloudflare에 배포한다 (사양서 4장).
+# 테스트가 실패하면 배포 단계는 실행되지 않는다 (needs).
 name: 테스트·배포
 
 on:
@@ -29,9 +30,26 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  worker-test:
+    name: Worker 타입 검사·테스트
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
   deploy:
     name: GitHub Pages 배포
-    needs: test
+    needs: [test, worker-test]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -61,3 +79,46 @@ jobs:
           path: dist
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  deploy-worker:
+    name: 파일 게이트웨이(Worker) 배포
+    needs: [test, worker-test]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      # Settings → Secrets and variables → Actions 에 등록한 값 (사양서 11장). 없으면 배포를 건너뛴다
+      HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && vars.VITE_SUPABASE_URL != '' }}
+      HAS_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET != '' }}
+    steps:
+      - name: 설정값 확인
+        if: env.HAS_CLOUDFLARE != 'true'
+        run: echo "::notice::Cloudflare 비밀값(CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID)이나 VITE_SUPABASE_URL 변수가 아직 없어 Worker 배포를 건너뜁니다."
+      - uses: actions/checkout@v7
+        if: env.HAS_CLOUDFLARE == 'true'
+      - name: 허용할 웹앱 출처 (GitHub Pages)
+        if: env.HAS_CLOUDFLARE == 'true'
+        run: echo "ALLOWED_ORIGIN=https://${OWNER,,}.github.io" >> "$GITHUB_ENV"
+        env:
+          OWNER: ${{ github.repository_owner }}
+      - name: Worker 배포
+        if: env.HAS_CLOUDFLARE == 'true' && env.HAS_JWT_SECRET != 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          wranglerVersion: '4.155.0'
+          command: deploy --var SUPABASE_URL:${{ vars.VITE_SUPABASE_URL }} --var ALLOWED_ORIGIN:${{ env.ALLOWED_ORIGIN }}
+      - name: Worker 배포 (예전 방식 JWT 비밀값 포함)
+        if: env.HAS_CLOUDFLARE == 'true' && env.HAS_JWT_SECRET == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          wranglerVersion: '4.155.0'
+          command: deploy --var SUPABASE_URL:${{ vars.VITE_SUPABASE_URL }} --var ALLOWED_ORIGIN:${{ env.ALLOWED_ORIGIN }}
+          secrets: |
+            SUPABASE_JWT_SECRET
+        env:
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}

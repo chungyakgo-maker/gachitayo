@@ -43,3 +43,16 @@ export interface SessionSummary {
   validLapCount: number;
   bestLapMs: number | null;
 }
+
+/** 업로드 대기열 (사양서 6.4 uploadQueue) */
+export interface UploadQueueItem {
+  /** `${kind}:${targetId}` */
+  id: string;
+  kind: 'session';
+  targetId: string;
+  attempts: number;
+  lastError: string | null;
+  /** 다음 시도 시각 epoch ms (지수 백오프) */
+  nextAt: number;
+  createdAt: number;
+}

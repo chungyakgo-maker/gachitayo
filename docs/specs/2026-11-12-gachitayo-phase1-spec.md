@@ -105,8 +105,9 @@
   - 예약 작업: Supabase 깨우기 (11장 참고)
 - **환경 변수와 비밀값 (모두 GitHub 웹에서 등록):**
   - Actions 변수: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_FILES_API_URL`(Worker 주소)
-  - Actions 비밀: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-  - Worker 설정값(`wrangler.toml`의 vars): `SUPABASE_URL`, `ALLOWED_ORIGIN`(GitHub Pages 주소)
+  - Actions 비밀: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, (예전 대칭 키 프로젝트만) `SUPABASE_JWT_SECRET`
+  - Worker 설정값 `SUPABASE_URL`, `ALLOWED_ORIGIN`(GitHub Pages 출처 `https://{주인}.github.io`)은 `wrangler.toml`에 적지 않고 배포 때 Actions 변수에서 넣는다 (사용자가 파일을 고칠 필요가 없게, M6).
+  - 서버 변수·비밀값이 아직 없으면 앱은 폰에만 저장하고(첫 실행의 계정 만들기도 건너뜀), Worker 배포와 깨우기 작업은 건너뛴다.
 
 ---
 
@@ -316,7 +317,9 @@ docs/specs/
 | `trace` | jsonb | 6.8 비교용 축약 데이터 |
 | `created_at` | timestamptz | |
 
-- 업로드는 id 기준 upsert로 한다. 같은 세션을 다시 올려도 중복이 생기지 않는다.
+- 업로드는 id 기준 upsert로 한다. 같은 세션을 다시 올려도 중복이 생기지 않는다. 랩은 `(session_id, lap_no)` 기준이고, 다시 처리해서 랩이 줄었으면 남는 랩 행을 지운다.
+- 순서: 코스 → 원본·처리된 궤적 파일(PUT 뒤 HEAD로 크기 확인) → 세션 → 랩. 첫 주행에서 코스를 저장하지 않은 세션은 `course_id` 없이 올리고, 나중에 저장하면 다시 올려 연결한다.
+- 업로드 대기열의 재시도 간격은 10초부터 두 배씩, 최대 30분이다. 앱 시작·통신 복구·화면 복귀·주행 처리 직후·1분마다 시도한다.
 
 - 파일은 Supabase Storage를 쓰지 않고 R2에 둔다 (6.6).
 - `ping()` 함수: 현재 시각만 돌려주는 함수다. anon 역할에 실행 권한만 주고 표 데이터에는 접근하지 않는다. 깨우기 예약 작업(11장)이 호출한다.
@@ -331,8 +334,8 @@ docs/specs/
 - 웹앱은 R2에 직접 접근하지 않는다. R2 접근 키는 어디에도 두지 않고, Worker의 R2 바인딩(`SESSION_FILES`)으로만 접근한다.
 - 모든 요청에 `Authorization: Bearer <Supabase access token>`이 있어야 한다.
 - **토큰 검증:**
-  - Supabase 프로젝트의 JWKS(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`)로 서명을 검증하고, 만료 시각과 발급자를 확인한다. JWKS는 Worker에서 캐시한다.
-  - 프로젝트가 예전 방식(대칭 키 JWT secret)을 쓰면 그 값을 Worker 비밀값으로 등록해서 검증한다. 구현 전에 Supabase 대시보드에서 어느 방식인지 확인한다.
+  - Supabase 프로젝트의 JWKS(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`)로 서명(ES256, RS256)을 검증하고, 만료 시각과 발급자를 확인한다. JWKS는 Worker에서 10분 캐시하고, 모르는 키 ID가 오면(키 교체) 1분에 한 번까지 다시 받는다.
+  - 프로젝트가 예전 방식(대칭 키 JWT secret, HS256)을 쓰면 그 값을 비밀값 `SUPABASE_JWT_SECRET`으로 등록해서 검증한다. 두 방식을 모두 구현해 두고, 사용자는 어느 방식인지에 따라 비밀값 등록 여부만 정한다 (M6).
   - 검증된 토큰의 `sub`가 사용자 ID다.
 
 | 요청 | 동작 | 권한 |
@@ -671,7 +674,7 @@ docs/specs/
 - 시간 정보 있는 GPX와 없는 GPX
 - 가민 확장 속도값 읽기
 
-**파일 게이트웨이 테스트** (Cloudflare의 Workers용 Vitest 환경)
+**파일 게이트웨이 테스트** (Cloudflare의 Workers용 Vitest 환경 `@cloudflare/vitest-plugin`, `worker/` 폴더의 별도 패키지)
 - 토큰 없음 → 401, 다른 사용자 폴더 → 403, 잘못된 경로 → 400, 크기 초과 → 413
 - 정상 업로드 뒤 `HEAD`와 `GET` 결과가 올린 파일과 같은지
 - 허용하지 않은 출처(Origin)의 요청이 CORS에서 막히는지
@@ -710,8 +713,8 @@ docs/specs/
    - API 토큰을 만든다 (Workers 배포 권한 + R2 권한). 계정 ID를 확인한다.
 4. **GitHub Actions 변수와 비밀 등록:** 4장 목록대로 등록한다.
 5. **첫 배포:**
-   - main에 푸시하면 자동 테스트 → 웹앱과 Worker 배포가 진행된다.
-   - Worker 주소(`*.workers.dev`)를 `VITE_FILES_API_URL`에 넣고 한 번 더 배포한다.
+   - main에 푸시하거나 Actions 탭에서 다시 실행하면 자동 테스트 → 웹앱과 Worker 배포가 진행된다. Worker 배포 전에 R2 버킷이 있어야 한다.
+   - Worker 주소(`https://gachitayo-files.{계정 서브도메인}.workers.dev`)를 `VITE_FILES_API_URL`에 넣고 한 번 더 배포한다.
 6. 폰에서 링크를 열고 홈 화면에 추가한다.
 
 **Supabase 깨우기 예약 작업**
@@ -750,4 +753,5 @@ docs/specs/
 | 2026-11-12 | 6.3 자동 부호 확인·GPS 속도 없는 기기 처리, 7.2 재보정 비교 방식·손에 든 뒤 거치·확인 단계, 7.3 GPS 위치 표준편차·끊김 뒤 첫 점·GPS만 구간 잇기, 10.1 직선 있는 오벌 (M3) |
 | 2026-11-12 | 7.5 랩 코스 판정(이전 경로 어디든 다시 지나면, 8m 겹침), 편도 게이트 20m 안쪽·U턴 시작점·여러 번 달리기, 종류를 바꾸면 다시 만들기, 끊긴 랩 제외, GPX 평활 생략(이 앱이 내보낸 것)·짧은 GPX·UTC, 선 옮기기. 7.6 s 넘어감 보정, 7.8 랩 번호는 완주 순서, 7.12 빈 칸 제외 평균, 10.1 랩타임은 RMS 기준·델타 RMS 0.15초 (M4·M4 검토) |
 | 2026-11-12 | 6.3 GPS 방향 값이 없으면 위치 이동 방향으로 대신 (M5) |
+| 2026-11-12 | 4장 Worker 설정값은 배포 때 Actions 변수에서, 서버 설정 전에는 폰에만 저장. 6.5 업로드 순서·랩 정리·재시도 간격, 6.6 두 토큰 방식 모두 지원·JWKS 캐시, 10.1 Worker 테스트 도구, 11장 첫 배포 (M6) |
 | 2026-11-12 | 8장 디자인 시안 반영: 공통 디자인·랩타임 표기·델타 색 설정, 8.2 아래 탭 홈, 8.3 준비 화면에서 기록 시작·상단 표시 값, 8.4 지도 모드 추가(기본)·대시보드 구간 델타, 8.5 종료 요약 구성, 8.8 설정 항목. 친구 관련 표시는 1단계에서 뺌. 7.2 직선 등속 재보정 (M5) |

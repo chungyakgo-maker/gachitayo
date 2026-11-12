@@ -1,7 +1,7 @@
-// 폰 저장소 IndexedDB (사양서 6.4). uploadQueue는 동기화(M6)에서 버전을 올려 추가한다.
+// 폰 저장소 IndexedDB (사양서 6.4)
 import Dexie, { type Table } from 'dexie';
 import type { Course } from '../types/course';
-import type { DriveResultRecord, RefLapRecord } from '../types/drive';
+import type { DriveResultRecord, RefLapRecord, UploadQueueItem } from '../types/drive';
 import type { ChunkRecord, SessionRecord } from '../types/session';
 
 export class GachitayoDb extends Dexie {
@@ -10,6 +10,7 @@ export class GachitayoDb extends Dexie {
   results!: Table<DriveResultRecord, string>;
   courses!: Table<Course, string>;
   refLaps!: Table<RefLapRecord, string>;
+  uploadQueue!: Table<UploadQueueItem, string>;
 
   constructor(name = 'gachitayo') {
     super(name);
@@ -22,6 +23,10 @@ export class GachitayoDb extends Dexie {
       results: 'sessionId',
       courses: 'id',
       refLaps: 'id, [courseId+courseVersion], sessionId',
+    });
+    // M6: 업로드 대기열
+    this.version(3).stores({
+      uploadQueue: 'id, nextAt',
     });
   }
 }

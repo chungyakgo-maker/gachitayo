@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { changeKind, processSession, saveCourse, useProcessing } from '../../app/drive';
 import { getDriveRepo, getRepo } from '../../app/recording';
+import { useSync } from '../../app/sync';
 import type { InvalidReason } from '../../engine/course/laps';
 import type { Course, CourseKind } from '../../types/course';
 import type { DriveResultRecord } from '../../types/drive';
@@ -31,6 +32,7 @@ export function SummaryView({
   onRetry,
   onKind,
   onSave,
+  upload = '폰에 저장됨',
 }: {
   data: Loaded;
   busy: boolean;
@@ -38,6 +40,8 @@ export function SummaryView({
   onRetry: () => void;
   onKind: (k: CourseKind) => void;
   onSave: (name: string) => void;
+  /** 업로드 상태 한 줄 */
+  upload?: string;
 }) {
   const { session, result, course } = data;
   const [name, setName] = useState('');
@@ -189,8 +193,8 @@ export function SummaryView({
           )}
           {result.fusion.gpsOnly && <div className="notice">모션 센서 없이 GPS만으로 계산했어요 (정확도 낮음).</div>}
           <div className="notice">
-            <IconCloud size={20} color="#FFB224" />
-            폰에 저장됨 · 서버 업로드는 다음 업데이트에서 연결됩니다
+            <IconCloud size={20} color={session.status === 'uploaded' ? '#3EE08F' : '#FFB224'} />
+            {upload}
           </div>
         </>
       )}
@@ -205,6 +209,7 @@ export function SummaryView({
 
 export function SummaryScreen({ sessionId }: { sessionId: string }) {
   const proc = useProcessing(sessionId);
+  const sync = useSync();
   const [data, setData] = useState<Loaded | 'missing' | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -228,7 +233,8 @@ export function SummaryScreen({ sessionId }: { sessionId: string }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, proc?.state]);
+    // 업로드가 끝나면 세션 상태(업로드됨)를 다시 읽는다
+  }, [sessionId, proc?.state, sync.pending, sync.lastSyncAt]);
 
   if (data === 'missing') {
     return (
@@ -241,9 +247,15 @@ export function SummaryScreen({ sessionId }: { sessionId: string }) {
     );
   }
   if (!data) return <main className="page page-full" aria-busy="true" />;
+  const upload = !sync.enabled
+    ? '폰에 저장됨 · 서버 연결 전'
+    : data.session.status === 'uploaded'
+      ? '업로드됨'
+      : '업로드 대기 · 통신이 연결되면 자동으로 올라갑니다';
   return (
     <SummaryView
       data={data}
+      upload={upload}
       busy={proc?.state === 'running'}
       error={saveError ?? (proc?.state === 'error' ? proc.error : null)}
       onRetry={() => {

@@ -2,6 +2,7 @@ import { useEffect, type ReactElement } from 'react';
 import { resumeDrive } from '../app/drive';
 import { finishInterruptedSession, useRecording } from '../app/recording';
 import { useSettings } from '../app/settings';
+import { useAccount } from '../app/account';
 import { InterruptedPrompt } from './components/InterruptedPrompt';
 import { useHashPath } from './router';
 import { CoursesScreen } from './screens/CoursesScreen';
@@ -14,6 +15,7 @@ import { ReplayScreen } from './screens/ReplayScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
+import { WelcomeScreen } from './screens/WelcomeScreen';
 
 /** 경로 → 화면 */
 function route(path: string): ReactElement {
@@ -48,6 +50,7 @@ export function App() {
   const path = useHashPath();
   const { interrupted, phase } = useRecording();
   const { deltaPalette } = useSettings();
+  const { onboarded } = useAccount();
   // 델타 색 (설정): 화면 전체에 적용
   useEffect(() => {
     document.documentElement.classList.toggle('palette-blue-orange', deltaPalette === 'blue-orange');
@@ -56,7 +59,8 @@ export function App() {
   const pending = phase === 'idle' ? interrupted[0] : undefined;
   return (
     <>
-      {route(path)}
+      {/* 첫 실행 안내 (사양서 8.1). 개발자 메뉴는 그대로 연다 */}
+      {!onboarded && !path.startsWith('/dev/') ? <WelcomeScreen /> : route(path)}
       {pending && (
         <InterruptedPrompt
           startedAt={pending.startedAt}

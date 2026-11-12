@@ -22,6 +22,7 @@ import { createSessionRepo, type SessionRepo } from '../storage/sessionRepo';
 import type { DeviceInfo, SessionRecord } from '../types/session';
 import type { GpsSample, RawMotionSample, SessionEventType } from '../types/samples';
 import { createDriveRepo, type DriveRepo } from '../storage/driveRepo';
+import { createQueueRepo, type QueueRepo } from '../storage/queueRepo';
 import { LiveStatsTracker, type LiveStatsSnapshot } from '../ui/recording/liveStats';
 
 /** stopFailed: 마지막 저장이 실패해 아직 끝내지 못함 (다시 저장을 누를 수 있음) */
@@ -102,6 +103,11 @@ let driveRepo: DriveRepo | undefined;
 export function getDriveRepo(): DriveRepo {
   driveRepo ??= createDriveRepo(getDb());
   return driveRepo;
+}
+let queueRepo: QueueRepo | undefined;
+export function getQueueRepo(): QueueRepo {
+  queueRepo ??= createQueueRepo(getDb());
+  return queueRepo;
 }
 
 // ── 샘플 구독 (주행 중 계산이 기록기와 같은 센서 값을 받는다) ──

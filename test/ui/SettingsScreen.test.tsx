@@ -32,3 +32,14 @@ describe('상단 표시 값 (시안 Widgets)', () => {
     expect(screen.getByRole('link', { name: '완료' })).toHaveAttribute('href', '#/prepare');
   });
 });
+
+describe('설정: 닉네임·동기화 (사양서 8.8)', () => {
+  it('서버 연결 전이면 "폰에만 저장"을 알리고 닉네임은 폰에 저장한다', async () => {
+    const { waitFor } = await import('@testing-library/react');
+    render(<SettingsScreen />);
+    expect(screen.getByText('서버 연결 전 · 폰에만 저장')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('닉네임'), { target: { value: '지훈' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '저장' })[0]!);
+    await waitFor(() => expect(localStorage.getItem('gachitayo.nickname')).toBe('지훈'));
+  });
+});

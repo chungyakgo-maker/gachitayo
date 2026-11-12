@@ -13,6 +13,8 @@ export interface SessionRepo {
   /** seq 순서 */
   chunks(sessionId: string): Promise<ChunkRecord[]>;
   nextSeq(sessionId: string): Promise<number>;
+  /** 원본 덩어리만 지운다 (업로드 뒤 정리) */
+  deleteChunks(sessionId: string): Promise<number>;
 }
 
 export function createSessionRepo(db: GachitayoDb): SessionRepo {
@@ -38,5 +40,6 @@ export function createSessionRepo(db: GachitayoDb): SessionRepo {
         .last();
       return last ? last.seq + 1 : 0;
     },
+    deleteChunks: (sessionId) => db.chunks.where('sessionId').equals(sessionId).delete(),
   };
 }
