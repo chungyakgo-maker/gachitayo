@@ -53,7 +53,9 @@ export function PrepareScreen() {
     !motionOk || (cal && !cal.motionActive)
       ? { right: '건너뜀', text: '모션 센서 없이 GPS만으로 기록합니다.', progress: null }
       : !cal || cal.state === 'need_stationary'
-        ? { right: `${stillLeft}초 남음`, text: '3초간 정차해 주세요. 어느 쪽이 아래인지 재고 있습니다.', progress: cal?.stillProgress ?? 0 }
+        ? cal && cal.stillProgress >= 1
+          ? { right: '확인 중', text: '멈춘 것은 확인했어요. 폰이 흔들리지 않게 거치대에 둔 채 잠시 더 기다려 주세요.', progress: 1 }
+          : { right: `${stillLeft}초 남음`, text: '3초간 정차해 주세요. 어느 쪽이 아래인지 재고 있습니다.', progress: cal?.stillProgress ?? 0 }
         : cal.state === 'need_forward'
           ? { right: '정차 확인됨', text: '출발 뒤 곧은 길에서 가속·제동하면 앞 방향을 마저 잽니다.', progress: 1 }
           : { right: '완료', text: cal.signsConfirmed ? '거치 방향을 모두 확인했습니다.' : '코너를 몇 번 돌면 좌우 방향을 확인합니다.', progress: 1 };
@@ -74,6 +76,61 @@ export function PrepareScreen() {
           위치 권한이 거부되었습니다. 브라우저 설정에서 이 사이트의 위치를 허용한 뒤 다시 시작해 주세요.
         </div>
       )}
+
+      {/* 사용자 요청: 기록 시작 버튼을 맨 위, 준비 상태(GPS·모션·거치 보정)를 그 아래로 */}
+      <button type="button" className="primary-btn record" disabled={rec.phase !== 'recording'} onClick={startDrive}>
+        {rec.phase === 'starting' ? '센서를 켜는 중…' : '기록 시작'}
+      </button>
+      <div className="card-col" style={{ alignItems: 'center', textAlign: 'center' }}>
+        <span style={{ fontSize: 13 }} className="dim">
+          {!gpsReady && rec.phase === 'recording' ? 'GPS가 아직 준비되지 않았어요. 잠시 기다리면 더 정확해요' : '출발선을 지나면 랩 측정이 시작됩니다'}
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--fg-faint)' }}>주행 중에는 화면을 조작하지 마세요</span>
+      </div>
+
+      <section aria-label="준비 상태" className="card status-list">
+        <div className="status-item">
+          <div className="status-head">
+            {gpsReady ? <IconCheck color="#3EE08F" /> : <IconGps color={gps?.hAcc != null ? '#FFB224' : '#5E656D'} />}
+            <strong>GPS</strong>
+            <span>
+              {gpsReady ? '준비 완료' : 'GPS 대기 중'}
+              {gps?.hAcc != null && (
+                <>
+                  {' · 오차 '}
+                  <span className="mono">{Math.round(gps.hAcc)}m</span>
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+        <div className="status-item">
+          <div className="status-head">
+            {motionOk ? <IconCheck color="#3EE08F" /> : <IconWarn color="#FFB224" />}
+            <strong>모션 센서</strong>
+            <span>{motionLabel}</span>
+          </div>
+        </div>
+        <div className="status-item">
+          <div className="status-head">
+            <IconPhone color="#aacae6" />
+            <strong>거치 보정</strong>
+            <span style={{ color: mount.right === '완료' ? '#3EE08F' : 'var(--accent)' }}>{mount.right}</span>
+          </div>
+          <span style={{ fontSize: 13 }} className="dim">
+            {mount.text}
+          </span>
+          {mount.progress !== null && mount.progress < 1 && (
+            <div className="progress" role="progressbar" aria-label="거치 보정 진행" aria-valuenow={Math.round(mount.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
+              <div style={{ width: `${Math.round(mount.progress * 100)}%` }} />
+            </div>
+          )}
+          <button type="button" className="link-btn" aria-expanded={tips} onClick={() => setTips(!tips)}>
+            {tips ? '거치 팁 닫기' : '거치 팁 보기'}
+          </button>
+          {tips && <MountTips />}
+        </div>
+      </section>
 
       <section aria-label="코스" className="card card-row">
         <div className="card-col">
@@ -152,61 +209,6 @@ export function PrepareScreen() {
         </span>
         <IconChevron size={20} color="#9AA1A9" />
       </a>
-
-      <section aria-label="준비 상태" className="card status-list">
-        <div className="status-item">
-          <div className="status-head">
-            {gpsReady ? <IconCheck color="#3EE08F" /> : <IconGps color={gps?.hAcc != null ? '#FFB224' : '#5E656D'} />}
-            <strong>GPS</strong>
-            <span>
-              {gpsReady ? '준비 완료' : 'GPS 대기 중'}
-              {gps?.hAcc != null && (
-                <>
-                  {' · 오차 '}
-                  <span className="mono">{Math.round(gps.hAcc)}m</span>
-                </>
-              )}
-            </span>
-          </div>
-        </div>
-        <div className="status-item">
-          <div className="status-head">
-            {motionOk ? <IconCheck color="#3EE08F" /> : <IconWarn color="#FFB224" />}
-            <strong>모션 센서</strong>
-            <span>{motionLabel}</span>
-          </div>
-        </div>
-        <div className="status-item">
-          <div className="status-head">
-            <IconPhone color="#aacae6" />
-            <strong>거치 보정</strong>
-            <span style={{ color: mount.right === '완료' ? '#3EE08F' : 'var(--accent)' }}>{mount.right}</span>
-          </div>
-          <span style={{ fontSize: 13 }} className="dim">
-            {mount.text}
-          </span>
-          {mount.progress !== null && mount.progress < 1 && (
-            <div className="progress" role="progressbar" aria-label="거치 보정 진행" aria-valuenow={Math.round(mount.progress * 100)} aria-valuemin={0} aria-valuemax={100}>
-              <div style={{ width: `${Math.round(mount.progress * 100)}%` }} />
-            </div>
-          )}
-          <button type="button" className="link-btn" aria-expanded={tips} onClick={() => setTips(!tips)}>
-            {tips ? '거치 팁 닫기' : '거치 팁 보기'}
-          </button>
-          {tips && <MountTips />}
-        </div>
-      </section>
-
-      <div style={{ flex: 1 }} />
-      <button type="button" className="primary-btn record" disabled={rec.phase !== 'recording'} onClick={startDrive}>
-        {rec.phase === 'starting' ? '센서를 켜는 중…' : '기록 시작'}
-      </button>
-      <div className="card-col" style={{ alignItems: 'center', textAlign: 'center' }}>
-        <span style={{ fontSize: 13 }} className="dim">
-          {!gpsReady && rec.phase === 'recording' ? 'GPS가 아직 준비되지 않았어요. 잠시 기다리면 더 정확해요' : '출발선을 지나면 랩 측정이 시작됩니다'}
-        </span>
-        <span style={{ fontSize: 12, color: 'var(--fg-faint)' }}>주행 중에는 화면을 조작하지 마세요</span>
-      </div>
 
       {sheet === 'course' && (
         <Sheet title="코스 고르기" onClose={() => setSheet(null)}>
