@@ -7,7 +7,6 @@ set -euo pipefail
 
 BBOX="124.5,33.0,131.0,38.7"   # 남한 + 제주 + 울릉 (서경, 남위, 동경, 북위)
 MAXZOOM=14                     # 그 위는 앱이 늘려 그린다 (도로 정밀도 약 0.6 m)
-LIMIT_MB=295                   # wrangler 한 번 올리기 한도 300 MiB
 
 # pmtiles 명령 (Protomaps 공식, Go)
 GOBIN="$PWD/.bin" go install github.com/protomaps/go-pmtiles@latest
@@ -27,10 +26,15 @@ echo "지도 빌드: $BUILD"
 size=$(stat -c %s korea.pmtiles)
 echo "한국 지도 파일: $((size / 1024 / 1024)) MB"
 "$PM" show korea.pmtiles | head -25
-if [ "$size" -gt $((LIMIT_MB * 1024 * 1024)) ]; then
-  echo "::error::지도 파일이 ${LIMIT_MB}MB를 넘어 한 번에 올릴 수 없습니다 (MAXZOOM을 줄이거나 나눠 올려야 함)"
-  exit 1
+# 지도 파일은 300 MB가 넘어(wrangler 한도) R2의 S3 방식으로 나눠 올린다 (aws 명령, GitHub 러너에 있음).
+# S3 열쇠는 Cloudflare 문서 방식으로 기존 API 토큰에서 만든다: 열쇠 ID = 토큰 ID, 비밀 = 토큰 값의 SHA-256.
+tid=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify | jq -r '.result.id // empty')
+if [ -z "$tid" ]; then
+  tid=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" | jq -r '.result.id // empty')
 fi
+[ -n "$tid" ] || { echo "::error::Cloudflare 토큰 ID를 알 수 없어 지도 파일을 올릴 수 없습니다"; exit 1; }
+secret=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1)
+echo "::add-mask::$secret"
 
 # 글자 조각: protomaps/basemaps-assets 저장소에서 필요한 범위만
 rm -rf assets
@@ -60,5 +64,8 @@ echo "글자 조각 ${uploaded}개 올림"
 [ "$uploaded" -ge 2 ] || { echo "::error::글자 조각을 찾지 못했습니다 (basemaps-assets 구조가 바뀌었을 수 있음)"; exit 1; }
 
 # 마지막에 지도 파일 (올리기가 끝나야 바뀐다. 앱은 바뀐 파일을 알아서 다시 읽는다)
-npx wrangler r2 object put gachitayo-map/korea.pmtiles --file ../korea.pmtiles --content-type application/octet-stream --remote
-echo "올림: gachitayo-map/korea.pmtiles (빌드 $BUILD)"
+AWS_ACCESS_KEY_ID="$tid" AWS_SECRET_ACCESS_KEY="$secret" AWS_DEFAULT_REGION=auto \
+  AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required \
+  aws s3 cp ../korea.pmtiles s3://gachitayo-map/korea.pmtiles \
+  --endpoint-url "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" --content-type application/octet-stream --only-show-errors
+echo "올림: gachitayo-map/korea.pmtiles ($((size / 1024 / 1024)) MB, 빌드 $BUILD)"
