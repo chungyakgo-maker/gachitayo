@@ -17,7 +17,7 @@ import type { RefLapRecord } from '../../types/drive';
 import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
 import { OverlayCanvas } from '../components/OverlayCanvas';
-import { ReplayMap } from '../components/ReplayMap';
+import { LiveMap } from '../components/LiveMap';
 import { MapViewButton } from '../components/MapViewButton';
 import { GpsIcon, type GpsState } from '../components/GpsIcon';
 import { useOverlayInsets } from '../hooks/useOverlayInsets';
@@ -25,8 +25,8 @@ import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
-import { drawMiniMap, followView, mapModel } from '../overlay/minimap';
-import { useSmoothAngle, useSpanM } from '../hooks/useSmoothView';
+import { mapModel } from '../overlay/minimap';
+import { useSmoothAngle } from '../hooks/useSmoothView';
 import { overlayTheme, type OverlayTheme } from '../overlay/theme';
 
 export interface DriveViewProps {
@@ -92,9 +92,8 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   const hl = headline(frame);
   const h = { label: hl.label, text: hl.text, word: hl.word, cls: hl.tone === 'none' ? '' : hl.tone };
   const th = useMemo(() => overlayTheme(settings.deltaPalette), [settings.deltaPalette]);
-  // 나를 가운데 / 진행 방향 위 보기: 진행 방향과 보이는 거리를 부드럽게 (훅은 모드와 관계없이 늘 부른다)
+  // 나침반 바늘용 진행 방향 (지도 자체는 LiveMap이 매 프레임 부드럽게 돌린다. 훅은 모드와 관계없이 늘 부른다)
   const headSm = useSmoothAngle(snap?.pos?.psi);
-  const spanM = useSpanM(st?.speedKmh);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.end-btn, .map-compass')) return;
@@ -273,22 +272,25 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   const mapView = settings.mapView;
   const headPsi = headSm ?? me?.psi ?? null;
   const mapRot = mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
-  const viewFor = (w: number, hh: number) =>
-    mapView === 'fit' || !me ? undefined : followView(me, w, hh, { spanM, insetBottom: ins.bottom, top: ins.top, headingUp: mapView === 'heading' ? (headSm ?? me.psi ?? null) : null });
   return (
     // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
     <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
       <div className="drive-map" ref={mapRef}>
-        {replay || settings.mapTiles ? (
-          // 바탕 지도(OSM) 위에 그린다 (사용자 요청). 통신이 없거나 타일이 안 오면 타일 없이 그린다
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetTop={ins.top} insetBottom={ins.bottom} label={mapLabel} friend={front} friends={friends} heading={headSm} view={mapView} />
-        ) : (
-          <OverlayCanvas
-            style={{ position: 'absolute', inset: 0 }}
-            label={mapLabel}
-            draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: ins.bottom, top: ins.top + 20, margin: 28, friend: front, friends, view: viewFor(w, hh), north: false })}
-          />
-        )}
+        {/* 지도는 화면 주사율로 따로 그린다 (사용자 요청 "지도가 뚝뚝 끊긴다"). 바탕 지도(OSM)는 설정으로 끔, 통신이 없으면 타일 없이 */}
+        <LiveMap
+          model={model}
+          frame={frame}
+          origin={snap?.origin ?? null}
+          th={th}
+          insetTop={ins.top}
+          insetBottom={ins.bottom}
+          label={mapLabel}
+          friend={front}
+          friends={friends}
+          view={mapView}
+          tiles={replay !== null || settings.mapTiles}
+          speedKmh={st?.speedKmh ?? null}
+        />
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
         <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />
         <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 13 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />

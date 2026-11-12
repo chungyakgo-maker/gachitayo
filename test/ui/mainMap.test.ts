@@ -153,3 +153,18 @@ describe('가려지지 않은 영역 가운데 (사용자 요청: 지도는 화�
     r.destroy();
   });
 });
+
+describe('매 프레임 따라가기 (사용자 요청: 지도가 뚝뚝 끊긴다)', () => {
+  it('track: 다시 맞추지 않고 밀어서 내 위치를 가려지지 않은 영역 가운데에 둔다', async () => {
+    const { createReplayMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const r = createReplayMap(el);
+    const inset = { top: 240, bottom: 80 };
+    r.track(37.2, 127.1, inset);
+    for (let i = 1; i <= 10; i++) r.track(37.2 + i * 0.00002, 127.1, inset);
+    const p = r.project(37.2 + 10 * 0.00002, 127.1);
+    expect(p.x).toBeCloseTo(195, 0);
+    expect(Math.abs(p.y - (240 + (500 - 80)) / 2)).toBeLessThanOrEqual(1);
+    r.destroy();
+  });
+});

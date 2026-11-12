@@ -13,11 +13,3 @@ export function useSmoothAngle(a: number | null | undefined, k = 0.3): number | 
   }
   return v.current;
 }
-
-/** 속도에 따라 화면 너비에 보일 거리(m): 60 km/h까지 300 m, 160 km/h에서 800 m. 천천히 바뀐다 */
-export function useSpanM(speedKmh: number | null | undefined): number {
-  const v = useRef(300);
-  const target = 300 + Math.min(100, Math.max(0, (speedKmh ?? 0) - 60)) * 5;
-  v.current += (target - v.current) * 0.1;
-  return v.current;
-}

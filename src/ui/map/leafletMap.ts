@@ -228,6 +228,13 @@ export interface ReplayMapController {
   follow(lat: number, lon: number, inset: { top: number; bottom: number }): void;
   /** 지도 한가운데에 놓기 (진행 방향 위 보기: 지도판을 크게 만들어 돌리므로 가운데 = 나) */
   centerOn(lat: number, lon: number): void;
+  /**
+   * 매 프레임 따라가기 (사용자 요청 "지도가 뚝뚝 끊긴다"): 다시 맞추지 않고 지도판을 그만큼만 밀어 가볍다.
+   * 확대 단계가 다르거나 크게 떨어지면 한 번 맞춘다
+   */
+  track(lat: number, lon: number, inset: { top: number; bottom: number }): void;
+  /** 지도 상자 크기가 바뀌었을 때 */
+  resize(): void;
   /** 위경도 → 지도 안의 화면 좌표 (px) */
   project(lat: number, lon: number): { x: number; y: number };
   setOnline(online: boolean): void;
@@ -238,7 +245,7 @@ export const FOLLOW_ZOOM = 17;
 
 export function createReplayMap(el: HTMLElement): ReplayMapController {
   // 재생 화면은 두 번 탭으로 모드를 바꾸므로 지도 조작은 모두 끈다.
-  // 지도 출처는 지도판이 돌아가도 바로 보이게 바깥(ReplayMap)에서 글자로 쓴다
+  // 지도 출처는 지도판이 돌아가도 바로 보이게 바깥(LiveMap)에서 글자로 쓴다
   const map = L.map(el, {
     zoomControl: false,
     attributionControl: false,
@@ -284,6 +291,20 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     centerOn(lat, lon) {
       map.invalidateSize({ pan: false });
       map.setView([lat, lon], FOLLOW_ZOOM, { animate: false });
+    },
+    track(lat, lon, inset) {
+      const target = map.unproject(map.project([lat, lon], FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]), FOLLOW_ZOOM);
+      if (map.getZoom() !== FOLLOW_ZOOM) {
+        map.setView(target, FOLLOW_ZOOM, { animate: false });
+        return;
+      }
+      const off = map.project(target, FOLLOW_ZOOM).subtract(map.project(map.getCenter(), FOLLOW_ZOOM));
+      if (Math.abs(off.x) < 0.5 && Math.abs(off.y) < 0.5) return;
+      if (Math.hypot(off.x, off.y) > 300) map.setView(target, FOLLOW_ZOOM, { animate: false });
+      else map.panBy(off, { animate: false });
+    },
+    resize() {
+      map.invalidateSize({ pan: false });
     },
     project(lat, lon) {
       const p = map.latLngToContainerPoint([lat, lon]);
