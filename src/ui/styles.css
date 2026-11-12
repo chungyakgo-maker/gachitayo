@@ -67,3 +67,28 @@ body {
   color: var(--fg-dim);
   font-variant-numeric: tabular-nums;
 }
+
+.update-banner {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #1c1c1e;
+  font-size: 16px;
+}
+
+.update-banner button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #000;
+  font-size: 16px;
+  font-weight: 700;
+}
