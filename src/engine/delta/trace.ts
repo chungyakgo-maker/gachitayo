@@ -88,3 +88,31 @@ export function refTimeAt(trace: LapTrace, s: number, lapTimeMs: number, lengthM
   if (end <= lastS) return trace.t[n - 1]!;
   return trace.t[n - 1]! + (lapTimeMs / 1000 - trace.t[n - 1]!) * Math.min(1, (s - lastS) / (end - lastS));
 }
+
+/**
+ * refTimeAt의 역: 비교 랩이 랩 시작 뒤 elapsedS초에 있던 코스 거리 (고스트 위치).
+ * 랩 시간이 지나면 코스 끝, 0 이하면 0.
+ */
+export function refDistanceAt(trace: LapTrace, elapsedS: number, lapTimeMs: number, lengthM: number): number {
+  const n = trace.t.length;
+  if (elapsedS <= 0 || n === 0) return 0;
+  const tLast = trace.t[n - 1]!;
+  if (elapsedS >= tLast) {
+    const lastS = (n - 1) * trace.stepM;
+    const tEnd = lapTimeMs / 1000;
+    if (elapsedS >= tEnd || tEnd <= tLast) return lengthM;
+    return lastS + ((lengthM - lastS) * (elapsedS - tLast)) / (tEnd - tLast);
+  }
+  // t는 커지는 순서: 이진 탐색
+  let lo = 0;
+  let hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (trace.t[mid]! <= elapsedS) lo = mid;
+    else hi = mid;
+  }
+  const ta = trace.t[lo]!;
+  const tb = trace.t[hi]!;
+  const f = tb > ta ? (elapsedS - ta) / (tb - ta) : 0;
+  return Math.min(lengthM, (lo + f) * trace.stepM);
+}

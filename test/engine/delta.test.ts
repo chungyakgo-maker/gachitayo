@@ -68,3 +68,17 @@ describe('델타 (사양서 7.11)', () => {
     expect(f.push(200, -1)).toBe(-1);
   });
 });
+
+describe('고스트: 비교 랩이 같은 경과 시간에 있던 코스 거리', () => {
+  it('t_ref(s)의 역함수 (등속 20 m/s, 1000 m)', async () => {
+    const { refDistanceAt } = await import('../../src/engine/delta/trace');
+    const stepM = 5;
+    const L = 1000;
+    const trace = { stepM, t: Array.from({ length: L / stepM + 1 }, (_, i) => (i * stepM) / 20), v: [], alt: [] };
+    expect(refDistanceAt(trace, 10, 50_000, L)).toBeCloseTo(200, 6);
+    expect(refDistanceAt(trace, 12.345, 50_000, L)).toBeCloseTo(246.9, 6);
+    expect(refDistanceAt(trace, 0, 50_000, L)).toBe(0);
+    expect(refDistanceAt(trace, -1, 50_000, L)).toBe(0);
+    expect(refDistanceAt(trace, 60, 50_000, L)).toBe(L);
+  });
+});

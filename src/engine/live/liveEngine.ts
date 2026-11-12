@@ -47,6 +47,15 @@ export interface LiveState {
   bestLapMs: number | null;
   /** 지금 랩 구간 기록 */
   sectorTimesMs: [number | null, number | null, number | null];
+  /** 지금 달리는 구간 (0, 1, 2). 랩 밖이면 null */
+  currentSector: 0 | 1 | 2 | null;
+  /**
+   * 비교 랩 대비 구간 델타 (초, + 느림). 끝난 구간 = 구간 기록 − 비교 구간 기록,
+   * 지금 구간 = 지금 델타 − 구간 시작 때 델타. 비교 랩이 없거나 아직 안 간 구간은 null
+   */
+  sectorDeltas: [number | null, number | null, number | null];
+  /** 이번 세션 최고 속도 */
+  maxSpeedKmh: number;
   /** 초, + 느림. 숨김이면 null */
   delta: number | null;
   s: number | null;
@@ -54,6 +63,13 @@ export interface LiveState {
   gx: number | null;
   gy: number | null;
   status: { gpsWeak: boolean; offCourse: boolean; gNotCalibrated: boolean; courseRecording: boolean };
+}
+
+export interface LiveRef {
+  trace: LapTrace;
+  lapTimeMs: number;
+  /** 비교 랩 구간 기록 (구간 델타). 없으면 구간 델타 없음 */
+  sectorTimesMs?: [number | null, number | null, number | null];
 }
 
 export class LiveEngine {
@@ -75,10 +91,13 @@ export class LiveEngine {
   private firstMoveT: number | null = null;
   private gpsBadSince: number | null = null;
   private readonly progress: LapProgress;
+  private maxV = 0;
+  /** 구간 경계를 지날 때의 델타 (구간 1 시작은 0) */
+  private deltaAtBound: [number | null, number | null] = [null, null];
 
   constructor(
     private readonly geom: CourseGeometry | null,
-    private readonly ref: { trace: LapTrace; lapTimeMs: number } | null,
+    private readonly ref: LiveRef | null,
   ) {
     this.det = geom ? new GateDetector(geom) : null;
     this.st = geom?.centerline ? new STracker(geom) : null;
@@ -86,6 +105,7 @@ export class LiveEngine {
   }
 
   push(p: LiveInput): LiveState {
+    this.maxV = Math.max(this.maxV, p.v);
     const g = p.ax !== null && p.ay !== null && p.gCalibrated ? this.g.push(p.t, p.ax, p.ay) : null;
     const status = { gpsWeak: !p.gpsOk, offCourse: false, gNotCalibrated: !p.gCalibrated, courseRecording: false };
 
@@ -124,6 +144,7 @@ export class LiveEngine {
         this.geom.sectorBounds.forEach((bound, i) => {
           if (this.sectorCross[i] === null && a < bound && b >= bound) {
             this.sectorCross[i] = this.prev!.t + ((bound - a) / (b - a)) * (p.t - this.prev!.t);
+            this.deltaAtBound[i] = this.delta;
           }
         });
       }
@@ -152,6 +173,7 @@ export class LiveEngine {
     this.lapStartT = t;
     this.lapValid = true;
     this.sectorCross = [null, null];
+    this.deltaAtBound = [null, null];
     this.filter.push(t, null);
     this.delta = null;
     this.st?.resetAtStart();
@@ -182,6 +204,23 @@ export class LiveEngine {
   ): LiveState {
     const [s1, s2] = this.sectorCross;
     const start = this.lapStartT;
+    const sectorTimes: [number | null, number | null, number | null] = [
+      start !== null && s1 !== null ? s1 - start : null,
+      s1 !== null && s2 !== null ? s2 - s1 : null,
+      null,
+    ];
+    const currentSector: LiveState['currentSector'] = start === null ? null : s2 !== null ? 2 : s1 !== null ? 1 : 0;
+    const refSec = this.ref?.sectorTimesMs;
+    const sectorDeltas: [number | null, number | null, number | null] = [null, null, null];
+    if (refSec && currentSector !== null) {
+      for (let i = 0; i < currentSector; i++) {
+        const mine = sectorTimes[i];
+        const theirs = refSec[i];
+        sectorDeltas[i] = mine != null && theirs != null ? (mine - theirs) / 1000 : null;
+      }
+      const startDelta = currentSector === 0 ? 0 : this.deltaAtBound[currentSector - 1]!;
+      sectorDeltas[currentSector] = this.delta !== null && startDelta !== null ? this.delta - startDelta : null;
+    }
     return {
       t: p.t,
       speedKmh: p.v * 3.6,
@@ -189,11 +228,10 @@ export class LiveEngine {
       lapElapsedMs,
       lastLap: this.lastLap,
       bestLapMs: this.bestLapMs,
-      sectorTimesMs: [
-        start !== null && s1 !== null ? s1 - start : null,
-        s1 !== null && s2 !== null ? s2 - s1 : null,
-        null,
-      ],
+      sectorTimesMs: sectorTimes,
+      currentSector,
+      sectorDeltas,
+      maxSpeedKmh: this.maxV * 3.6,
       delta: this.delta,
       s,
       onCourse,
