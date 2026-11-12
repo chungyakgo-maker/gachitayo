@@ -12,11 +12,15 @@
 //   GET /api/friends/presence            위치 공유 중인 친구의 위치 (2분 안에 받은 것만)
 //   PUT /api/presence {lat, lon, …}      내 위치 공유 (마지막 하나만 저장)
 //   DELETE /api/presence                 공유 끄기 (지운다)
+//   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 413 너무 큼, 429 가입 제한
 import { authenticate, signup, validNickname } from './auth';
 import { getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
+import { tokenFromProtocol } from './live';
+
+export { LiveRoom } from './live';
 import { corsHeaders, errorResponse, HttpError, json, readJson, UUID_RE } from './http';
 
 /** 표 API 본문 최대 크기 (긴 코스 중심선, 랩 trace 묶음) */
@@ -45,6 +49,23 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers): Promi
   const method = req.method;
 
   if (path.startsWith('/files/')) return handleFiles(req, env, path, headers);
+
+  const live = /^\/live\/([^/]+)$/.exec(path);
+  if (live) {
+    if (method !== 'GET') throw new HttpError(405);
+    if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket') throw new HttpError(426, 'WebSocket으로 연결해 주세요');
+    const target = live[1]!.toLowerCase();
+    if (!UUID_RE.test(target)) throw new HttpError(400, '잘못된 사용자 id');
+    const userId = await authenticate(req, env, tokenFromProtocol(req));
+    let role: 'leader' | 'follower' = 'leader';
+    if (target !== userId) {
+      const friend = await env.DB.prepare('SELECT 1 AS x FROM friends WHERE user_id = ? AND friend_id = ?').bind(userId, target).first();
+      if (!friend) throw new HttpError(403, '친구만 볼 수 있어요');
+      role = 'follower';
+    }
+    const fwd = new Request(req.url, { headers: { Upgrade: 'websocket', 'X-Live-Role': role } });
+    return env.LIVE.get(env.LIVE.idFromName(target)).fetch(fwd);
+  }
 
   if (path === '/auth/signup') {
     if (method !== 'POST') throw new HttpError(405);

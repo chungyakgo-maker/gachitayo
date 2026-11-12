@@ -164,4 +164,20 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByText('GPS 약함')).toBeInTheDocument();
     expect(screen.getByText('코스 이탈')).toBeInTheDocument();
   });
+
+  it('앞 친구 간격(M9): 큰 델타 자리에 목표와의 차이, 신호가 끊기면 상태 줄에 알림', () => {
+    const gap = { nickname: '지훈', targetS: 2, gapS: 1.5, stale: false };
+    const { unmount } = render(<DriveView {...props({ gap, front: { x: 30, y: 40, label: '지훈' } })} />);
+    const panel = screen.getByRole('img', { name: '앞 지훈 · 목표 2.0초 · 가까움 −0.5, 랩 4 1:12.4' });
+    expect(panel.closest('.delta-panel')).toHaveClass('slow');
+    unmount();
+    render(<DriveView {...props({ gap: { ...gap, stale: true } })} />);
+    expect(screen.getByText('앞 친구 신호 없음')).toBeInTheDocument();
+  });
+
+  it('앞 친구 간격은 미니멀 모드의 큰 숫자에도 나온다', () => {
+    render(<DriveView {...props({ mode: 'minimal', gap: { nickname: '지훈', targetS: 2, gapS: 2.64, stale: false } })} />);
+    expect(screen.getByText('+0.6')).toBeInTheDocument();
+    expect(screen.getByText('멂')).toBeInTheDocument();
+  });
 });

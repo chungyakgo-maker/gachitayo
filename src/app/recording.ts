@@ -120,6 +120,8 @@ export function subscribeSamples(fn: (e: SampleEvent) => void): () => void {
   return () => sampleListeners.delete(fn);
 }
 const emitSample = (e: SampleEvent) => sampleListeners.forEach((l) => l(e));
+/** 시험용: 기록기 없이 샘플을 흘려보낸다 */
+export const __emitSampleForTest = emitSample;
 
 let wakeLock: WakeLockManager | undefined;
 function getWakeLock(): WakeLockManager {

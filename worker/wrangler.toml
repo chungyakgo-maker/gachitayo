@@ -13,3 +13,12 @@ binding = "DB"
 database_name = "gachitayo"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
+
+# 앞 친구 간격용 실시간 방 (M9). 무료 플랜은 SQLite 방식만 쓸 수 있다
+[[durable_objects.bindings]]
+name = "LIVE"
+class_name = "LiveRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LiveRoom"]

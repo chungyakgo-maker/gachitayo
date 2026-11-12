@@ -2,7 +2,7 @@
 import { useSyncExternalStore } from 'react';
 
 export type DriveMode = 'map' | 'minimal' | 'dashboard';
-export type WidgetId = 'g' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno';
+export type WidgetId = 'g' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap';
 export type DeltaPalette = 'green-red' | 'blue-orange';
 
 export interface Settings {
@@ -10,9 +10,19 @@ export interface Settings {
   /** 지도 모드 위쪽에 델타와 함께 보여줄 두 칸 */
   widgets: [WidgetId, WidgetId];
   deltaPalette: DeltaPalette;
+  /** 앞 친구 간격 (M9): 고른 앞 친구와 목표 간격(초, 1초 이상). friendId가 없으면 끔 */
+  gap: { friendId: string | null; nickname: string | null; targetS: number };
 }
 
-export const DEFAULT_SETTINGS: Settings = { defaultMode: 'map', widgets: ['g', 'speed'], deltaPalette: 'green-red' };
+export const GAP_MIN_S = 1;
+export const GAP_MAX_S = 10;
+
+export const DEFAULT_SETTINGS: Settings = {
+  defaultMode: 'map',
+  widgets: ['g', 'speed'],
+  deltaPalette: 'green-red',
+  gap: { friendId: null, nickname: null, targetS: 2 },
+};
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   g: 'G미터',
@@ -21,11 +31,18 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
   sector: '구간 기록',
   vmax: '최고 속도',
   lapno: '랩 번호',
+  gap: '앞 친구 간격',
 };
 
 const KEY = 'gachitayo.settings';
 const MODES: DriveMode[] = ['map', 'minimal', 'dashboard'];
 const WIDGETS = Object.keys(WIDGET_LABEL) as WidgetId[];
+
+function loadGap(g: unknown): Settings['gap'] {
+  const o = (g ?? {}) as Partial<Settings['gap']>;
+  const t = typeof o.targetS === 'number' && Number.isFinite(o.targetS) ? Math.min(GAP_MAX_S, Math.max(GAP_MIN_S, Math.round(o.targetS * 2) / 2)) : 2;
+  return { friendId: typeof o.friendId === 'string' ? o.friendId : null, nickname: typeof o.nickname === 'string' ? o.nickname : null, targetS: t };
+}
 
 function load(): Settings {
   try {
@@ -39,6 +56,7 @@ function load(): Settings {
           ? [w[0]!, w[1]!]
           : DEFAULT_SETTINGS.widgets,
       deltaPalette: raw.deltaPalette === 'blue-orange' ? 'blue-orange' : 'green-red',
+      gap: loadGap(raw.gap),
     };
   } catch {
     return DEFAULT_SETTINGS;

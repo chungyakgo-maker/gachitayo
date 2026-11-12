@@ -176,3 +176,30 @@ describe('미니맵 (지도 모드, 사양서 8.4)', () => {
     expect(b.calls.filter((c) => c.op === 'lineTo').length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('앞 친구 간격 (M9): 델타 자리에 목표와의 차이', () => {
+  const gap = (gapS: number | null, stale = false) => ({ nickname: '지훈', targetS: 2, gapS, stale });
+  it('목표보다 가까우면 빨강 "가까움", 멀면 초록 "멂", 0.2초 안이면 "유지"', () => {
+    expect(headline(frame({ gap: gap(1.5) }))).toMatchObject({ label: '앞 지훈 · 목표 2.0초', text: '−0.5', word: '가까움', tone: 'slow' });
+    expect(headline(frame({ gap: gap(2.64) }))).toMatchObject({ text: '+0.6', word: '멂', tone: 'fast' });
+    expect(headline(frame({ gap: gap(2.1) }))).toMatchObject({ text: '+0.1', word: '유지', tone: 'none' });
+    expect(headline(frame({ gap: gap(null) }))).toMatchObject({ text: '—' });
+    expect(headline(frame({ gap: gap(2, true) }))).toMatchObject({ label: '앞 지훈 · 신호 없음', text: '—' });
+  });
+
+  it('패널 오른쪽: 지금 간격, 아래에 작게 베스트 대비 델타. 상단 칸 "앞 친구 간격"', () => {
+    const { ctx, texts } = fakeCtx();
+    drawDeltaPanel(ctx, 358, 112, frame({ gap: gap(1.5) }), th);
+    const t = texts().map((x) => x.text);
+    expect(t).toEqual(['앞 지훈 · 목표 2.0초', ' · ', '가까움', '−0.5', '지금 간격', '1.5초', '베스트 +0.43']);
+    expect(texts().find((x) => x.text === '−0.5')!.color).toBe(th.slow);
+    expect(widgetValue('gap', frame({ gap: gap(2.44) }))).toMatchObject({ label: '앞 친구 간격', value: '2.4', unit: '초' });
+    expect(widgetValue('gap', frame({ gap: gap(2.44, true) }))).toMatchObject({ value: '—', unit: '' });
+  });
+
+  it('미니맵에 앞 친구 점과 닉네임', () => {
+    const { ctx, texts } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, mapModel(course), frame({ ghost: null }), th, { friend: { x: 30, y: 40, label: '지훈' } });
+    expect(texts().map((x) => x.text)).toEqual(['지훈']);
+  });
+});

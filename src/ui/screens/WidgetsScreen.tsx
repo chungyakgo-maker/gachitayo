@@ -1,5 +1,5 @@
 // 상단 표시 값 (디자인 시안 Widgets): 지도 모드 위쪽에 델타와 함께 보여줄 두 칸.
-// 같은 값을 고르면 두 칸이 서로 바뀐다. 앞 친구 간격(3단계)은 넣지 않는다.
+// 같은 값을 고르면 두 칸이 서로 바뀐다. 앞 친구 간격은 M9(사용자 요청)에서 넣었다.
 import { setWidget, useSettings, WIDGET_LABEL, type WidgetId } from '../../app/settings';
 import { IconBack } from '../icons';
 
@@ -10,6 +10,7 @@ const SAMPLE: Record<WidgetId, string> = {
   sector: 'S2 −0.19',
   vmax: '186 km/h',
   lapno: '랩 4',
+  gap: '2.4초',
 };
 const IDS = Object.keys(WIDGET_LABEL) as WidgetId[];
 

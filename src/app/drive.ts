@@ -1,5 +1,7 @@
 // 주행 컨트롤러 (사양서 8.3~8.5): 주행 준비 → 주행 → 종료 → 주행 후 처리. 재생 모드(10.2)도 같은 주행 화면을 쓴다.
 // 기록(센서·저장)은 app/recording이 맡고, 여기서는 같은 샘플을 주행 중 계산(LivePipeline)에 넣어 화면 스냅숏을 만든다.
+import { getFriendsState } from './friends';
+import { startLiveLinks, stopLiveLinks } from './liveLink';
 import { useSyncExternalStore } from 'react';
 import { nearestCourse } from '../engine/course/nearest';
 import { LivePipeline, type LiveSnapshot } from '../engine/live/livePipeline';
@@ -180,8 +182,15 @@ export function cycleDriveMode(): void {
 }
 
 /** 주행 준비의 "기록 시작" */
+/** 앞 친구 받기·내 위치 보내기 (M9): 주행을 시작하거나 이어서 할 때 */
+function startLinks(): void {
+  const g = getSettings().gap;
+  startLiveLinks({ friend: g.friendId ? { id: g.friendId, nickname: g.nickname ?? '앞 친구' } : null, publish: getFriendsState().sharing });
+}
+
 export function startDrive(): void {
   if (state.phase !== 'preparing') return;
+  startLinks();
   markRecordingEvent('drive_start', state.course ? { courseId: state.course.id, courseVersion: state.course.version } : {});
   const id = getRecordingState().sessionId;
   if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null });
@@ -191,6 +200,7 @@ export function startDrive(): void {
 
 /** 주행 준비에서 뒤로: 기록을 지운다 */
 export async function cancelPrepare(): Promise<void> {
+  stopLiveLinks();
   teardownLive?.();
   teardownLive = null;
   pipeline = null;
@@ -210,6 +220,7 @@ export async function endDrive(): Promise<void> {
   }
   if (state.phase !== 'driving' && state.phase !== 'ending') return;
   set({ phase: 'ending', error: null });
+  stopLiveLinks();
   teardownLive?.();
   teardownLive = null;
   const id = await stopRecording();
@@ -299,6 +310,7 @@ export async function resumeDrive(sessionId: string): Promise<void> {
     unsub();
     stopTicker();
   };
+  startLinks();
   set({ phase: 'driving', replay: null, mode: getSettings().defaultMode });
   go('#/drive');
 }

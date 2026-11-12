@@ -1,13 +1,14 @@
 // 오버레이 그리기 (사양서 13.1 확장 지점, 5.1의 12번): "시각 t의 상태 → 캔버스".
 // 주행 화면 지도 모드가 쓰고, 나중에 영상에 입히기가 영상 프레임 위에 같은 함수를 부른다.
 // 크기·글꼴은 디자인 시안(styles.css)과 같게 맞췄다. 좌표는 CSS px (호출하는 쪽이 기기 배율을 맞춘다).
-import { formatLapTime } from '../format';
+import { formatDelta, formatLapTime } from '../format';
 import { gLabel, headline, type OverlayFrame, type Tone, type ValueTile } from './frame';
 import type { OverlayTheme } from './theme';
 
 export type Ctx = CanvasRenderingContext2D;
 
 const toneColor = (th: OverlayTheme, tone: Tone, fallback: string) => (tone === 'fast' ? th.fast : tone === 'slow' ? th.slow : fallback);
+const toneColorOf = (th: OverlayTheme, d: number) => (d < 0 ? th.fast : d > 0 ? th.slow : th.fg2);
 
 /** 글자 간격: 지원하는 브라우저에서만 (모르면 기본 간격) */
 function setSpacing(ctx: Ctx, px: number): void {
@@ -77,8 +78,19 @@ export function drawDeltaPanel(ctx: Ctx, w: number, h: number, f: OverlayFrame, 
   // 큰 델타
   setFont(ctx, 600, big, th.mono, -0.05);
   text(ctx, hl.text, padX, top + labelH + big / 2 + big * 0.13, hl.plain ? th.fg : toneColor(th, hl.tone, th.fg2));
-  // 오른쪽: 랩 번호, 현재 랩 경과
-  if (f.hasCourse) {
+  // 오른쪽: 앞 친구 간격이면 지금 간격과 작은 베스트 대비 델타, 아니면 랩 번호와 현재 랩 경과
+  if (f.gap) {
+    const rx = w - padX;
+    setFont(ctx, 400, 12, th.sans);
+    text(ctx, '지금 간격', rx, h / 2 - 17.5, th.fgDim, 'right');
+    setFont(ctx, 500, 24, th.mono);
+    const g = f.gap;
+    text(ctx, !g.stale && g.gapS !== null ? `${g.gapS.toFixed(1)}초` : '—', rx, h / 2 + 14.5, th.fg, 'right');
+    if (f.hasCourse && f.hasRef && f.hasState && f.lapNo > 0 && f.delta !== null) {
+      setFont(ctx, 400, 12, th.sans);
+      text(ctx, `베스트 ${formatDelta(f.delta)}`, rx, h - 12, toneColorOf(th, f.delta), 'right');
+    }
+  } else if (f.hasCourse) {
     const lap = f.hasState && f.lapNo > 0 ? `랩 ${f.lapNo}` : '랩';
     const rx = w - padX;
     setFont(ctx, 400, 12, th.sans);

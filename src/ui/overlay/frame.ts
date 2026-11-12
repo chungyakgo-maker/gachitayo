@@ -32,7 +32,22 @@ export interface OverlayFrame {
   ghost: { x: number; y: number } | null;
   /** 지나온 경로 (첫 주행) */
   path?: ReadonlyArray<XY>;
+  /** 앞 친구 간격 (M9). 앞 친구를 고르지 않았으면 없음 */
+  gap?: GapInfo | null;
 }
+
+export interface GapInfo {
+  nickname: string;
+  /** 목표 간격 초 */
+  targetS: number;
+  /** 지금 간격 초 (모르면 null) */
+  gapS: number | null;
+  /** 앞 친구 위치가 5초 넘게 안 옴 */
+  stale: boolean;
+}
+
+/** 목표와 이만큼 안쪽이면 "유지" */
+export const GAP_HOLD_S = 0.2;
 
 export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, hasRef: boolean): OverlayFrame {
   const st = snap?.state ?? null;
@@ -70,8 +85,19 @@ export interface Headline {
   plain: boolean;
 }
 
-/** 델타 패널에 보여줄 것: 첫 주행이면 출발 뒤 경과, 아니면 델타 */
+/** 델타 패널에 보여줄 것: 앞 친구 간격을 켰으면 목표와의 차이, 첫 주행이면 출발 뒤 경과, 아니면 델타 */
 export function headline(f: OverlayFrame): Headline {
+  if (f.gap) {
+    const g = f.gap;
+    const target = `목표 ${g.targetS.toFixed(1)}초`;
+    if (g.stale) return { label: `앞 ${g.nickname} · 신호 없음`, text: '—', word: '', tone: 'none', plain: false };
+    if (g.gapS === null) return { label: `앞 ${g.nickname} · ${target}`, text: '—', word: '', tone: 'none', plain: false };
+    const d = g.gapS - g.targetS;
+    // 목표보다 가까우면 빨강(느림 색), 멀면 초록(빠름 색), 0.2초 안이면 유지
+    const tone: Tone = d < -GAP_HOLD_S ? 'slow' : d > GAP_HOLD_S ? 'fast' : 'none';
+    const word = tone === 'slow' ? '가까움' : tone === 'fast' ? '멂' : '유지';
+    return { label: `앞 ${g.nickname} · ${target}`, text: formatDelta(d, 1), word, tone, plain: false };
+  }
   if (!f.hasCourse) return { label: '코스 기록 중 · 출발 뒤', text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
   if (!f.hasRef) return { label: '비교 랩 없음', text: '—', word: '', tone: 'none', plain: false };
   if (!f.hasState || f.lapNo === 0) return { label: '출발선을 지나면 시작', text: '—', word: '', tone: 'none', plain: false };
@@ -92,6 +118,11 @@ export interface ValueTile {
 /** 상단 표시 값 한 칸 (G미터 제외, 사양서 8.3.1) */
 export function widgetValue(id: Exclude<WidgetId, 'g'>, f: OverlayFrame): ValueTile {
   const label = WIDGET_LABEL[id];
+  if (id === 'gap') {
+    const g = f.gap;
+    const v = g && !g.stale && g.gapS !== null ? g.gapS.toFixed(1) : '—';
+    return { label, value: v, unit: v === '—' ? '' : '초', tone: 'none', small: false };
+  }
   if (id === 'speed') return { label, value: kmh(f.speedKmh), unit: 'km/h', tone: 'none', small: false };
   if (id === 'vmax') return { label, value: kmh(f.maxSpeedKmh), unit: 'km/h', tone: 'none', small: false };
   if (id === 'lap') return { label, value: formatLapTime(f.lapElapsedMs, 1), unit: '', tone: 'none', small: false };

@@ -7,8 +7,20 @@ describe('설정 (폰 보관)', () => {
     updateSettings(DEFAULT_SETTINGS);
   });
 
-  it('기본값: 지도 모드, 상단 값 G미터·속도, 델타 색 초록·빨강', () => {
-    expect(getSettings()).toEqual({ defaultMode: 'map', widgets: ['g', 'speed'], deltaPalette: 'green-red' });
+  it('기본값: 지도 모드, 상단 값 G미터·속도, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초)', () => {
+    expect(getSettings()).toEqual({ defaultMode: 'map', widgets: ['g', 'speed'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 } });
+  });
+
+  it('앞 친구 목표 간격은 1~10초, 0.5초 단위로 맞춘다 (폰에 저장된 값이 이상해도)', async () => {
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ gap: { friendId: 'u2', nickname: '지훈', targetS: 0.3 } }));
+    const { vi } = await import('vitest');
+    vi.resetModules();
+    const m = await import('../../src/app/settings');
+    expect(m.getSettings().gap).toEqual({ friendId: 'u2', nickname: '지훈', targetS: 1 });
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ gap: { targetS: 3.26 } }));
+    vi.resetModules();
+    expect((await import('../../src/app/settings')).getSettings().gap.targetS).toBe(3.5);
+    localStorage.removeItem('gachitayo.settings');
   });
 
   it('상단 표시 값: 다른 칸과 같은 값을 고르면 두 칸이 서로 바뀐다', () => {

@@ -38,10 +38,10 @@ export async function signup(env: Cloudflare.Env, nickname: string, ip: string, 
   return { userId, token };
 }
 
-/** 요청의 폰 열쇠로 사용자 ID를 찾는다. 없거나 틀리면 401 */
-export async function authenticate(req: Request, env: Cloudflare.Env): Promise<string> {
+/** 요청의 폰 열쇠로 사용자 ID를 찾는다. 없거나 틀리면 401. tokenOverride: 실시간 연결처럼 머리글 대신 받은 열쇠 */
+export async function authenticate(req: Request, env: Cloudflare.Env, tokenOverride?: string | null): Promise<string> {
   const auth = req.headers.get('Authorization');
-  const token = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  const token = tokenOverride ?? (auth?.startsWith('Bearer ') ? auth.slice(7).trim() : '');
   if (token.length < 20 || token.length > 200) throw new HttpError(401, '로그인 필요');
   const row = await env.DB.prepare('SELECT id FROM users WHERE token_hash = ?').bind(await sha256Hex(token)).first<{ id: string }>();
   if (!row) throw new HttpError(401, '로그인 필요');

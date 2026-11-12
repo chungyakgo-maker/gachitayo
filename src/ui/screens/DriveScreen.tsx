@@ -2,6 +2,9 @@
 // 두 번 탭하면 모드 전환(지도 → 미니멀 → 대시보드), 2초 길게 눌러 종료. 그 밖의 터치는 무시한다.
 // 지도 모드의 델타·고른 값·미니맵은 오버레이 그리기 함수(src/ui/overlay)로 캔버스에 그린다 (사양서 13.1 확장 지점).
 import { useMemo, useRef } from 'react';
+import { useFollow, type FollowState } from '../../app/liveLink';
+import { toLocal } from '../../engine/geo';
+import { GapTracker } from '../../engine/live/gap';
 import { cycleDriveMode, endDrive, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
 import { useSettings, type DriveMode, type Settings, type WidgetId } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
@@ -15,12 +18,16 @@ import { ReplayMap } from '../components/ReplayMap';
 import { formatDelta, formatLapTime } from '../format';
 import { IconGps } from '../icons';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
-import { frameFromLive, gLabel, headline, widgetValue, type OverlayFrame } from '../overlay/frame';
+import { frameFromLive, gLabel, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
 import { drawMiniMap, mapModel } from '../overlay/minimap';
 import { overlayTheme, type OverlayTheme } from '../overlay/theme';
 
 export interface DriveViewProps {
   snap: LiveSnapshot | null;
+  /** 앞 친구 간격 (M9). 없으면 끔 */
+  gap?: GapInfo | null;
+  /** 앞 친구 위치 (같은 평면 좌표) */
+  front?: { x: number; y: number; label: string } | null;
   course: Course | null;
   refLap: RefLapRecord | null;
   mode: DriveMode;
@@ -44,12 +51,13 @@ function sectorTime(ms: number | null): string {
   return ms < 60_000 ? (Math.floor(ms) / 1000).toFixed(3) : formatLapTime(ms, 3);
 }
 
-function StatusBar({ snap, mode, course, replay }: { snap: LiveSnapshot | null; mode: DriveMode; course: Course | null; replay: DriveState['replay'] }) {
+function StatusBar({ snap, mode, course, replay, gap }: { snap: LiveSnapshot | null; mode: DriveMode; course: Course | null; replay: DriveState['replay']; gap?: GapInfo | null }) {
   const st = snap?.state;
   const hAcc = snap?.gps.hAcc;
   const weak = !snap || st?.status.gpsWeak || (snap.gps.ageMs ?? Infinity) > 3000;
   const flags: Array<{ text: string; cls: string }> = [];
   if (replay) flags.push({ text: `재생 ${replay.speed}×${replay.ended ? ' · 끝' : ''}`, cls: 'warn' });
+  if (gap?.stale) flags.push({ text: '앞 친구 신호 없음', cls: 'warn' });
   if (!course) flags.push({ text: '코스 기록 중', cls: '' });
   if (st?.status.offCourse && course) flags.push({ text: '코스 이탈', cls: 'bad' });
   if (snap && !snap.calibration.motionActive) flags.push({ text: 'G 없음', cls: '' });
@@ -81,10 +89,10 @@ function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, course, refLap, mode, settings, replay, error, onCycle, onEnd }: DriveViewProps) {
+export function DriveView({ snap, gap = null, front = null, course, refLap, mode, settings, replay, error, onCycle, onEnd }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   const st = snap?.state ?? null;
-  const frame = frameFromLive(snap, course !== null, refLap !== null);
+  const frame: OverlayFrame = { ...frameFromLive(snap, course !== null, refLap !== null), gap };
   const hl = headline(frame);
   const h = { label: hl.label, text: hl.text, word: hl.word, cls: hl.tone === 'none' ? '' : hl.tone };
   const th = useMemo(() => overlayTheme(settings.deltaPalette), [settings.deltaPalette]);
@@ -167,7 +175,7 @@ export function DriveView({ snap, course, refLap, mode, settings, replay, error,
               </>
             )}
           </div>
-          <StatusBar snap={snap} mode={mode} course={course} replay={replay} />
+          <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
           {end(true)}
         </div>
       </div>
@@ -248,7 +256,7 @@ export function DriveView({ snap, course, refLap, mode, settings, replay, error,
           </div>
           <div style={{ flex: 1 }} />
           <div className="full">
-            <StatusBar snap={snap} mode={mode} course={course} replay={replay} />
+            <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
             {end(true)}
           </div>
         </div>
@@ -277,12 +285,12 @@ export function DriveView({ snap, course, refLap, mode, settings, replay, error,
       <div className="drive-map">
         {replay ? (
           // 재생은 운전 중이 아니라서 지도 타일 위에 그린다 (전체 코스 / 따라가기)
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} />
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} />
         ) : (
-          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28 })} />
+          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front })} />
         )}
         <div className="drive-bottom">
-          <StatusBar snap={snap} mode={mode} course={course} replay={replay} />
+          <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
           {end(false)}
         </div>
       </div>
@@ -299,10 +307,37 @@ function GText({ st }: { st: LiveState | null }) {
   );
 }
 
+/** 받은 앞 친구 위치로 간격을 계산한다 (그릴 때마다, 1초 동안 부드럽게) */
+export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targetS: number): { gap: GapInfo | null; front: DriveViewProps['front'] } {
+  const tracker = useRef(new GapTracker());
+  const fed = useRef<{ key: string; n: number; lastT: number }>({ key: '', n: 0, lastT: 0 });
+  if (!follow.friendId) return { gap: null, front: null };
+  const nickname = follow.nickname ?? '앞 친구';
+  const origin = snap?.origin;
+  if (!origin) return { gap: { nickname, targetS, gapS: null, stale: true }, front: null };
+  // 좌표계(원점)가 바뀌면 다시 넣고, 아니면 새로 온 것만 넣는다
+  const key = `${follow.friendId}:${origin.lat}:${origin.lon}`;
+  const pts = follow.points;
+  if (fed.current.key !== key || (pts.length > 0 && pts[pts.length - 1]!.t < fed.current.lastT)) {
+    tracker.current.reset(pts.map((p) => ({ t: p.t, ...toLocal(origin, p.lat, p.lon) })));
+    fed.current = { key, n: pts.length, lastT: pts.at(-1)?.t ?? 0 };
+  } else {
+    for (const p of pts) if (p.t > fed.current.lastT) tracker.current.push({ t: p.t, ...toLocal(origin, p.lat, p.lon) });
+    fed.current.lastT = pts.at(-1)?.t ?? fed.current.lastT;
+  }
+  const pos = snap?.pos;
+  const me = pos && snap.utcOffsetMs !== null ? { x: pos.x, y: pos.y, psi: pos.psi, t: snap.t + snap.utcOffsetMs } : null;
+  const r = me ? tracker.current.update(me, Date.now()) : { gapS: null, stale: tracker.current.latest() === null || Date.now() - tracker.current.latest()!.t > 5000 };
+  const last = tracker.current.latest();
+  return { gap: { nickname, targetS, gapS: r.gapS, stale: r.stale }, front: last && !r.stale ? { x: last.x, y: last.y, label: nickname } : null };
+}
+
 export function DriveScreen() {
   const d = useDrive();
   const snap = useLiveSnapshot();
   const settings = useSettings();
+  const follow = useFollow();
+  const { gap, front } = useFrontGap(d.replay ? null : snap, d.replay ? { ...follow, friendId: null } : follow, settings.gap.targetS);
   if (d.phase === 'idle' && !d.replay) {
     return (
       <main className="page page-full">
@@ -316,6 +351,8 @@ export function DriveScreen() {
   return (
     <DriveView
       snap={snap}
+      gap={gap}
+      front={front}
       course={d.course}
       refLap={d.ref}
       mode={d.mode}

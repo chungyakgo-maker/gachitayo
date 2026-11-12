@@ -28,13 +28,13 @@ describe('설정 탭', () => {
 });
 
 describe('상단 표시 값 (시안 Widgets)', () => {
-  it('칸 2에서 칸 1과 같은 값을 고르면 두 칸이 바뀐다. 앞 친구 간격은 없다', () => {
+  it('칸 2에서 칸 1과 같은 값을 고르면 두 칸이 바뀐다. 앞 친구 간격도 고를 수 있다 (M9)', () => {
     updateSettings(DEFAULT_SETTINGS);
     render(<WidgetsScreen back="#/prepare" />);
     const slot2 = screen.getByRole('region', { name: '칸 2' });
     fireEvent.click(slot2.querySelector('button[aria-pressed="false"]')!); // 첫 번째: G미터 (칸 1과 같음)
     expect(getSettings().widgets).toEqual(['speed', 'g']);
-    expect(screen.queryByText(/친구/)).not.toBeInTheDocument();
+    expect(screen.getAllByText('앞 친구 간격').length).toBe(2);
     expect(screen.getByRole('link', { name: '완료' })).toHaveAttribute('href', '#/prepare');
   });
 });

@@ -1,4 +1,5 @@
 // 주행 준비 (사양서 8.3, 디자인 시안 Prepare)
+import { GapSection } from '../components/GapSection';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
@@ -125,6 +126,8 @@ export function PrepareScreen() {
           ))}
         </div>
       </section>
+
+      <GapSection />
 
       <a className="list-link" href="#/prepare/widgets">
         <span className="card-col" style={{ gap: 3 }}>

@@ -8,6 +8,7 @@ import { useAccount } from '../../app/account';
 import { useSync } from '../../app/sync';
 import { nearestCourse } from '../../engine/course/nearest';
 import { MainMap } from '../components/MainMap';
+import { Overlay } from '../components/Overlay';
 import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { formatLapTime, formatLength } from '../format';
@@ -120,46 +121,48 @@ export function MainScreen() {
         </div>
       </MainMap>
       {askShare && (
-        <div className="modal-backdrop">
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
-            <h2 id="share-title">위치 공유</h2>
-            {fr.friends.length === 0 ? (
-              <>
-                <p>아직 친구가 없어요. 설정 → 친구에서 내 친구 코드를 보내거나 친구 코드를 넣어 친구를 추가해 주세요.</p>
-                <div className="modal-actions">
-                  <a className="btn btn-primary" href="#/settings" style={{ textAlign: 'center', textDecoration: 'none' }} onClick={() => setAskShare(false)}>
-                    친구 추가하러 가기
-                  </a>
-                  <button type="button" className="btn" onClick={() => setAskShare(false)}>
-                    닫기
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p>
-                  친구 {fr.friends.length}명에게 내 위치가 보여요. 앱을 화면에 띄워 둔 동안 5초마다 보내고, 공유를 끄거나 앱을 닫으면 멈춰요. 앱을 다시 열면
-                  공유는 꺼져 있어요.
-                </p>
-                <div className="modal-actions">
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setAskShare(false);
-                      void setSharing(true);
-                    }}
-                  >
-                    공유 켜기
-                  </button>
-                  <button type="button" className="btn" onClick={() => setAskShare(false)}>
-                    취소
-                  </button>
-                </div>
-              </>
-            )}
+        <Overlay>
+          <div className="modal-backdrop">
+            <div className="modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
+              <h2 id="share-title">위치 공유</h2>
+              {fr.friends.length === 0 ? (
+                <>
+                  <p>아직 친구가 없어요. 설정 → 친구에서 내 친구 코드를 보내거나 친구 코드를 넣어 친구를 추가해 주세요.</p>
+                  <div className="modal-actions">
+                    <a className="btn btn-primary" href="#/settings" style={{ textAlign: 'center', textDecoration: 'none' }} onClick={() => setAskShare(false)}>
+                      친구 추가하러 가기
+                    </a>
+                    <button type="button" className="btn" onClick={() => setAskShare(false)}>
+                      닫기
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p>
+                    친구 {fr.friends.length}명에게 내 위치가 보여요. 앱을 화면에 띄워 둔 동안 5초마다 보내고, 공유를 끄거나 앱을 닫으면 멈춰요. 앱을 다시 열면
+                    공유는 꺼져 있어요.
+                  </p>
+                  <div className="modal-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setAskShare(false);
+                        void setSharing(true);
+                      }}
+                    >
+                      공유 켜기
+                    </button>
+                    <button type="button" className="btn" onClick={() => setAskShare(false)}>
+                      취소
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        </Overlay>
       )}
     </Tabbed>
   );
