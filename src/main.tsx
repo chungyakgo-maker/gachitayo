@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { initRecording } from './app/recording';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
+import './ui/fonts';
 import './ui/styles.css';
 
 const root = document.getElementById('root');

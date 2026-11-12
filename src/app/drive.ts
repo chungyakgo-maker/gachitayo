@@ -122,6 +122,8 @@ function startTicker(now: () => number | null): () => void {
 
 /** 메인의 "주행 시작". 아이폰 모션 권한 요청이 탭 처리 안에서 일어나야 하므로 버튼 onClick에서 바로 부른다 */
 export function beginPrepare(): void {
+  // 재생 중이었으면 재생을 끝내고 시작한다
+  if (state.replay) stopReplay(false);
   if (state.phase !== 'idle' || getRecordingState().phase !== 'idle') {
     go('#/prepare');
     return;
