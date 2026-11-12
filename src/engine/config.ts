@@ -45,6 +45,32 @@ export const config = {
     axisSignMinSpeedMps: 5,
   },
 
+  /** 센서 융합 EKF (사양서 7.3) */
+  fusion: {
+    /** 격자 간격 (50 Hz) */
+    stepMs: 20,
+    /** GPS 위치 표준편차(축당) = hAcc × 이 값 (hAcc는 대략 95% 반지름으로 본다) */
+    hAccToSigma: 0.5,
+    minPosSigmaM: 1,
+    /** GPS 속도 표준편차 (높은 가중치) */
+    speedSigmaMps: 0.3,
+    headingSigmaDeg: 3,
+    /** 이 속도 이상일 때만 GPS 방향을 쓴다 */
+    headingMinSpeedMps: 5,
+    /** 예측 위치와의 마할라노비스 거리가 이보다 크면 GPS 점을 버린다 */
+    outlierSigma: 3,
+    /** 연속으로 이만큼 버리면 다음 점으로 위치를 다시 맞춘다 */
+    maxConsecutiveRejects: 3,
+    /** 과정 잡음 밀도 (단위²/s): 위치, 방향, 속도, 가속도 바이어스 */
+    q: {
+      imu: { pos: 0.05 ** 2, psi: 0.03 ** 2, v: 0.3 ** 2, b: 0.05 ** 2 },
+      imuNoGyro: { pos: 0.05 ** 2, psi: 0.5 ** 2, v: 0.3 ** 2, b: 0.05 ** 2 },
+      gpsOnly: { pos: 0.5 ** 2, psi: 0.5 ** 2, v: 3 ** 2, b: 0 },
+    },
+    /** 처음 상태의 표준편차 */
+    init: { psiUnknownRad: Math.PI, psiKnownRad: 0.1, vUnknownMps: 3, vKnownMps: 0.5, b: 0.5 },
+  },
+
   /** GPS 준비 판정 (사양서 7.4) */
   gpsReady: {
     maxHAccM: 10,
