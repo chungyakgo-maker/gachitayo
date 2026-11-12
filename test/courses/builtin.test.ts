@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUILTIN_COURSES, builtinCourse, builtinInfo, missingBuiltins, sortCourses } from '../../src/courses/builtin';
+import { BUILTIN_COURSES, builtinCourse, builtinInfo, missingBuiltins, renamedBuiltins, sortCourses } from '../../src/courses/builtin';
 import { BUILTIN_POINTS } from '../../src/courses/builtinData';
 import type { Course } from '../../src/types/course';
 
@@ -7,7 +7,7 @@ const built = BUILTIN_COURSES.map((b) => builtinCourse(b, BUILTIN_POINTS[b.key]!
 
 describe('기본 코스 (사양서 7.5)', () => {
   it('사용자가 준 카카오맵 GPX 아홉 개, 모두 편도', () => {
-    expect(BUILTIN_COURSES.map((b) => b.name)).toEqual(['배후령', '미시령 옛길', '만항재', '말티재', '구룡령', '가평 복장리–상천리', '하오고개', '북악스카이웨이', '남한산성']);
+    expect(BUILTIN_COURSES.map((b) => b.name)).toEqual(['배후령', '미시령 옛길', '만항재', '말티재', '구룡령', '로코갤러리', '하오고개', '북악스카이웨이', '남한산성']);
     for (const b of BUILTIN_COURSES) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(200);
     expect(new Set(BUILTIN_COURSES.map((b) => b.key)).size).toBe(BUILTIN_COURSES.length);
     expect(new Set(built.map((c) => c.kind))).toEqual(new Set(['point_to_point']));
@@ -18,6 +18,15 @@ describe('기본 코스 (사양서 7.5)', () => {
   it('길이는 카카오맵 경로 길이와 같다 (±3%)', () => {
     const km = built.map((c) => c.lengthM! / 1000);
     [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
+  });
+
+  it('기본 이름이 바뀌면(가평 복장리–상천리 → 로코갤러리) 폰에 예전 이름으로 있는 것만 바꾼다. 직접 바꾼 이름은 그대로', () => {
+    const gp = built[5]!;
+    expect(gp.name).toBe('로코갤러리');
+    expect(renamedBuiltins([{ ...gp, name: '가평 복장리–상천리' }]).map((c) => c.name)).toEqual(['로코갤러리']);
+    expect(renamedBuiltins([gp])).toEqual([]);
+    expect(renamedBuiltins([{ ...gp, name: '내가 지은 이름' }])).toEqual([]);
+    expect(renamedBuiltins([{ ...built[0]!, builtin: undefined, name: '가평 복장리–상천리' }])).toEqual([]);
   });
 
   it('출발선은 출발점, 도착선은 도착점 근처. 선 폭은 설정값', () => {

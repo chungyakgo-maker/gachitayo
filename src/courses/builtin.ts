@@ -9,6 +9,8 @@ export interface BuiltinCourse {
   name: string;
   /** 어디서 어디로 (목록에 보이는 글) */
   route: string;
+  /** 예전 기본 이름. 폰에 이 이름으로 들어 있으면 새 이름으로 바꾼다 (사용자가 직접 바꾼 이름은 그대로) */
+  oldNames?: readonly string[];
 }
 
 /** 목록에 보이는 순서 */
@@ -18,7 +20,7 @@ export const BUILTIN_COURSES: readonly BuiltinCourse[] = [
   { key: 'manhangjae', name: '만항재', route: '태백 → 만항재 쉼터' },
   { key: 'maltijae', name: '말티재', route: '보은 → 말티재 전망대' },
   { key: 'guryongnyeong', name: '구룡령', route: '홍천 → 양양' },
-  { key: 'gapyeong-bokjang-sangcheon', name: '가평 복장리–상천리', route: '가평읍 → 청평면' },
+  { key: 'gapyeong-bokjang-sangcheon', name: '로코갤러리', route: '가평읍 → 청평면', oldNames: ['가평 복장리–상천리'] },
   { key: 'haogogae', name: '하오고개', route: '의왕 청계 → 분당 운중' },
   { key: 'bukak-skyway', name: '북악스카이웨이', route: '부암동 → 정릉' },
   { key: 'namhansanseong', name: '남한산성', route: '성남 산성동 → 남한산성' },
@@ -34,6 +36,16 @@ export function builtinInfo(c: Course): BuiltinCourse | null {
 export function missingBuiltins(courses: readonly Course[]): BuiltinCourse[] {
   const have = new Set(courses.map((c) => c.builtin));
   return BUILTIN_COURSES.filter((b) => !have.has(b.key));
+}
+
+/** 폰에 예전 기본 이름으로 들어 있는 기본 코스 → 새 이름으로 바꾼 코스 (바꿀 것만) */
+export function renamedBuiltins(courses: readonly Course[]): Course[] {
+  const out: Course[] = [];
+  for (const c of courses) {
+    const b = c.builtin ? byKey.get(c.builtin) : undefined;
+    if (b && c.name !== b.name && b.oldNames?.includes(c.name)) out.push({ ...c, name: b.name });
+  }
+  return out;
 }
 
 /** 경로 점 [위도, 경도, …] → 코스. GPX 불러오기와 같은 방법(평활, 1 m 재샘플, 양 끝에 출발·도착선) */
