@@ -616,6 +616,38 @@ html.app-h .modal-backdrop {
   flex-shrink: 0;
 }
 
+/* 코스 목록: 왼쪽 1:1 썸네일 + 오른쪽 글 (사용자 요청) */
+.row-card.course-row {
+  justify-content: flex-start;
+  padding: 10px 14px 10px 10px;
+}
+
+.course-thumb {
+  flex-shrink: 0;
+  display: block;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0d0f12;
+  border: 1px solid var(--card-line);
+}
+
+.course-thumb svg {
+  display: block;
+}
+
+.course-row-text {
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.course-row-text strong,
+.course-row-route {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 기록 목록: 오른쪽 지우기 버튼 */
 .row-with-action {
   display: flex;

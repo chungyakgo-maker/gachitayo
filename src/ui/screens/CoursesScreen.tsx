@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { importGpx } from '../../app/courses';
 import { builtinInfo } from '../../courses/builtin';
 import type { Course } from '../../types/course';
+import { CourseThumb } from '../components/CourseThumb';
 import { loadCourses, useDrive } from '../../app/drive';
 import { parseGpx, suggestedCourseName } from '../../gpx/parse';
 import { Sheet } from '../components/Sheet';
@@ -122,13 +123,14 @@ function CourseRow({ c, best }: { c: Course; best: number | null | undefined }) 
   const route = builtinInfo(c)?.route;
   return (
     <li>
-      <a className="row-card" href={`#/course/${c.id}`}>
-        <span className="card-col">
+      <a className="row-card course-row" href={`#/course/${c.id}`}>
+        <CourseThumb course={c} />
+        <span className="card-col course-row-text">
           <strong style={{ fontSize: 16 }}>{c.name}</strong>
           <span className="sub">
             {c.kind === 'loop' ? '랩' : '편도'} · {formatLength(c.lengthM)}
-            {route ? ` · ${route}` : ''}
           </span>
+          {route && <span className="sub course-row-route">{route}</span>}
         </span>
         <span className="right card-col" style={{ alignItems: 'flex-end' }}>
           <span className="label">내 베스트</span>

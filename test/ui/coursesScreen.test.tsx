@@ -22,13 +22,15 @@ describe('코스 탭: 내 코스 + 기본 코스 (사양서 7.5, 8.7)', () => {
     const rows = within(base).getAllByRole('link');
     expect(rows.map((a) => a.getAttribute('href'))).toEqual(BUILTIN_COURSES.map((_, i) => `#/course/b${i}`));
     expect(rows[0]!.textContent).toContain('배후령');
-    expect(rows[0]!.textContent).toContain('편도 · 8.5km · 춘천 → 화천내 베스트8:32.345');
+    // 왼쪽 1:1 썸네일 (사용자 요청)
+    expect(rows.every((r) => r.querySelector('.course-thumb svg path'))).toBe(true);
+    expect(rows[0]!.textContent).toContain('배후령편도 · 8.5km춘천 → 화천내 베스트8:32.345');
     expect(rows[1]!.textContent).toContain('미시령 옛길');
     expect(rows[2]!.textContent).toContain('태백 → 만항재 쉼터');
-    expect(rows[3]!.textContent).toContain('말티재편도 · 2.1km · 보은 → 말티재 전망대');
-    expect(rows[4]!.textContent).toContain('구룡령편도 · 17.0km · 홍천 → 양양');
-    expect(rows[7]!.textContent).toContain('북악스카이웨이편도 · 7.2km · 부암동 → 정릉');
-    expect(rows[8]!.textContent).toContain('남한산성편도 · 3.9km · 성남 산성동 → 남한산성');
+    expect(rows[3]!.textContent).toContain('말티재편도 · 2.1km보은 → 말티재 전망대');
+    expect(rows[4]!.textContent).toContain('구룡령편도 · 17.0km홍천 → 양양');
+    expect(rows[7]!.textContent).toContain('북악스카이웨이편도 · 7.2km부암동 → 정릉');
+    expect(rows[8]!.textContent).toContain('남한산성편도 · 3.9km성남 산성동 → 남한산성');
   });
 
   it('내 코스가 없으면 안내 한 줄, 기본 코스는 그대로', () => {
