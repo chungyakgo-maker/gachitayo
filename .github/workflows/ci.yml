@@ -119,6 +119,16 @@ jobs:
           else
             npx wrangler r2 bucket create gachitayo-sessions
           fi
+      - name: 선 지도 R2 버킷 (없으면 만들기, 지도 데이터는 map-data.yml이 올림)
+        if: env.HAS_CLOUDFLARE == 'true'
+        working-directory: worker
+        run: |
+          # 지도 데이터 작업(map-data.yml)이 같은 때 만들 수도 있어, 만들기가 실패해도 이미 있으면 괜찮다
+          if npx wrangler r2 bucket list | grep -q 'gachitayo-map'; then
+            echo "R2 버킷 gachitayo-map 있음"
+          else
+            npx wrangler r2 bucket create gachitayo-map || npx wrangler r2 bucket list | grep -q 'gachitayo-map'
+          fi
       - name: D1 데이터베이스 (없으면 만들기)
         if: env.HAS_CLOUDFLARE == 'true'
         working-directory: worker

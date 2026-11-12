@@ -1627,6 +1627,22 @@ html.app-h .modal-backdrop {
   font-family: var(--sans);
 }
 
+/* 선 지도 (MapLibre) */
+.course-map .maplibregl-map {
+  font-family: var(--sans);
+  background: #08090a;
+}
+
+.course-map .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background: rgba(13, 14, 16, 0.75);
+  color: var(--fg-faint);
+  font-size: 10px;
+}
+
+.course-map .maplibregl-ctrl.maplibregl-ctrl-attrib a {
+  color: var(--fg-dim);
+}
+
 .course-map .leaflet-container .leaflet-control-attribution {
   background: rgba(13, 14, 16, 0.75);
   color: var(--fg-faint);

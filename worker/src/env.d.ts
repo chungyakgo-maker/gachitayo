@@ -3,6 +3,8 @@ declare namespace Cloudflare {
   interface Env {
     /** R2 버킷 gachitayo-sessions */
     SESSION_FILES: R2Bucket;
+    /** R2 버킷 gachitayo-map: 선 지도 파일 korea.pmtiles, 글자 조각 fonts/… (GitHub Actions map-data.yml이 올림) */
+    MAP: R2Bucket;
     /** D1 데이터베이스 gachitayo */
     DB: D1Database;
     /** 앞 친구 간격용 실시간 방 (사람마다 하나) */

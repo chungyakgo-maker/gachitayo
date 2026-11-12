@@ -333,7 +333,7 @@ docs/specs/
 
 - 업로드는 id 기준 upsert로 한다. 같은 세션을 다시 올려도 중복이 생기지 않는다. 다른 사람의 id면 403이다. 랩은 `(session_id, lap_no)`가 기본 키이고, 세션의 랩을 한 번에(트랜잭션) 통째로 바꿔서 다시 처리해 랩이 줄어도 옛 랩이 남지 않는다.
 - 세션의 `course_id`는 본인 코스만, `raw_key`·`processed_key`는 본인 폴더의 그 세션 파일만 가리킬 수 있다.
-- **API** (`Authorization: Bearer <폰 열쇠>`): `POST /auth/signup {nickname}` → `{userId, token}`, `GET·PUT /api/me`, `GET /api/courses`, `PUT /api/courses/{id}`, `PUT /api/sessions/{id}`, `PUT /api/sessions/{id}/laps`, `DELETE /api/sessions/{id}`(기록 지우기: 랩·세션 행과 원본·처리된 파일, 서버에 없어도 성공, M10), `DELETE /api/courses/{id}`(코스 지우기: 이 코스의 기록이 서버에 남아 있으면 409, 서버에 없어도 성공, 사용자 요청). 친구(M8): `GET /api/friends`(내 코드·친구 목록), `POST /api/friends {code}`, `DELETE /api/friends/{id}`, `GET /api/friends/presence`, `PUT·DELETE /api/presence`. 앞 친구 간격(M9): `GET /live/{userId}` WebSocket (열쇠는 하위 프로토콜 `['gachitayo', 열쇠]`로, 브라우저 WebSocket은 머리글을 못 붙여서). 본인 방이면 보내기, 친구 방이면 받기, 친구가 아니면 403. 응답 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것, 404, 409 먼저 할 일이 남음, 413, 429 가입 제한·친구 코드 짐작 제한.
+- **API** (`Authorization: Bearer <폰 열쇠>`): `POST /auth/signup {nickname}` → `{userId, token}`, `GET·PUT /api/me`, `GET /api/courses`, `PUT /api/courses/{id}`, `PUT /api/sessions/{id}`, `PUT /api/sessions/{id}/laps`, `DELETE /api/sessions/{id}`(기록 지우기: 랩·세션 행과 원본·처리된 파일, 서버에 없어도 성공, M10), `DELETE /api/courses/{id}`(코스 지우기: 이 코스의 기록이 서버에 남아 있으면 409, 서버에 없어도 성공, 사용자 요청), 선 지도 `GET /map/info`·`/map/tiles/{z}/{x}/{y}.mvt`·`/map/fonts/…`(로그인 없이, 8.9). 친구(M8): `GET /api/friends`(내 코드·친구 목록), `POST /api/friends {code}`, `DELETE /api/friends/{id}`, `GET /api/friends/presence`, `PUT·DELETE /api/presence`. 앞 친구 간격(M9): `GET /live/{userId}` WebSocket (열쇠는 하위 프로토콜 `['gachitayo', 열쇠]`로, 브라우저 WebSocket은 머리글을 못 붙여서). 본인 방이면 보내기, 친구 방이면 받기, 친구가 아니면 403. 응답 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것, 404, 409 먼저 할 일이 남음, 413, 429 가입 제한·친구 코드 짐작 제한.
 
 **친구 (M8, `worker/migrations/0002_friends.sql`)**
 - `users.friend_code`: 8자리(헷갈리는 0·O·1·I·L 없는 31글자, 약 8.5×10¹¹가지), 처음 친구 화면을 열 때 만든다. 화면에는 `K7P2-Q9XM`처럼 4자리씩 보여주고, 넣을 때는 소문자·하이픈·공백을 다듬는다.
@@ -820,6 +820,22 @@ docs/specs/
 - 동기화 상태 (대기 건수, 마지막 오류, 다시 시도 버튼)
 - 개발자 메뉴: 재생 모드 (10.2 참고), 센서 기록 테스트 (원본 파일 `.json.gz`/`.json` 내보내기, 실주행 테스트 데이터 수집용)
 
+
+### 8.9 선 지도 (사용자 요청, 시안 2 확인)
+- 사진 지도(OSM 타일) 대신 선만 그린 지도. 우리 앱 색으로 칠한다.
+  - 땅은 칸 색(#101114), 바다·물은 더 어두운 숯색(#08090a), 도 경계는 옅은 점선.
+  - 도로는 꼭 넣는다: 포인트 하늘색(#aacae6). 고속도로가 가장 밝고, 국도·지방도는 중간, 작은 길은 회색으로 옅게(11단계부터).
+  - 지명: 시는 밝은 회색 굵게, 읍·면은 9단계부터, 산(▲)은 11단계부터, 도 이름은 넓게 볼 때만.
+  - 우리 글자(출발·도착 핀 글자, 구간 글자)가 먼저 자리를 잡고, 겹치는 지명은 숨긴다.
+  - 한글은 폰 글꼴로 그린다(MapLibre `localIdeographFontFamily`). 숫자·기호만 서버의 글자 조각(Noto Sans)을 쓴다.
+- 데이터: Protomaps의 전 세계 지도 파일(OpenStreetMap 기반 벡터 타일)에서 한국 범위(경도 124.5~131, 위도 33~38.7), 0~14단계만 잘라 쓴다(약 150 MB). 14단계 위는 앱이 늘려 그린다.
+  - GitHub Actions `map-data.yml`이 매달(또는 직접 실행) 최신 빌드에서 잘라 R2 버킷 `gachitayo-map`에 `korea.pmtiles`로 올린다. 글자 조각도 같은 버킷 `fonts/…`.
+  - Worker가 `GET /map/info`, `GET /map/tiles/{z}/{x}/{y}.mvt`(없는 칸은 204), `GET /map/fonts/{글꼴}/{범위}.pbf`로 내준다. 로그인 없이, 앱 출처만.
+  - OSM 공식 타일 서버를 쓰지 않아도 되고, 아이폰 앱으로 넘어갈 때도 같은 데이터를 쓴다.
+- 그리기: MapLibre GL JS 6 (WebGL). 처음 지도가 필요할 때 따로 불러온다. 지도판은 돌리지 않는다(북쪽 위).
+- 쓸 수 없으면 예전 사진 지도(Leaflet + OSM 타일): 서버 주소가 없거나, 폰이 WebGL을 못 쓰거나, 서버에 지도 데이터가 아직 없을 때(`/map/info` 404).
+- 적용 순서: 1단계 코스 상세·새 코스 지도 (2026-11-12). 2단계 메인·주행 지도.
+
 ---
 
 ## 9. 오류 처리
@@ -1101,3 +1117,4 @@ docs/specs/
 | 2026-11-12 | 사용자 요청: 기본 코스 "가평 복장리–상천리" → "로코갤러리". 폰에 예전 기본 이름으로 있으면 새 이름으로 바꾼다 (7.5) |
 | 2026-11-12 | 사용자 요청(시안 확인 후): 코스 목록 줄마다 왼쪽에 1:1 코스 모양 썸네일, 글은 오른쪽 세 줄 (8.7) |
 | 2026-11-12 | 마스터플랜(13.5)에 코스별 속도 랭킹과 출시 전 위험(심사·법), 앱 전환 때 바꿀 것(지도 타일, 기본 코스 경로 출처, 카카오내비) 추가 |
+| 2026-11-12 | 사용자 요청(시안 2 확인 후): 선 지도 1단계 — 우리 색 OSM 벡터 지도(Protomaps 한국 범위, R2 + Worker), 코스 상세·새 코스 지도에 적용. 쓸 수 없으면 사진 지도 (8.9) |

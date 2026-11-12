@@ -35,8 +35,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // 통신 없이도 앱 화면이 열리도록 빌드 결과 전체를 캐시 (사양서 4장). 글꼴도 미리 보관한다 (woff는 옛 브라우저용이라 뺀다)
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,woff2}'],
+        // 통신 없이도 앱 화면이 열리도록 빌드 결과 전체를 캐시 (사양서 4장). 글꼴도 미리 보관한다 (woff는 옛 브라우저용이라 뺀다).
+        // mjs: 선 지도(MapLibre)의 작업 파일
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,webmanifest,woff2}'],
         cleanupOutdatedCaches: true,
       },
     }),

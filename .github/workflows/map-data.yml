@@ -1,0 +1,54 @@
+# 선 지도 데이터 (사양서 8.9): 한국 지도 파일을 만들어 R2(gachitayo-map)에 올린다.
+# 처음 한 번(이 파일을 올릴 때), 매달 한 번, 또는 Actions 화면에서 "Run workflow"로 직접.
+name: 지도 데이터
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 18 3 * *' # 매달 4일 03:23 (한국 시각)
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/map-data.yml
+      - .github/scripts/map-data.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: map-data
+  cancel-in-progress: false
+
+jobs:
+  map:
+    name: 한국 지도 파일 만들어 올리기
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: 설정값 확인
+        if: env.HAS_CLOUDFLARE != 'true'
+        run: echo "::notice::Cloudflare 비밀값이 없어 지도 데이터를 올리지 않습니다. 앱은 예전 사진 지도를 씁니다."
+      - uses: actions/checkout@v7
+        if: env.HAS_CLOUDFLARE == 'true'
+      - name: 비밀값 확인
+        if: env.HAS_CLOUDFLARE == 'true'
+        run: bash .github/scripts/cloudflare-secrets.sh
+      - uses: actions/setup-node@v7
+        if: env.HAS_CLOUDFLARE == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: 준비
+        if: env.HAS_CLOUDFLARE == 'true'
+        working-directory: worker
+        run: npm ci
+      - name: 지도 파일 만들어 올리기
+        if: env.HAS_CLOUDFLARE == 'true'
+        run: |
+          go version
+          bash .github/scripts/map-data.sh

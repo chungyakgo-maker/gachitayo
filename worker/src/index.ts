@@ -15,10 +15,12 @@
 //   PUT /api/presence {lat, lon, …}      내 위치 공유 (마지막 하나만 저장)
 //   DELETE /api/presence                 공유 끄기 (지운다)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
+//   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
 import { authenticate, signup, validNickname } from './auth';
 import { deleteCourse, deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
+import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
 
@@ -51,6 +53,7 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers): Promi
   const method = req.method;
 
   if (path.startsWith('/files/')) return handleFiles(req, env, path, headers);
+  if (path.startsWith('/map/')) return handleMap(req, env, path, headers);
 
   const live = /^\/live\/([^/]+)$/.exec(path);
   if (live) {
