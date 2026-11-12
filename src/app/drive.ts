@@ -1,7 +1,7 @@
 // 주행 컨트롤러 (사양서 8.3~8.5): 주행 준비 → 주행 → 종료 → 주행 후 처리. 재생 모드(10.2)도 같은 주행 화면을 쓴다.
 // 기록(센서·저장)은 app/recording이 맡고, 여기서는 같은 샘플을 주행 중 계산(LivePipeline)에 넣어 화면 스냅숏을 만든다.
 import { getFriendsState } from './friends';
-import { startLiveLinks, stopLiveLinks } from './liveLink';
+import { pushVirtualPoint, setVirtualFollow, startLiveLinks, stopLiveLinks } from './liveLink';
 import { useSyncExternalStore } from 'react';
 import { nearestCourse } from '../engine/course/nearest';
 import { LivePipeline, type LiveSnapshot } from '../engine/live/livePipeline';
@@ -317,7 +317,7 @@ export async function resumeDrive(sessionId: string): Promise<void> {
 
 // ── 재생 모드 (사양서 10.2) ──────────────────────────────
 
-export type ReplaySource = { kind: 'session'; id: string } | { kind: 'sim'; withRef: boolean };
+export type ReplaySource = { kind: 'session'; id: string } | { kind: 'sim'; withRef: boolean } | { kind: 'friendSim' };
 
 let replayTimer: (() => void) | null = null;
 
@@ -331,7 +331,16 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
     let course: Course | null = null;
     let ref: RefLapRecord | null = null;
     let label: string;
-    if (src.kind === 'session') {
+    let friendFeed: { points: Array<{ t: number; lat: number; lon: number; speed: number; heading: null; hAcc: number }>; lagMs: number; startEpochMs: number } | null = null;
+    if (src.kind === 'friendSim') {
+      // 가상 친구 따라가기 (사용자 요청): 앞 친구 '지훈(가상)'의 위치를 1초마다, 0.8초 늦게 넣는다
+      const sim = await import('../sim');
+      const sc = sim.friendScenario();
+      gps = sc.gps;
+      motion = sc.motion;
+      friendFeed = { points: sc.friend, lagMs: sc.lagMs, startEpochMs: sc.startEpochMs };
+      label = '가상 친구 따라가기';
+    } else if (src.kind === 'session') {
       const raw = await loadRaw(getRepo(), src.id);
       const session = await getRepo().get(src.id);
       gps = raw.gps;
@@ -376,14 +385,18 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
     pipeline.setCourse(course, toLiveRef(ref));
     set({ phase: 'driving', replay: { label, speed, ended: false }, course, courseChosen: true, refs: ref ? [ref] : [], ref, mode: getSettings().defaultMode });
     publish(null);
+    setVirtualFollow(friendFeed !== null);
     let simT = 0;
     let i = 0;
     let j = 0;
+    let k = 0;
     const id = setInterval(() => {
       if (!pipeline) return;
       simT = Math.min(end, simT + 100 * speed);
       while (i < gps.length && gps[i]!.tRecv <= simT) pipeline.pushGps(gps[i++]!);
       while (j < motion.length && motion[j]!.t <= simT) pipeline.pushMotion(motion[j++]!);
+      if (friendFeed)
+        while (k < friendFeed.points.length && friendFeed.points[k]!.t - friendFeed.startEpochMs <= simT - friendFeed.lagMs) pushVirtualPoint(friendFeed.points[k++]!);
       publish(pipeline.tick(simT));
       if (simT >= end) {
         clearInterval(id);
@@ -400,6 +413,7 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
 export function stopReplay(navigate = true): void {
   replayTimer?.();
   replayTimer = null;
+  setVirtualFollow(false);
   if (!state.replay) return;
   pipeline = null;
   publish(null);

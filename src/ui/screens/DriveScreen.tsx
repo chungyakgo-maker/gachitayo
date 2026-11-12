@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useAccount } from '../../app/account';
 import { useFriends, watchFriendPositions } from '../../app/friends';
-import { useFollow, type FollowState } from '../../app/liveLink';
+import { useFollow, VIRTUAL_FRIEND, type FollowState } from '../../app/liveLink';
 import { toLocal } from '../../engine/geo';
 import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
@@ -343,7 +343,8 @@ export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targ
   }
   const pos = snap?.pos;
   const me = pos && snap.utcOffsetMs !== null ? { x: pos.x, y: pos.y, psi: pos.psi, t: snap.t + snap.utcOffsetMs } : null;
-  const r = me ? tracker.current.update(me, Date.now()) : { gapS: null, stale: tracker.current.latest() === null || Date.now() - tracker.current.latest()!.t > 5000 };
+  // 신호 끊김은 내 위치 시각(GPS 기준)으로 판단한다 (폰 시계와 무관, 재생 모드의 가상 시각에서도 맞다)
+  const r = me ? tracker.current.update(me, me.t) : { gapS: null, stale: tracker.current.latest() === null || Date.now() - tracker.current.latest()!.t > 5000 };
   // 아이콘은 내 위치와 같은 시각(GPS 기준)으로 예측해야 지도에서 둘의 거리가 맞다
   const f = me && !r.stale ? marker.current.position(me.t, road) : null;
   return { gap: { nickname, targetS, gapS: r.gapS, stale: r.stale }, front: f ? { x: f.x, y: f.y, label: nickname } : null };
@@ -366,7 +367,10 @@ export function DriveScreen() {
   const snap = useLiveSnapshot();
   const settings = useSettings();
   const follow = useFollow();
-  const { gap, front } = useFrontGap(d.replay ? null : snap, d.replay ? { ...follow, friendId: null } : follow, settings.gap.targetS, d.course);
+  // 재생 중에는 앞 친구 간격을 쓰지 않는다. 다만 재생 모드의 가상 친구 따라가기는 예외 (목표 2.0초)
+  const virtual = follow.friendId === VIRTUAL_FRIEND.id;
+  const useGap = !d.replay || virtual;
+  const { gap, front } = useFrontGap(useGap ? snap : null, useGap ? follow : { ...follow, friendId: null }, virtual ? VIRTUAL_FRIEND.targetS : settings.gap.targetS, d.course);
   const friends = useDriveFriends(d.replay ? null : snap, follow.friendId);
   if (d.phase === 'idle' && !d.replay) {
     return (

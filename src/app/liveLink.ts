@@ -80,6 +80,21 @@ const setFollow = (p: Partial<FollowState>) => {
   listeners.forEach((l) => l());
 };
 export const getFollowState = (): FollowState => follow;
+
+/** 재생 모드의 가상 앞 친구 (사용자 요청: 직접 시뮬 돌려보기). 실제 친구 연결 없이 따라가기 상태에 위치를 넣는다 */
+export const VIRTUAL_FRIEND = { id: 'sim-friend', nickname: '지훈(가상)', /** 목표 간격 초 (sim/friendScenario와 같게) */ targetS: 2 } as const;
+
+export function setVirtualFollow(on: boolean): void {
+  if (on) setFollow({ friendId: VIRTUAL_FRIEND.id, nickname: VIRTUAL_FRIEND.nickname, connected: true, points: [] });
+  else if (follow.friendId === VIRTUAL_FRIEND.id) setFollow({ friendId: null, nickname: null, connected: false, points: [] });
+}
+
+export function pushVirtualPoint(p: LivePoint): void {
+  if (follow.friendId !== VIRTUAL_FRIEND.id) return;
+  const pts = follow.points;
+  if (pts.length && p.t <= pts[pts.length - 1]!.t) return;
+  setFollow({ points: [...pts.filter((q) => q.t > p.t - KEEP_MS), p] });
+}
 export function useFollow(): FollowState {
   return useSyncExternalStore(
     (cb) => {

@@ -54,6 +54,17 @@ export function ReplayScreen() {
           </span>
         </button>
       </section>
+      <section className="card-col" style={{ gap: 8 }} aria-label="가상 친구 따라가기">
+        <span className="label">앞 친구 간격 (가상 친구)</span>
+        <button type="button" className="sheet-item" disabled={busy} onClick={() => run({ kind: 'friendSim' })}>
+          <span className="card-col">
+            <strong>가상 친구 따라가기</strong>
+            <span className="sub">
+              앞에 가상 친구 '지훈'이 달려요. 목표 간격 2.0초로 멂(+0.7) → 유지(0.0) → 가까움(−0.6) → 66초에 신호 끊김. 친구 위치는 실제처럼 1초마다, 0.8초 늦게 와요. 1×로 보세요
+            </span>
+          </span>
+        </button>
+      </section>
       <section className="card-col" style={{ gap: 8 }} aria-label="저장된 기록">
         <span className="label">저장된 기록</span>
         {list.length === 0 ? (
