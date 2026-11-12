@@ -49,6 +49,10 @@ export interface MiniMapOpts {
   top?: number;
   /** 고스트 이름표 */
   ghostLabel?: boolean;
+  /** 바깥에서 정한 좌표 변환 (재생 모드에서 지도 타일 위에 그릴 때) */
+  view?: MapView;
+  /** 함께 그릴 앞 친구 위치 (같은 평면 좌표) */
+  friend?: { x: number; y: number; label: string } | null;
 }
 
 /** 화면에 맞추기: 코스가 있으면 코스 전체, 없으면 지나온 경로와 내 위치 (너무 작으면 200 m 범위) */
@@ -114,7 +118,7 @@ function gateLine(ctx: Ctx, g: Gate, v: MapView, dashed: boolean): void {
 
 /** 미니맵 그리기. 바탕은 호출하는 쪽이 칠한다 */
 export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: OverlayFrame, th: OverlayTheme, opts: MiniMapOpts = {}): MapView | null {
-  const v = fitView(model, f, w, h, opts);
+  const v = opts.view ?? fitView(model, f, w, h, opts);
   if (!v) return null;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -168,6 +172,24 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
       ctx.fillText('베스트 고스트', cx, cy);
     }
     ctx.setLineDash([]);
+  }
+
+  if (opts.friend) {
+    const x = v.X(opts.friend.x);
+    const y = v.Y(opts.friend.y);
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#5cb8ff';
+    ctx.fill();
+    ctx.strokeStyle = '#0d0e10';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.font = `700 12px ${th.sans}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#5cb8ff';
+    ctx.fillText(opts.friend.label, x, y - 16);
   }
 
   if (f.me) {

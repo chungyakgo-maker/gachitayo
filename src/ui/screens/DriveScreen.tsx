@@ -11,6 +11,7 @@ import type { RefLapRecord } from '../../types/drive';
 import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
 import { OverlayCanvas } from '../components/OverlayCanvas';
+import { ReplayMap } from '../components/ReplayMap';
 import { formatDelta, formatLapTime } from '../format';
 import { IconGps } from '../icons';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
@@ -89,7 +90,7 @@ export function DriveView({ snap, course, refLap, mode, settings, replay, error,
   const th = useMemo(() => overlayTheme(settings.deltaPalette), [settings.deltaPalette]);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('.end-btn')) return;
+    if ((e.target as HTMLElement).closest('.end-btn, .map-view-toggle')) return;
     const now = Date.now();
     const prev = lastTap.current;
     if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 40) {
@@ -259,6 +260,7 @@ export function DriveView({ snap, course, refLap, mode, settings, replay, error,
   const lapText = lapNo ? `랩 ${lapNo}` : '랩';
   const deltaLabel = `${h.label}${h.word ? ` · ${h.word}` : ''} ${h.text}${course ? `, ${lapText} ${formatLapTime(st?.lapElapsedMs ?? null, 1)}` : ''}`;
   const model = mapModel(course);
+  const mapLabel = frame.ghost ? '코스 지도: 내 위치와 베스트 고스트' : '코스 지도: 내 위치';
   return (
     <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
       <div className="drive-pad">
@@ -273,11 +275,12 @@ export function DriveView({ snap, course, refLap, mode, settings, replay, error,
         </div>
       </div>
       <div className="drive-map">
-        <OverlayCanvas
-          style={{ position: 'absolute', inset: 0 }}
-          label={frame.ghost ? '코스 지도: 내 위치와 베스트 고스트' : '코스 지도: 내 위치'}
-          draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120 })}
-        />
+        {replay ? (
+          // 재생은 운전 중이 아니라서 지도 타일 위에 그린다 (전체 코스 / 따라가기)
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} />
+        ) : (
+          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28 })} />
+        )}
         <div className="drive-bottom">
           <StatusBar snap={snap} mode={mode} course={course} replay={replay} />
           {end(false)}

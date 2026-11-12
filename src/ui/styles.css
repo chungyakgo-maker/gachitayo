@@ -628,8 +628,8 @@ html.app-h .modal-backdrop {
   font-family: var(--sans);
 }
 
-/* OSM 타일을 어두운 화면에 맞게 뒤집어 어둡게 */
-.main-map .osm-tiles {
+/* OSM 타일을 어두운 화면에 맞게 뒤집어 어둡게 (메인 지도, 재생 지도) */
+.osm-tiles {
   filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
 }
 
@@ -641,6 +641,47 @@ html.app-h .modal-backdrop {
 
 .main-map .leaflet-container .leaflet-control-attribution a {
   color: var(--fg-dim);
+}
+
+/* 재생 모드 지도 (지도 위에 캔버스) */
+.replay-map {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+}
+
+.replay-map .leaflet-host {
+  position: absolute;
+  inset: 0;
+}
+
+.replay-map .leaflet-container {
+  background: transparent;
+  font-family: var(--sans);
+}
+
+.replay-map .leaflet-container .leaflet-control-attribution {
+  background: rgba(13, 14, 16, 0.75);
+  color: var(--fg-faint);
+  font-size: 10px;
+}
+
+.replay-map .leaflet-container .leaflet-control-attribution a {
+  color: var(--fg-dim);
+}
+
+/* 캔버스는 타일(200) 위, 지도 출처(800) 아래 */
+.replay-map .overlay-layer {
+  z-index: 500;
+}
+
+.map-view-toggle {
+  position: absolute;
+  z-index: 1000;
+  top: 10px;
+  right: calc(10px + var(--safe-r));
+  width: 180px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .map-label {

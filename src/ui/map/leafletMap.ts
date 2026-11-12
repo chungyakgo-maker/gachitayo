@@ -8,7 +8,7 @@ import { fromLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 
 export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+export const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
 /** 타일이 이만큼 연달아 실패하면 통신이 안 되는 것으로 보고 타일 없이 그린다 */
 const TILE_FAILS_OFFLINE = 6;
 
@@ -192,6 +192,82 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     },
     tilesShown: () => shown,
     map,
+    destroy() {
+      map.remove();
+    },
+  };
+}
+
+// ── 재생 모드 지도 (사용자 요청: 재생할 때는 지도 위에, 전체 코스 / 따라가기) ──
+// 운전 중이 아니라서 타일을 쓴다 (주행 중 지도 모드는 사양서 8.4대로 타일 없이). 지도는 바탕만 그리고,
+// 코스·고스트·내 위치는 오버레이 그리기 함수(캔버스)가 이 지도의 좌표 변환으로 그 위에 그린다.
+
+export interface ReplayMapController {
+  /** 점들이 화면을 꽉 채우게 (아래 띠 높이만큼 비움) */
+  fit(points: Array<[number, number]>, insetBottom: number): void;
+  /** 내 위치를 아래 띠를 뺀 화면 가운데에, 가깝게 */
+  follow(lat: number, lon: number, insetBottom: number): void;
+  /** 위경도 → 지도 안의 화면 좌표 (px) */
+  project(lat: number, lon: number): { x: number; y: number };
+  setOnline(online: boolean): void;
+  destroy(): void;
+}
+
+export const FOLLOW_ZOOM = 17;
+
+export function createReplayMap(el: HTMLElement): ReplayMapController {
+  // 재생 화면은 두 번 탭으로 모드를 바꾸므로 지도 조작은 모두 끈다
+  const map = L.map(el, {
+    zoomControl: false,
+    attributionControl: true,
+    zoomSnap: 0,
+    fadeAnimation: false,
+    dragging: false,
+    touchZoom: false,
+    doubleClickZoom: false,
+    scrollWheelZoom: false,
+    boxZoom: false,
+    keyboard: false,
+  });
+  map.attributionControl.setPrefix(false);
+  map.attributionControl.setPosition('topleft');
+  const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
+  map.setView([36.5, 127.8], 7);
+  let shown = false;
+  let fails = 0;
+  tiles.on('tileload', () => {
+    fails = 0;
+  });
+  tiles.on('tileerror', () => {
+    if (++fails >= TILE_FAILS_OFFLINE) setTiles(false);
+  });
+  function setTiles(on: boolean) {
+    if (on === shown) return;
+    shown = on;
+    fails = 0;
+    if (on) tiles.addTo(map);
+    else tiles.remove();
+  }
+  return {
+    fit(points, insetBottom) {
+      if (points.length === 0) return;
+      map.invalidateSize({ pan: false });
+      if (points.length === 1) map.setView(points[0]!, FOLLOW_ZOOM, { animate: false });
+      else map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20], paddingBottomRight: [20, 20 + insetBottom], maxZoom: 18, animate: false });
+    },
+    follow(lat, lon, insetBottom) {
+      map.invalidateSize({ pan: false });
+      // 아래 띠에 가리지 않게 위로 띠 높이의 절반만큼
+      const c = map.project([lat, lon], FOLLOW_ZOOM).add([0, insetBottom / 2]);
+      map.setView(map.unproject(c, FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
+    },
+    project(lat, lon) {
+      const p = map.latLngToContainerPoint([lat, lon]);
+      return { x: p.x, y: p.y };
+    },
+    setOnline(online) {
+      setTiles(online);
+    },
     destroy() {
       map.remove();
     },

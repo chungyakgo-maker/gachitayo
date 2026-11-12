@@ -52,6 +52,8 @@ function snap(st: LiveState | null): LiveSnapshot {
     t: st?.t ?? 0,
     state: st,
     frame: 'course',
+    origin: { lat: 37.2, lon: 127.1 },
+    utcOffsetMs: 1_800_000_000_000,
     pos: { x: 10, y: 20, psi: 0.5 },
     gps: { ready: true, hAcc: 4, ageMs: 300 },
     calibration: { state: 'calibrated', stillProgress: 1, signsConfirmed: true, motionActive: true },

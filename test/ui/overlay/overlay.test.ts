@@ -69,6 +69,8 @@ describe('오버레이 상태 (시각 t의 주행 상태, 사양서 13.1)', () =
       t: 5,
       state: null,
       frame: 'course' as const,
+      origin: { lat: 37.2, lon: 127.1 },
+      utcOffsetMs: null,
       pos: { x: 1, y: 2, psi: 0 },
       gps: { ready: true, hAcc: 4, ageMs: 100 },
       calibration: { state: 'calibrated' as const, stillProgress: 1, signsConfirmed: true, motionActive: true },

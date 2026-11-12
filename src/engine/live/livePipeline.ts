@@ -29,6 +29,10 @@ export interface LiveSnapshot {
   state: LiveState | null;
   /** 좌표계: course = 코스 원점 기준(코스 중심선과 같은 평면), session = 첫 GPS 기준 */
   frame: 'course' | 'session';
+  /** 그 좌표계의 원점 (위경도로 바꿀 때). 위치를 아직 못 받았으면 null */
+  origin: LatLon | null;
+  /** 세션 시계 → GPS 기준 절대 시각(epoch ms)의 차이: 최근 GPS 점의 tFix − tRecv 중앙값 (앞 친구 간격 계산용) */
+  utcOffsetMs: number | null;
   pos: { x: number; y: number; psi: number } | null;
   gps: { ready: boolean; hAcc: number | null; ageMs: number | null };
   calibration: {
@@ -106,6 +110,10 @@ export class LivePipeline {
     this.gpsObs ??= new LiveGpsObs(this.fusionOrigin);
     this.readiness.push(g);
     this.lastGps = g;
+    if (Number.isFinite(g.tFix - g.tRecv)) {
+      this.utcOffsets.push(g.tFix - g.tRecv);
+      if (this.utcOffsets.length > 30) this.utcOffsets.shift();
+    }
     const o = this.gpsObs.push(g);
     this.gpsQueue.push(o);
     this.runner ??= new FusionRunner({ m50: this.motion, calibrationAt: () => this.cal.current });
@@ -159,6 +167,8 @@ export class LivePipeline {
       t: tNow,
       state: this.state,
       frame: this.geom ? 'course' : 'session',
+      origin: this.displayOrigin(),
+      utcOffsetMs: this.utcOffset(),
       pos: this.pos,
       gps: {
         ready: this.readiness.ready,
@@ -211,6 +221,13 @@ export class LivePipeline {
     const s = refDistanceAt(this.ref.trace, st.lapElapsedMs / 1000, this.ref.lapTimeMs, cl.length);
     const q = polylinePoint(cl, s);
     return { x: q.x, y: q.y, s };
+  }
+
+  private utcOffsets: number[] = [];
+  private utcOffset(): number | null {
+    if (this.utcOffsets.length === 0) return null;
+    const s = [...this.utcOffsets].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)]!;
   }
 
   private displayOrigin(): LatLon | null {
