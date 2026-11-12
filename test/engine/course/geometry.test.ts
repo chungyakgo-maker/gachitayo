@@ -41,6 +41,22 @@ describe('중심선 (사양서 7.5)', () => {
     expect(Math.abs(len - t.length) / t.length).toBeLessThan(0.005);
   });
 
+  it('16.4 km보다 긴 열린 경로도 끝점이 제자리 (부동소수 반올림으로 원점에 붙던 문제, 구룡령 GPX)', () => {
+    for (const L of [8_000, 17_000, 40_000, 120_000]) {
+      const n = Math.round(L / 25) + 1;
+      const xs = Array.from({ length: n }, (_, i) => (L * i) / (n - 1));
+      const ys = xs.map((x) => 30 * Math.sin(x / 400));
+      const sm = smoothPath(xs, ys, 30);
+      expect(sm.x[n - 1]).toBeCloseTo(xs[n - 1]!, 6);
+      expect(sm.y[n - 1]).toBeCloseTo(ys[n - 1]!, 6);
+      // 끝에 같은 점이 두 번 있어도 (카카오맵 GPX)
+      const sm2 = smoothPath([...xs, xs[n - 1]!], [...ys, ys[n - 1]!], 30);
+      expect(sm2.x[n]).toBeCloseTo(xs[n - 1]!, 6);
+      const len = makePolyline(sm.x, sm.y).length;
+      expect(len).toBeLessThan(makePolyline(xs, ys).length * 1.001);
+    }
+  });
+
   it('지점과 진행 방향을 보간한다', () => {
     const p = makePolyline([0, 10, 10], [0, 0, 10]);
     expect(polylinePoint(p, 5)).toMatchObject({ x: 5, y: 0 });

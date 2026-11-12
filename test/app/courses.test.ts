@@ -15,16 +15,16 @@ const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed: 51 });
 const r = processDrive({ gps: s.gps, motion: s.motion, events: [{ t: 0, type: 'start' }], course: null, newCourse: { id: crypto.randomUUID(), name: '오벌' } });
 
 describe('코스 관리 (사양서 8.7, M10)', () => {
-  it('기본 코스: 앱 시작 때 폰 목록에 세 코스를 한 번 넣는다 (폰마다 새 번호, 서버 대기열에는 넣지 않음)', async () => {
+  it('기본 코스: 앱 시작 때 폰 목록에 다섯 코스를 한 번 넣는다 (폰마다 새 번호, 서버 대기열에는 넣지 않음)', async () => {
     await seedBuiltinCourses();
     const list = await rec.getDriveRepo().listCourses();
     const built = list.filter((c) => c.builtin);
-    expect(built.map((c) => c.name).sort()).toEqual(['만항재', '미시령 옛길', '배후령']);
-    expect(built.every((c) => /^[0-9a-f-]{36}$/.test(c.id) && c.centerline && c.lengthM! > 8000)).toBe(true);
+    expect(built.map((c) => c.name).sort()).toEqual(['구룡령', '만항재', '말티재', '미시령 옛길', '배후령']);
+    expect(built.every((c) => /^[0-9a-f-]{36}$/.test(c.id) && c.centerline && c.lengthM! > 2000)).toBe(true);
     expect((await rec.getQueueRepo().all()).filter((q) => built.some((c) => c.id === q.targetId))).toEqual([]);
     expect(drive.loadCourses).toHaveBeenCalled();
     await seedBuiltinCourses();
-    expect((await rec.getDriveRepo().listCourses()).filter((c) => c.builtin)).toHaveLength(3);
+    expect((await rec.getDriveRepo().listCourses()).filter((c) => c.builtin)).toHaveLength(5);
   });
 
   it('이름 바꾸기는 저장하고 서버에 코스를 올리도록 대기열에 넣는다', async () => {

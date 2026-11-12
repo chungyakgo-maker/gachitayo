@@ -50,12 +50,13 @@ export function smoothPath(
     cx[k + 1] = cx[k]! + X[k]!;
     cy[k + 1] = cy[k]! + Y[k]!;
   }
-  const lower = (v: number) => {
+  /** v 이상인 첫 점 (inclusive=false면 v보다 큰 첫 점) */
+  const bound = (v: number, inclusive: boolean) => {
     let lo = 0;
     let hi = S.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (S[mid]! < v) lo = mid + 1;
+      if (inclusive ? S[mid]! < v : S[mid]! <= v) lo = mid + 1;
       else hi = mid;
     }
     return lo;
@@ -66,8 +67,10 @@ export function smoothPath(
     const si = p.s[i]!;
     // 열린 경로의 끝 근처는 창을 양쪽 같은 폭으로 줄인다 (한쪽만 평균하면 끝점이 안쪽으로 끌려 들어간다)
     const h = closed ? half : Math.min(half, si, L - si);
-    const a = lower(si - h - 1e-12);
-    const b = lower(si + h + 1e-12);
+    // 창 [si − h, si + h] 안의 점들. 경계를 작은 수(1e-12)로 넓히면 16 km가 넘는 거리에서는 반올림으로 사라져
+    // 열린 경로 끝점(h = 0)의 창이 비고 원점으로 끌려갔다. 그래서 비교로 경계를 정한다
+    const a = bound(si - h, true);
+    const b = bound(si + h, false);
     const c = Math.max(1, b - a);
     outX.push((cx[b]! - cx[a]!) / c);
     outY.push((cy[b]! - cy[a]!) / c);
