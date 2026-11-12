@@ -91,6 +91,78 @@ export const config = {
     init: { posSigmaM: 5, psiUnknownRad: Math.PI, psiKnownRad: 0.1, vUnknownMps: 3, vKnownMps: 0.5, b: 0.5 },
   },
 
+  /** 코스 (사양서 7.5~7.7) */
+  course: {
+    /** 중심선 간격 */
+    centerlineSpacingM: 1,
+    /** 중심선 평활 창 (길이). 너무 크면 헤어핀 안쪽으로 깎인다 */
+    centerlineSmoothM: 6,
+    gateWidthM: 30,
+    sectorFractions: [1 / 3, 2 / 3] as const,
+    /** s 검색 범위: 뒤로 */
+    sBackWindowM: 20,
+    /** s 검색 범위: 앞으로 최소 */
+    sFwdWindowMinM: 50,
+    /** s 검색 범위: 앞으로 = max(최소, 이 값 × v × dt) */
+    sFwdWindowSpeedFactor: 3,
+    /** 중심선과의 횡거리가 이보다 크면 코스 이탈 */
+    offCourseLateralM: 30,
+    /** 같은 게이트를 이 시간 안에 다시 지나면 무시 */
+    gateDebounceS: 10,
+    /** 첫 주행 자동 생성 */
+    auto: {
+      startSpeedMps: 3,
+      loopMinTravelM: 500,
+      loopReturnRadiusM: 30,
+      loopHeadingDeg: 45,
+    },
+    /** 코스 다듬기에 필요한 유효 랩 수 */
+    refineMinLaps: 3,
+  },
+
+  /** 랩 유효 판정 (사양서 7.8) */
+  laps: {
+    minCoverage: 0.95,
+    distanceTolerance: 0.05,
+    maxGpsGapS: 5,
+    /** s 덮음 계산 칸 크기 */
+    coverageBinM: 5,
+  },
+
+  /** 비교용 축약 데이터와 델타 (사양서 6.8, 7.11) */
+  delta: {
+    stepM: 5,
+    updateHz: 10,
+    smoothTauS: 0.3,
+    /** 위치 표준편차가 이보다 크면 s 신뢰도 낮음 → 델타 숨김 */
+    sLowConfidenceSigmaM: 8,
+  },
+
+  /** G값 (사양서 7.12) */
+  gforce: {
+    avgWindowS: 0.2,
+    g: 9.80665,
+  },
+
+  /** 고도 (사양서 7.13) */
+  altitude: {
+    /** altAcc가 이보다 크면 뺀다 */
+    maxAltAccM: 15,
+    /** 평활 창 */
+    smoothWindowS: 10,
+  },
+
+  /** 처리된 궤적 (사양서 6.7) */
+  processed: {
+    hz: 10,
+  },
+
+  /** GPX */
+  gpx: {
+    /** GPX에는 정확도가 없어서 이 값으로 둔다 */
+    defaultHAccM: 6,
+  },
+
   /** GPS 준비 판정 (사양서 7.4) */
   gpsReady: {
     maxHAccM: 10,
