@@ -5,6 +5,12 @@ import { WidgetsScreen } from '../../src/ui/screens/WidgetsScreen';
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from '../../src/app/settings';
 
 describe('설정 탭', () => {
+  it('버전(커밋 번호·빌드 시각)은 설정에서 본다', async () => {
+    const { buildInfo } = await import('../../src/ui/buildInfo');
+    render(<SettingsScreen />);
+    expect(screen.getByText(new RegExp(`버전 ${buildInfo.version} `))).toBeInTheDocument();
+  });
+
   it('개발자 메뉴: 재생 모드, 센서 기록 테스트', () => {
     render(<SettingsScreen />);
     expect(screen.getByRole('link', { name: /재생 모드/ })).toHaveAttribute('href', '#/dev/replay');

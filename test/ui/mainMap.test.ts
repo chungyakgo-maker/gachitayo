@@ -76,4 +76,30 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     expect(el.querySelector('path[stroke-dasharray="4 3"]')).not.toBeNull();
     m.destroy();
   });
+
+  it('코스가 없으면 내 위치를 따라가고, 사용자가 지도를 옮기면 멈췄다가 "내 위치"를 누르면 다시 따라간다', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    const near = (a: { lat: number; lng: number }, b: { lat: number; lon: number }) => Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.lng - b.lon) < 1e-5;
+    const p1 = { lat: 37.5665, lon: 126.978, hAcc: 5 };
+    const p2 = { lat: 37.567, lon: 126.979, hAcc: 5 };
+    const p3 = { lat: 37.568, lon: 126.98, hAcc: 5 };
+    m.update(null, p1);
+    expect(near(m.map.getCenter(), p1)).toBe(true);
+    m.update(null, p2);
+    expect(near(m.map.getCenter(), p2)).toBe(true);
+    // 사용자가 지도를 끌어서 옮김
+    m.map.fire('dragstart');
+    m.map.setView([37.6, 127.0], 14, { animate: false });
+    m.update(null, p3);
+    expect(near(m.map.getCenter(), { lat: 37.6, lon: 127.0 })).toBe(true);
+    // "내 위치"
+    m.locate(p3);
+    expect(near(m.map.getCenter(), p3)).toBe(true);
+    expect(m.map.getZoom()).toBeGreaterThanOrEqual(16);
+    m.update(null, p1);
+    expect(near(m.map.getCenter(), p1)).toBe(true);
+    m.destroy();
+  });
 });

@@ -58,7 +58,7 @@ function StatusBar({ snap, mode, course, replay }: { snap: LiveSnapshot | null; 
       <span className="flags">
         <IconGps size={18} color={weak ? '#FF5B4F' : '#3EE08F'} />
         <span>
-          {weak ? 'GPS 약함' : 'GPS'} <span className="mono">{hAcc === null || hAcc === undefined ? '—' : `${Math.round(hAcc)}m`}</span>
+          {weak ? 'GPS 약함' : 'GPS'} <span className="mono gps-m">{hAcc === null || hAcc === undefined ? '—' : `${Math.round(Math.min(hAcc, 999))}m`}</span>
         </span>
         {flags.map((f) => (
           <span key={f.text} className={`flag ${f.cls}`}>
@@ -66,7 +66,7 @@ function StatusBar({ snap, mode, course, replay }: { snap: LiveSnapshot | null; 
           </span>
         ))}
       </span>
-      <span>두 번 탭하면 {NEXT_LABEL[mode]}</span>
+      <span className="hint">두 번 탭하면 {NEXT_LABEL[mode]}</span>
     </div>
   );
 }

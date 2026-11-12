@@ -99,6 +99,29 @@ a {
 }
 
 /* ── 앱 틀: 아래 탭 ─────────────────────────── */
+/* 아이폰 홈 화면 앱(html.app-h, src/ui/viewport.ts): 일부 iOS는 100dvh와 화면 고정(fixed) 요소를
+   상태 표시줄 높이만큼 작게 잡아, fixed 요소의 아래쪽이 잘린다(주행 화면의 "길게 눌러 종료").
+   그래서 문서는 스크롤하지 않게 화면 높이로 고정하고(스크롤은 #root 안에서), 화면 전체를 덮는 요소는
+   fixed 대신 문서 맨 위에 붙인 absolute로 그린다. */
+html.app-h,
+html.app-h body {
+  height: var(--app-h);
+  overflow: hidden;
+}
+
+html.app-h #root {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: none;
+}
+
+html.app-h .drive,
+html.app-h .sheet-backdrop,
+html.app-h .modal-backdrop {
+  position: absolute;
+}
+
 /* 앱 높이: --app-h는 아이폰 홈 화면 앱에서만 정해진다 (src/ui/viewport.ts). 없으면 100dvh */
 .tabbed {
   height: var(--app-h, 100dvh);
@@ -664,16 +687,24 @@ a {
   color: var(--fg-faint);
 }
 
-/* 메인: 지도가 아래 탭까지 채우고, 버전은 지도 오른쪽 아래 구석에 작게 */
-.main-map .build-info {
+/* 메인 지도의 "내 위치" 버튼 (오른쪽 위, 작게. 누르는 영역은 44px) */
+.map-locate {
   position: absolute;
   z-index: 1000;
-  /* 오른쪽 아래는 지도 출처(OpenStreetMap) 자리 */
-  left: calc(10px + var(--safe-l));
-  bottom: 4px;
-  padding: 0;
-  font-size: 11px;
-  pointer-events: none;
+  top: 10px;
+  right: calc(10px + var(--safe-r));
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--card-line);
+  background: rgba(23, 25, 28, 0.92);
+  color: var(--fg);
+}
+
+.map-locate:disabled {
+  color: var(--fg-off);
 }
 
 .update-banner {
@@ -849,21 +880,43 @@ a {
   border-top: 1px solid #1a1d21;
 }
 
+/* 상태 줄은 늘 한 줄 (값이 바뀌어도 줄이 바뀌거나 높이가 변하지 않게). 자리가 모자라면 오른쪽 안내가 먼저 줄어든다 */
 .drive-status {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 44px;
+  height: 44px;
   font-size: 13px;
   color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .drive-status .flags {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.drive-status .flags > * {
+  flex-shrink: 0;
+}
+
+/* GPS 오차 숫자 자리는 고정 폭 (6m ↔ 11m로 바뀌어도 옆 글자가 흔들리지 않게) */
+.drive-status .gps-m {
+  display: inline-block;
+  min-width: 3.2ch;
+}
+
+.drive-status .hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .flag {

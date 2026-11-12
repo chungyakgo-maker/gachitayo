@@ -39,8 +39,13 @@ export function installAppHeight(): () => void {
   const root = document.documentElement;
   const apply = () => {
     const h = appHeightFor(currentEnv());
-    if (h === null) root.style.removeProperty('--app-h');
-    else root.style.setProperty('--app-h', `${Math.round(h)}px`);
+    if (h === null) {
+      root.style.removeProperty('--app-h');
+      root.classList.remove('app-h');
+    } else {
+      root.style.setProperty('--app-h', `${Math.round(h)}px`);
+      root.classList.add('app-h');
+    }
   };
   apply();
   window.addEventListener('resize', apply);

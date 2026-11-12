@@ -21,8 +21,12 @@ export interface MapFix {
 export interface MainMapController {
   update(course: Course | null, me: MapFix | null): void;
   setOnline(online: boolean): void;
+  /** "내 위치" 버튼: 내 위치로 옮기고 다시 따라간다 */
+  locate(me: MapFix): void;
   /** 타일을 보여주는 중인지 (시험용) */
   tilesShown(): boolean;
+  /** Leaflet 지도 (시험용) */
+  readonly map: L.Map;
   destroy(): void;
 }
 
@@ -137,12 +141,20 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       if (courseChanged || (firstFix && !userMoved)) {
         if (courseChanged) userMoved = false;
         fit(course, me);
+      } else if (me && !course && !userMoved) {
+        // 코스가 없으면 내 위치를 따라간다 (사용자가 지도를 옮기면 멈추고, "내 위치"를 누르면 다시)
+        move(() => map.panTo([me.lat, me.lon], { animate: false }));
       }
     },
     setOnline(online) {
       showTiles(online);
     },
+    locate(me) {
+      userMoved = false;
+      move(() => map.setView([me.lat, me.lon], Math.max(map.getZoom(), 16), { animate: false }));
+    },
     tilesShown: () => shown,
+    map,
     destroy() {
       map.remove();
     },

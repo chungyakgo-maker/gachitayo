@@ -6,11 +6,10 @@ import { useRecording } from '../../app/recording';
 import { useAccount } from '../../app/account';
 import { useSync } from '../../app/sync';
 import { nearestCourse } from '../../engine/course/nearest';
-import { buildInfo } from '../buildInfo';
 import { MainMap } from '../components/MainMap';
 import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
-import { formatKst, formatLapTime, formatLength } from '../format';
+import { formatLapTime, formatLength } from '../format';
 import { useLocationPreview } from '../hooks/useLocationPreview';
 import { IconArrowRight, IconCloud, IconGps, IconPin, IconSettings, IconWarn } from '../icons';
 import { usePwaUpdate } from '../pwa/usePwaUpdate';
@@ -101,9 +100,6 @@ export function MainScreen() {
       </div>
       <MainMap course={course} me={fix} label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'}>
         {!course && !fix && <div className="map-chip">위치를 받으면 지도에 표시돼요</div>}
-        <footer className="build-info">
-          버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
-        </footer>
       </MainMap>
     </Tabbed>
   );

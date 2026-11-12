@@ -21,9 +21,9 @@ describe('App', () => {
     fireEvent.click(start);
     await waitFor(() => expect(screen.getByRole('navigation', { name: '주 메뉴' })).toBeInTheDocument());
     expect(localStorage.getItem('gachitayo.nickname')).toBe('민수');
-    // 메인: 앱 이름과 버전 (버전은 빌드 환경마다 다르다: Actions는 커밋 앞 7자리, 그 밖은 local)
+    // 메인: 앱 이름. 버전은 지도에 두지 않고 설정에만 (사용자 요청)
     expect(screen.getByRole('heading', { name: '같이타요' })).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(`버전 ${buildInfo.version} `))).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(`버전 ${buildInfo.version} `))).not.toBeInTheDocument();
   });
 
   it('알 수 없는 경로는 메인으로 보여준다', async () => {

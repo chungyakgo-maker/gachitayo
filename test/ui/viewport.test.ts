@@ -37,6 +37,8 @@ describe('installAppHeight', () => {
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('landscape') ? false : true }));
     const stop = installAppHeight();
     expect(document.documentElement.style.getPropertyValue('--app-h')).toBe('852px');
+    // 화면 전체를 덮는 요소를 fixed 대신 absolute로 그리게 하는 표시 (styles.css html.app-h)
+    expect(document.documentElement.classList.contains('app-h')).toBe(true);
     vi.stubGlobal('innerHeight', 400); // 키보드가 올라옴
     window.dispatchEvent(new Event('resize'));
     expect(document.documentElement.style.getPropertyValue('--app-h')).toBe('400px');
@@ -47,6 +49,7 @@ describe('installAppHeight', () => {
     vi.stubGlobal('navigator', { ...navigator, standalone: undefined });
     const stop = installAppHeight();
     expect(document.documentElement.style.getPropertyValue('--app-h')).toBe('');
+    expect(document.documentElement.classList.contains('app-h')).toBe(false);
     stop();
   });
 });

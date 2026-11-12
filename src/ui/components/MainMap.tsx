@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 import type { MainMapController, MapFix } from '../map/leafletMap';
+import { IconLocate } from '../icons';
 import { CourseMap } from './CourseMap';
 
 export interface MainMapProps {
@@ -61,6 +62,11 @@ export function MainMap({ course, me, label, children }: MainMapProps) {
   return (
     <div className={`main-map${tiles ? ' has-tiles' : ''}`}>
       <div ref={el} className="leaflet-host" role="region" aria-label={`${label}${tiles ? ' (지도: OpenStreetMap)' : ' (지도 그림 없음)'}`} />
+      {state === 'ready' && (
+        <button type="button" className="map-locate" aria-label="내 위치" disabled={!me} onClick={() => me && ctl.current?.locate(me)}>
+          <IconLocate size={18} />
+        </button>
+      )}
       {children}
     </div>
   );

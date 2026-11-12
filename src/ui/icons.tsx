@@ -75,6 +75,8 @@ export const IconPhone = make(
     <path d="M4 9v6M20 9v6" />
   </>,
 );
+/** 내 위치로 (지도) */
+export const IconLocate = make(<path d="M3 11l18-8-8 18-2-8-8-2z" />);
 export const IconStop = make(<rect x="6" y="6" width="12" height="12" rx="2" />);
 export const IconCloud = make(
   <>
