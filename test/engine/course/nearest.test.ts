@@ -3,6 +3,8 @@ import { stadiumTrack, windingWithHairpins } from '../../generators';
 import { nearestCourse } from '../../../src/engine/course/nearest';
 import { fromLocal } from '../../../src/engine/geo';
 import { courseFromTrack, ORIGIN } from './helpers';
+import { BUILTIN_COURSES, builtinCourse } from '../../../src/courses/builtin';
+import { BUILTIN_POINTS } from '../../../src/courses/builtinData';
 
 describe('현재 위치에서 가까운 코스 (사양서 8.3)', () => {
   const oval = { ...courseFromTrack(stadiumTrack(), { id: 'oval' }) };
@@ -25,5 +27,15 @@ describe('현재 위치에서 가까운 코스 (사양서 8.3)', () => {
     const noLine = { ...oval, id: 'map', centerline: null, lengthM: null, sectorBoundsM: null };
     const p = fromLocal(ORIGIN, 20, 0);
     expect(nearestCourse([noLine], p.lat, p.lon)!.course.id).toBe('map');
+  });
+
+  it('긴 편도 코스(배후령 8.5 km)도 출발선에서 먼 끝 근처면 찾고, 멀리(50 km)면 없음', () => {
+    const b = BUILTIN_COURSES[0]!;
+    const c = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'bh', gateWidthM: 30 });
+    const end = c.centerline![c.centerline!.length - 1]!;
+    const r = nearestCourse([c], end[0] + 0.002, end[1])!;
+    expect(r.course.id).toBe('bh');
+    expect(r.distanceM).toBeLessThan(250);
+    expect(nearestCourse([c], end[0] + 0.45, end[1])).toBeNull();
   });
 });

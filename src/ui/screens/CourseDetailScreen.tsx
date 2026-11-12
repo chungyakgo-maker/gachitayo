@@ -108,7 +108,7 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
         <h1 style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{course.name}</h1>
       </header>
       <span className="sub" style={{ marginTop: -8 }}>
-        {course.kind === 'loop' ? '랩' : '편도'} · {formatLength(course.lengthM)} · 버전 {course.version} · {SOURCE[course.source]}
+        {course.kind === 'loop' ? '랩' : '편도'} · {formatLength(course.lengthM)} · 버전 {course.version} · {course.builtin ? '기본 코스' : SOURCE[course.source]}
         {best[course.id] != null ? ` · 내 베스트 ${formatLapTime(best[course.id]!, 3)}` : ''} · 기록 {counts.sessions}개
       </span>
 

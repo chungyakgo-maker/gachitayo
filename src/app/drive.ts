@@ -3,6 +3,7 @@
 import { getFriendsState } from './friends';
 import { pushVirtualPoint, setVirtualFollow, startLiveLinks, stopLiveLinks } from './liveLink';
 import { useSyncExternalStore } from 'react';
+import { sortCourses } from '../courses/builtin';
 import { nearestCourse } from '../engine/course/nearest';
 import { LivePipeline, type LiveSnapshot } from '../engine/live/livePipeline';
 import type { LiveRef } from '../engine/live/liveEngine';
@@ -97,7 +98,7 @@ let teardownLive: (() => void) | null = null;
 
 export async function loadCourses(): Promise<Course[]> {
   try {
-    const courses = await getDriveRepo().listCourses();
+    const courses = sortCourses(await getDriveRepo().listCourses());
     set({ courses });
     return courses;
   } catch (e) {

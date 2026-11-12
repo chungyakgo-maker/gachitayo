@@ -1,6 +1,8 @@
-// 코스 탭 (사양서 8.7): 코스 목록 → 코스 상세. 지도에서 새 코스, GPX 불러오기(코스로 또는 주행 기록으로).
+// 코스 탭 (사양서 8.7): 코스 목록(내 코스, 기본 코스) → 코스 상세. 지도에서 새 코스, GPX 불러오기(코스로 또는 주행 기록으로).
 import { useEffect, useRef, useState } from 'react';
 import { importGpx } from '../../app/courses';
+import { builtinInfo } from '../../courses/builtin';
+import type { Course } from '../../types/course';
 import { loadCourses, useDrive } from '../../app/drive';
 import { parseGpx, suggestedCourseName } from '../../gpx/parse';
 import { Sheet } from '../components/Sheet';
@@ -15,6 +17,8 @@ export function CoursesScreen() {
     void loadCourses();
   }, []);
   const best = useBestTimes(courses);
+  const mine = courses.filter((c) => !c.builtin);
+  const builtins = courses.filter((c) => c.builtin);
   const file = useRef<HTMLInputElement>(null);
   const [gpx, setGpx] = useState<{ text: string; name: string; hasTime: boolean } | null>(null);
   const [gpxName, setGpxName] = useState('');
@@ -66,25 +70,30 @@ export function CoursesScreen() {
             주행을 시작하면 첫 주행으로 코스를 만들어요.
           </div>
         ) : (
-          <ul className="rows">
-            {courses.map((c) => (
-              <li key={c.id}>
-                <a className="row-card" href={`#/course/${c.id}`}>
-                <span className="card-col">
-                  <strong style={{ fontSize: 16 }}>{c.name}</strong>
-                  <span className="sub">
-                    {c.kind === 'loop' ? '랩' : '편도'} · {formatLength(c.lengthM)}
-                  </span>
-                </span>
-                <span className="right card-col" style={{ alignItems: 'flex-end' }}>
-                  <span className="label">내 베스트</span>
-                  <span className="mono">{best[c.id] != null ? formatLapTime(best[c.id]!, 3) : '—'}</span>
-                </span>
-                <IconChevron size={18} color="#9AA1A9" />
-                </a>
-              </li>
-            ))}
-          </ul>
+          <>
+            <section className="card-col" style={{ gap: 8 }} aria-label="내 코스">
+              <span className="label">내 코스</span>
+              {mine.length === 0 ? (
+                <span className="sub">주행을 시작하면 첫 주행으로 내 코스를 만들어요.</span>
+              ) : (
+                <ul className="rows">
+                  {mine.map((c) => (
+                    <CourseRow key={c.id} c={c} best={best[c.id]} />
+                  ))}
+                </ul>
+              )}
+            </section>
+            {builtins.length > 0 && (
+              <section className="card-col" style={{ gap: 8 }} aria-label="기본 코스">
+                <span className="label">기본 코스</span>
+                <ul className="rows">
+                  {builtins.map((c) => (
+                    <CourseRow key={c.id} c={c} best={best[c.id]} />
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
       </main>
       {gpx && (
@@ -106,5 +115,27 @@ export function CoursesScreen() {
         </Sheet>
       )}
     </Tabbed>
+  );
+}
+
+function CourseRow({ c, best }: { c: Course; best: number | null | undefined }) {
+  const route = builtinInfo(c)?.route;
+  return (
+    <li>
+      <a className="row-card" href={`#/course/${c.id}`}>
+        <span className="card-col">
+          <strong style={{ fontSize: 16 }}>{c.name}</strong>
+          <span className="sub">
+            {c.kind === 'loop' ? '랩' : '편도'} · {formatLength(c.lengthM)}
+            {route ? ` · ${route}` : ''}
+          </span>
+        </span>
+        <span className="right card-col" style={{ alignItems: 'flex-end' }}>
+          <span className="label">내 베스트</span>
+          <span className="mono">{best != null ? formatLapTime(best, 3) : '—'}</span>
+        </span>
+        <IconChevron size={18} color="#9AA1A9" />
+      </a>
+    </li>
   );
 }

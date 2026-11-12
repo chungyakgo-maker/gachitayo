@@ -28,4 +28,6 @@ export interface Course {
   sectorBoundsM: [number, number] | null;
   /** 중심선·게이트가 바뀔 때마다 +1 */
   version: number;
+  /** 기본 코스 키 (앱에 들어 있는 코스, courses/builtin). 폰에만 두고 서버 행에는 없다 */
+  builtin?: string;
 }

@@ -4,6 +4,7 @@ import { initRecording } from './app/recording';
 import { initAccount } from './app/account';
 import { initSync } from './app/sync';
 import { initFriends } from './app/friends';
+import { seedBuiltinCourses } from './app/courses';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
 import { installAppHeight } from './ui/viewport';
@@ -20,6 +21,8 @@ installAppHeight();
 void initRecording();
 // 계정 확인 뒤 업로드 대기열을 돌린다 (서버 설정 전이면 폰에만 저장)
 void initAccount().then(initSync);
+// 기본 코스(배후령 · 미시령 옛길 · 만항재)를 처음 한 번 코스 목록에 넣는다
+void seedBuiltinCourses();
 // 친구 위치 공유: 주행 기록의 GPS도 내 위치로 쓴다 (공유는 앱을 열 때마다 꺼져 있다)
 initFriends();
 

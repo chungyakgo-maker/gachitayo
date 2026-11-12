@@ -17,6 +17,8 @@ export function nearestCourse(courses: Course[], lat: number, lon: number): { co
     let d = Infinity;
     if (c.centerline && c.centerline.length > 1) {
       let prev = toLocal(c.origin, c.centerline[0]![0], c.centerline[0]![1]);
+      // 멀리 있는 코스는 점을 다 보지 않는다: 중심선의 모든 점은 첫 점에서 코스 길이 안에 있다 (삼각 부등식)
+      if (c.lengthM !== null && Math.hypot(p.x - prev.x, p.y - prev.y) > MAX_DISTANCE_M + c.lengthM * 1.01 + 10) continue;
       for (let i = 1; i < c.centerline.length; i++) {
         const q = toLocal(c.origin, c.centerline[i]![0], c.centerline[i]![1]);
         d = Math.min(d, segDist(p.x, p.y, prev.x, prev.y, q.x, q.y));
