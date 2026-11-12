@@ -1,7 +1,7 @@
 // 정답 주행에서 폰 센서 원본을 만든다: 1 Hz GPS, 약 60 Hz 기기 축 모션 (M2 원본과 같은 형식).
-import { fromLocal, type LatLon } from '../../src/engine/geo';
-import { matVec, rotationFromEuler, transpose, type Mat3, type Vec3 } from '../../src/engine/linalg';
-import type { GpsSample, RawMotionSample } from '../../src/types/samples';
+import { fromLocal, type LatLon } from '../engine/geo';
+import { matVec, rotationFromEuler, transpose, type Mat3, type Vec3 } from '../engine/linalg';
+import type { GpsSample, RawMotionSample } from '../types/samples';
 import { truthAt, type Truth } from './drive';
 import { gaussian, mulberry32 } from './random';
 

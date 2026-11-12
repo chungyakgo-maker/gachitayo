@@ -118,8 +118,8 @@ export class Recorder {
     this.buffer.events.push(e);
   }
 
-  /** 시작·멈춤·이어서·종료 이벤트: 나중에 실제 시각과 맞춰 볼 수 있게 벽시계 시각을 함께 남긴다. */
-  private markEvent(type: SessionEventType, payload: Record<string, unknown> = {}): void {
+  /** 시작·멈춤·이어서·종료·주행 시작 이벤트: 나중에 실제 시각과 맞춰 볼 수 있게 벽시계 시각을 함께 남긴다. */
+  markEvent(type: SessionEventType, payload: Record<string, unknown> = {}): void {
     this.addEvent(type, { ...payload, epochMs: (this.deps.epochNow ?? Date.now)() });
   }
 

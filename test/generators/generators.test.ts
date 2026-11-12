@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ellipseTrack, segmentTrack, closeParallelTrack, windingWithHairpins } from './track';
-import { simulateDrive, truthAt } from './drive';
-import { synthesizeSensors, defaultSensorOpts } from './sensors';
-import { mulberry32 } from './random';
+import { ellipseTrack, segmentTrack, closeParallelTrack, windingWithHairpins } from '../../src/sim/track';
+import { simulateDrive, truthAt } from '../../src/sim/drive';
+import { synthesizeSensors, defaultSensorOpts } from '../../src/sim/sensors';
+import { mulberry32 } from '../../src/sim/random';
 import { matVec, transpose } from '../../src/engine/linalg';
 import { toLocal } from '../../src/engine/geo';
 

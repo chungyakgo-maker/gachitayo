@@ -1,5 +1,6 @@
 // 폰 저장소의 세션과 덩어리 (사양서 6.4)
 import type { GpsSample, RawMotionSample, SessionEvent } from './samples';
+import type { SessionSummary } from './drive';
 
 export interface DeviceInfo {
   os: string;
@@ -26,8 +27,8 @@ export interface SessionRecord {
   device: DeviceInfo;
   /** 거치 보정 결과 (M3부터) */
   calibration: null;
-  /** 요약 (M4부터) */
-  summary: null;
+  /** 요약 (주행 후 처리 뒤) */
+  summary: SessionSummary | null;
 }
 
 /** 5초 단위로 저장하는 원본 덩어리 */

@@ -20,6 +20,8 @@ import {
 } from '../storage/recorder';
 import { createSessionRepo, type SessionRepo } from '../storage/sessionRepo';
 import type { DeviceInfo, SessionRecord } from '../types/session';
+import type { GpsSample, RawMotionSample, SessionEventType } from '../types/samples';
+import { createDriveRepo, type DriveRepo } from '../storage/driveRepo';
 import { LiveStatsTracker, type LiveStatsSnapshot } from '../ui/recording/liveStats';
 
 /** stopFailed: 마지막 저장이 실패해 아직 끝내지 못함 (다시 저장을 누를 수 있음) */
@@ -89,11 +91,29 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // ── 저장소, 화면 꺼짐 방지 ────────────────────────────────
 
+let db: GachitayoDb | undefined;
+const getDb = () => (db ??= new GachitayoDb());
 let repo: SessionRepo | undefined;
 export function getRepo(): SessionRepo {
-  repo ??= createSessionRepo(new GachitayoDb());
+  repo ??= createSessionRepo(getDb());
   return repo;
 }
+let driveRepo: DriveRepo | undefined;
+export function getDriveRepo(): DriveRepo {
+  driveRepo ??= createDriveRepo(getDb());
+  return driveRepo;
+}
+
+// ── 샘플 구독 (주행 중 계산이 기록기와 같은 센서 값을 받는다) ──
+
+export type SampleEvent = { kind: 'gps'; s: GpsSample } | { kind: 'motion'; s: RawMotionSample };
+const sampleListeners = new Set<(e: SampleEvent) => void>();
+
+export function subscribeSamples(fn: (e: SampleEvent) => void): () => void {
+  sampleListeners.add(fn);
+  return () => sampleListeners.delete(fn);
+}
+const emitSample = (e: SampleEvent) => sampleListeners.forEach((l) => l(e));
 
 let wakeLock: WakeLockManager | undefined;
 function getWakeLock(): WakeLockManager {
@@ -209,6 +229,7 @@ function begin(recorder: Recorder, motionPermission: MotionPermission): void {
       (s) => {
         recorder.addGps(s);
         stats.addGps(s);
+        emitSample({ kind: 'gps', s });
         if (state.locationPermission !== 'granted' || state.gpsError) {
           set({ locationPermission: 'granted', gpsError: null });
         }
@@ -222,6 +243,7 @@ function begin(recorder: Recorder, motionPermission: MotionPermission): void {
     ? startMotion(recorder.clock, (s) => {
         recorder.addMotion(s);
         stats.addMotion(s);
+        emitSample({ kind: 'motion', s });
       })
     : () => {};
 
@@ -326,12 +348,40 @@ export async function finishInterruptedSession(sessionId: string): Promise<void>
   await refreshSessions();
 }
 
+/** 기록 중인 세션 시계 (ms). 기록 중이 아니면 null */
+export function recordingClockNow(): number | null {
+  return active ? active.recorder.clock.now() : null;
+}
+
+/** 기록에 이벤트를 남긴다 (예: 주행 준비를 마치고 "기록 시작") */
+export function markRecordingEvent(type: SessionEventType, payload?: Record<string, unknown>): void {
+  active?.recorder.markEvent(type, payload);
+}
+
+/** 기록을 끝내고 지운다 (주행 준비에서 취소, 사양서 8.3) */
+export async function discardRecording(): Promise<void> {
+  const a = active;
+  if (!a) return;
+  if (state.phase === 'recording') a.teardown();
+  active = null;
+  a.recorder.dispose();
+  await a.recorder.idle();
+  try {
+    await getDriveRepo().deleteSession(a.recorder.sessionId);
+  } catch (e) {
+    set({ error: `기록을 지우지 못했습니다: ${message(e)}` });
+  }
+  await getWakeLock().release();
+  set({ phase: 'idle', sessionId: null, chunksSaved: 0, saveError: null });
+  await refreshSessions();
+}
+
 /**
  * "기록 종료" 버튼. 마지막 저장이 실패하면 기록을 끝내지 않고 stopFailed로 남는다.
  * 저장하지 못한 샘플은 메모리에 남아 있으므로, 공간을 확보한 뒤 다시 누르면 저장된다.
  */
-export async function stopRecording(): Promise<void> {
-  if (!active || (state.phase !== 'recording' && state.phase !== 'stopFailed')) return;
+export async function stopRecording(): Promise<string | null> {
+  if (!active || (state.phase !== 'recording' && state.phase !== 'stopFailed')) return null;
   const a = active;
   if (state.phase === 'recording') a.teardown();
   set({ phase: 'stopping', error: null });
@@ -343,7 +393,7 @@ export async function stopRecording(): Promise<void> {
       saveError: a.recorder.stats.lastError,
       error: `${message(e)}. 저장하지 못한 기록은 아직 앱에 남아 있습니다. 폰 저장 공간을 확보한 뒤 "다시 저장"을 눌러 주세요. 앱을 닫으면 사라집니다.`,
     });
-    return;
+    return null;
   }
   active = null;
   await getWakeLock().release();
@@ -354,4 +404,7 @@ export async function stopRecording(): Promise<void> {
     saveError: null,
   });
   await refreshSessions();
+  return a.recorder.sessionId;
 }
+
+export { refreshSessions };

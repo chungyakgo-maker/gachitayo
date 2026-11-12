@@ -36,6 +36,8 @@ export interface RawMotionSample {
 
 export type SessionEventType =
   | 'start'
+  /** 주행 준비를 마치고 "기록 시작"을 누름 (그 전은 준비 화면에서 GPS·거치 보정) */
+  | 'drive_start'
   | 'pause'
   | 'resume'
   | 'stop'
