@@ -1,5 +1,5 @@
 {
-  // 사양서 5.1 규칙: engine/, normalize/, gpx/는 DOM·브라우저 API를 쓰지 않는다.
+  // 사양서 5.1 규칙: engine/, normalize/, gpx/, export/는 DOM·브라우저 API를 쓰지 않는다.
   // DOM 타입을 빼고 검사해서, 이 폴더들이 window/document/navigator 등을 쓰거나
   // 화면 코드를 가져오면 타입 검사가 실패한다.
   "extends": "./tsconfig.base.json",
@@ -7,5 +7,5 @@
     "lib": ["ES2023"],
     "types": []
   },
-  "include": ["src/engine", "src/normalize", "src/gpx"]
+  "include": ["src/engine", "src/normalize", "src/gpx", "src/export"]
 }
