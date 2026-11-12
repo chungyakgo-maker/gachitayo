@@ -1,10 +1,11 @@
-// 설정 탭 (사양서 8.8): 닉네임, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 개발자 메뉴.
+// 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 개발자 메뉴.
 // 게이트 폭은 코스 관리(M7)에서.
 import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
 import { updateSettings, useSettings, WIDGET_LABEL, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
+import { FriendsSection } from '../components/FriendsSection';
 import { Tabbed } from '../components/TabBar';
 import { formatKst } from '../format';
 import { IconCloud, IconWarn } from '../icons';
@@ -100,6 +101,7 @@ export function SettingsScreen() {
           <h1 className="big">설정</h1>
         </header>
         <AccountSection />
+        <FriendsSection />
         <SyncSection />
         <section className="card-col" style={{ gap: 8 }} aria-label="기본 화면 모드">
           <span className="label">기본 화면 모드</span>

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
-import type { MainMapController, MapFix } from '../map/leafletMap';
+import type { FriendMarker, MainMapController, MapFix } from '../map/leafletMap';
 import { IconLocate } from '../icons';
 import { CourseMap } from './CourseMap';
 
@@ -12,12 +12,14 @@ export interface MainMapProps {
   course: Course | null;
   me: MapFix | null;
   label: string;
+  /** 위치 공유 중인 친구 */
+  friends?: FriendMarker[];
   children?: ReactNode;
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
 
-export function MainMap({ course, me, label, children }: MainMapProps) {
+export function MainMap({ course, me, label, friends = [], children }: MainMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<MainMapController | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -49,6 +51,9 @@ export function MainMap({ course, me, label, children }: MainMapProps) {
   useEffect(() => {
     if (state === 'ready') ctl.current?.update(course, me);
   }, [state, course, me]);
+  useEffect(() => {
+    if (state === 'ready') ctl.current?.setFriends(friends);
+  }, [state, friends]);
 
   if (state === 'failed') {
     const local = me ? toLocal(course?.origin ?? { lat: me.lat, lon: me.lon }, me.lat, me.lon) : null;
@@ -65,6 +70,11 @@ export function MainMap({ course, me, label, children }: MainMapProps) {
       {state === 'ready' && (
         <button type="button" className="map-locate" aria-label="내 위치" disabled={!me} onClick={() => me && ctl.current?.locate(me)}>
           <IconLocate size={18} />
+        </button>
+      )}
+      {state === 'ready' && friends.length > 0 && (
+        <button type="button" className="map-friends" onClick={() => ctl.current?.fitFriends(me)}>
+          위치 공유 중인 친구 {friends.length}명
         </button>
       )}
       {children}

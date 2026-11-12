@@ -14,7 +14,7 @@ export function corsHeaders(origin: string | null, env: Cloudflare.Env): Headers
   const h = new Headers();
   if (origin && origin === env.ALLOWED_ORIGIN) {
     h.set('Access-Control-Allow-Origin', origin);
-    h.set('Access-Control-Allow-Methods', 'GET, PUT, POST, HEAD, OPTIONS');
+    h.set('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, HEAD, OPTIONS');
     h.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
     h.set('Access-Control-Expose-Headers', 'Content-Length, ETag');
     h.set('Access-Control-Max-Age', '86400');

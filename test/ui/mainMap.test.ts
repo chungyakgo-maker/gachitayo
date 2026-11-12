@@ -102,4 +102,24 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     expect(near(m.map.getCenter(), p1)).toBe(true);
     m.destroy();
   });
+
+  it('위치 공유 중인 친구를 점과 닉네임으로 그리고(오래된 위치는 흐리게), 닉네임은 글자로만 넣는다', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    m.setFriends([
+      { userId: 'u2', nickname: '지훈', lat: 37.5665, lon: 126.978, ageMs: 2000 },
+      { userId: 'u3', nickname: '<b>남</b>', lat: 37.57, lon: 126.98, ageMs: 60_000 },
+    ]);
+    const labels = [...el.querySelectorAll('.map-label.friend')];
+    expect(labels.map((n) => n.textContent)).toEqual(['지훈', '<b>남</b>']);
+    expect(el.querySelector('.map-label.friend b')).toBeNull();
+    expect(labels[1]!.classList.contains('stale')).toBe(true);
+    m.fitFriends({ lat: 37.56, lon: 126.97, hAcc: 5 });
+    const b = m.map.getBounds();
+    for (const [lat, lon] of [[37.5665, 126.978], [37.57, 126.98], [37.56, 126.97]]) expect(b.contains([lat!, lon!])).toBe(true);
+    m.setFriends([]);
+    expect(el.querySelectorAll('.map-label.friend').length).toBe(0);
+    m.destroy();
+  });
 });

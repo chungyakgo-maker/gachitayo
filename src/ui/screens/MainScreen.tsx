@@ -1,6 +1,7 @@
-// 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도(통신이 되면 OSM 타일, 안 되면 타일 없이).
-// 친구 위치 공유·같이 달리기는 2·3단계라 넣지 않는다.
-import { useEffect, useMemo } from 'react';
+// 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도(통신이 되면 OSM 타일, 안 되면 타일 없이),
+// 위치 공유 켜기/끄기와 공유 중인 친구 (M8: 사용자 요청으로 2단계에서 앞당김). 같이 달리기는 3단계라 넣지 않는다.
+import { useEffect, useMemo, useState } from 'react';
+import { setSharing, useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
 import { beginPrepare, loadCourses, useDrive } from '../../app/drive';
 import { useRecording } from '../../app/recording';
 import { useAccount } from '../../app/account';
@@ -26,6 +27,14 @@ export function MainScreen() {
   useEffect(() => {
     void loadCourses();
   }, []);
+  const fr = useFriends();
+  const [askShare, setAskShare] = useState(false);
+  const friendsOn = acc.status === 'ready';
+  useEffect(() => {
+    if (!friendsOn) return;
+    void loadFriends();
+    return watchFriendPositions();
+  }, [friendsOn]);
   const near = useMemo(() => (fix ? nearestCourse(drive.courses, fix.lat, fix.lon) : null), [fix, drive.courses]);
   const course = near?.course ?? null;
   const best = useBestTimes(course ? [course] : []);
@@ -98,9 +107,60 @@ export function MainScreen() {
           <IconArrowRight size={26} />
         </button>
       </div>
-      <MainMap course={course} me={fix} label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'}>
-        {!course && !fix && <div className="map-chip">위치를 받으면 지도에 표시돼요</div>}
+      <MainMap course={course} me={fix} label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'} friends={friendsOn ? fr.positions : []}>
+        <div className="map-controls">
+          {friendsOn && (
+            <button type="button" className="map-share" aria-pressed={fr.sharing} onClick={() => (fr.sharing ? void setSharing(false) : setAskShare(true))}>
+              <span className="dot" />
+              {fr.sharing ? '위치 공유 중' : '위치 공유 꺼짐'}
+            </button>
+          )}
+          {!course && !fix && <div className="map-chip">위치를 받으면 지도에 표시돼요</div>}
+          {friendsOn && fr.error && fr.sharing && <div className="map-chip">{fr.error}</div>}
+        </div>
       </MainMap>
+      {askShare && (
+        <div className="modal-backdrop">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
+            <h2 id="share-title">위치 공유</h2>
+            {fr.friends.length === 0 ? (
+              <>
+                <p>아직 친구가 없어요. 설정 → 친구에서 내 친구 코드를 보내거나 친구 코드를 넣어 친구를 추가해 주세요.</p>
+                <div className="modal-actions">
+                  <a className="btn btn-primary" href="#/settings" style={{ textAlign: 'center', textDecoration: 'none' }} onClick={() => setAskShare(false)}>
+                    친구 추가하러 가기
+                  </a>
+                  <button type="button" className="btn" onClick={() => setAskShare(false)}>
+                    닫기
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>
+                  친구 {fr.friends.length}명에게 내 위치가 보여요. 앱을 화면에 띄워 둔 동안 5초마다 보내고, 공유를 끄거나 앱을 닫으면 멈춰요. 앱을 다시 열면
+                  공유는 꺼져 있어요.
+                </p>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      setAskShare(false);
+                      void setSharing(true);
+                    }}
+                  >
+                    공유 켜기
+                  </button>
+                  <button type="button" className="btn" onClick={() => setAskShare(false)}>
+                    취소
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </Tabbed>
   );
 }

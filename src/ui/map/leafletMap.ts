@@ -18,11 +18,24 @@ export interface MapFix {
   hAcc: number;
 }
 
+export interface FriendMarker {
+  userId: string;
+  nickname: string;
+  lat: number;
+  lon: number;
+  /** 몇 ms 전 위치인지 (30초가 넘으면 흐리게) */
+  ageMs: number;
+}
+
 export interface MainMapController {
   update(course: Course | null, me: MapFix | null): void;
   setOnline(online: boolean): void;
   /** "내 위치" 버튼: 내 위치로 옮기고 다시 따라간다 */
   locate(me: MapFix): void;
+  /** 위치 공유 중인 친구 (점과 닉네임) */
+  setFriends(list: FriendMarker[]): void;
+  /** 친구들(과 나)이 다 보이게 */
+  fitFriends(me: MapFix | null): void;
   /** 타일을 보여주는 중인지 (시험용) */
   tilesShown(): boolean;
   /** Leaflet 지도 (시험용) */
@@ -37,7 +50,9 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
   map.attributionControl.setPrefix(false);
   const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
   const courseLayer = L.layerGroup().addTo(map);
+  const friendLayer = L.layerGroup().addTo(map);
   const meLayer = L.layerGroup().addTo(map);
+  let friends: FriendMarker[] = [];
   map.setView([36.5, 127.8], 7); // 처음엔 남한 전체 (위치·코스가 오면 바로 옮긴다)
 
   let shown = false;
@@ -148,6 +163,28 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     },
     setOnline(online) {
       showTiles(online);
+    },
+    setFriends(list) {
+      friends = list;
+      friendLayer.clearLayers();
+      for (const f of list) {
+        const stale = f.ageMs > 30_000;
+        const at = L.latLng(f.lat, f.lon);
+        L.circleMarker(at, { radius: 7, color: '#0d0e10', weight: 2, fillColor: '#5cb8ff', fillOpacity: stale ? 0.45 : 1, opacity: stale ? 0.45 : 1, interactive: false }).addTo(friendLayer);
+        const label = document.createElement('span');
+        label.textContent = f.nickname; // 닉네임은 글자로만 (HTML로 해석하지 않는다)
+        L.marker(at, { icon: L.divIcon({ className: `map-label friend${stale ? ' stale' : ''}`, html: label, iconSize: [120, 16], iconAnchor: [60, 26] }), interactive: false, keyboard: false }).addTo(friendLayer);
+      }
+    },
+    fitFriends(me) {
+      const pts = friends.map((f) => L.latLng(f.lat, f.lon));
+      if (me) pts.push(L.latLng(me.lat, me.lon));
+      if (pts.length === 0) return;
+      userMoved = true; // 친구를 보는 동안은 내 위치를 따라가지 않는다 ("내 위치"를 누르면 다시)
+      move(() => {
+        if (pts.length === 1) map.setView(pts[0]!, 16, { animate: false });
+        else map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: false });
+      });
     },
     locate(me) {
       userMoved = false;

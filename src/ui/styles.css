@@ -604,6 +604,8 @@ html.app-h .modal-backdrop {
 
 .main-map {
   position: relative;
+  /* Leaflet의 z-index(400~1000)가 지도 밖(안내 창 등) 위로 올라오지 않게 가둔다 */
+  isolation: isolate;
   flex: 1;
   min-height: 240px;
   overflow: hidden;
@@ -1370,6 +1372,143 @@ html.app-h .modal-backdrop {
 }
 
 .btn:disabled {
+  opacity: 0.5;
+}
+
+.btn.small {
+  min-height: 44px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.btn.danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* 설정 · 친구 */
+.friend-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.friend-code {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.friend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.friend-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--card-line);
+}
+
+.friend-name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-list .sub.sharing {
+  color: #5cb8ff;
+}
+
+/* 메인 지도 위 버튼들: 왼쪽 위 (위치 공유, 안내), 왼쪽 아래 (공유 중인 친구 N명) */
+.map-controls {
+  position: absolute;
+  z-index: 1000;
+  left: calc(10px + var(--safe-l));
+  top: 10px;
+  right: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.map-controls > * {
+  pointer-events: auto;
+}
+
+.map-controls .map-chip {
+  position: static;
+}
+
+.map-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--card-line);
+  background: rgba(23, 25, 28, 0.92);
+  color: var(--fg-2);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.map-share .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg-off);
+}
+
+.map-share[aria-pressed='true'] {
+  border-color: #5cb8ff;
+  color: #5cb8ff;
+}
+
+.map-share[aria-pressed='true'] .dot {
+  background: #5cb8ff;
+  box-shadow: 0 0 0 4px rgba(92, 184, 255, 0.25);
+}
+
+.map-friends {
+  position: absolute;
+  z-index: 1000;
+  left: calc(10px + var(--safe-l));
+  bottom: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(92, 184, 255, 0.5);
+  background: rgba(23, 25, 28, 0.92);
+  color: #5cb8ff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.map-label.friend {
+  color: #5cb8ff;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 0 3px #000;
+}
+
+.map-label.friend.stale {
   opacity: 0.5;
 }
 

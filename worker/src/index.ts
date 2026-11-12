@@ -6,10 +6,17 @@
 //   PUT /api/sessions/{id}               세션 올리기
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
 //   PUT/GET/HEAD /files/{userId}/{sessionId}.{raw|processed}.json.gz
+//   GET /api/friends                     내 친구 코드와 친구 목록 (M8)
+//   POST /api/friends {code}             친구 코드로 친구 맺기 (바로 서로 친구)
+//   DELETE /api/friends/{id}             친구 끊기 (양쪽 모두)
+//   GET /api/friends/presence            위치 공유 중인 친구의 위치 (2분 안에 받은 것만)
+//   PUT /api/presence {lat, lon, …}      내 위치 공유 (마지막 하나만 저장)
+//   DELETE /api/presence                 공유 끄기 (지운다)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 413 너무 큼, 429 가입 제한
 import { authenticate, signup, validNickname } from './auth';
 import { getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
+import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { corsHeaders, errorResponse, HttpError, json, readJson, UUID_RE } from './http';
 
 /** 표 API 본문 최대 크기 (긴 코스 중심선, 랩 trace 묶음) */
@@ -25,7 +32,7 @@ export async function handle(req: Request, env: Cloudflare.Env): Promise<Respons
     return await route(req, env, headers);
   } catch (e) {
     if (e instanceof HttpError) {
-      if (e.status === 405) headers.set('Allow', 'GET, PUT, POST, HEAD, OPTIONS');
+      if (e.status === 405) headers.set('Allow', 'GET, PUT, POST, DELETE, HEAD, OPTIONS');
       return req.method === 'HEAD' ? new Response(null, { status: e.status, headers }) : errorResponse(e.status, headers, e.message);
     }
     console.error(e);
@@ -79,6 +86,31 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers): Promi
     const userId = await authenticate(req, env);
     const body = await readJson(req, MAX_JSON_BYTES);
     return json(200, headers, session[2] ? await putLaps(env, userId, id.toLowerCase(), body) : await putSession(env, userId, id.toLowerCase(), body));
+  }
+
+  if (path === '/api/friends') {
+    const userId = await authenticate(req, env);
+    if (method === 'GET') return json(200, headers, await listFriends(env, userId));
+    if (method === 'POST') return json(200, headers, await addFriend(env, userId, await readJson(req, 4096)));
+    throw new HttpError(405);
+  }
+
+  if (path === '/api/friends/presence') {
+    if (method !== 'GET') throw new HttpError(405);
+    return json(200, headers, await friendPresence(env, await authenticate(req, env)));
+  }
+
+  const friend = /^\/api\/friends\/([^/]+)$/.exec(path);
+  if (friend) {
+    if (method !== 'DELETE') throw new HttpError(405);
+    return json(200, headers, await removeFriend(env, await authenticate(req, env), friend[1]!));
+  }
+
+  if (path === '/api/presence') {
+    const userId = await authenticate(req, env);
+    if (method === 'PUT') return json(200, headers, await putPresence(env, userId, await readJson(req, 4096)));
+    if (method === 'DELETE') return json(200, headers, await deletePresence(env, userId));
+    throw new HttpError(405);
   }
 
   throw new HttpError(404, '없는 주소');
