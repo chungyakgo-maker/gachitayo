@@ -39,7 +39,7 @@ export function WelcomeScreen() {
       <section className="card status-list" aria-label="안내">
         <div className="status-item">
           <div className="status-head">
-            <IconPin color="#FFB224" />
+            <IconPin color="#aacae6" />
             <strong>위치·모션 권한</strong>
           </div>
           <span className="dim" style={{ fontSize: 13, lineHeight: 1.6 }}>
@@ -48,7 +48,7 @@ export function WelcomeScreen() {
         </div>
         <div className="status-item">
           <div className="status-head">
-            <IconPhone color="#FFB224" />
+            <IconPhone color="#aacae6" />
             <strong>홈 화면에 추가</strong>
             {standalone() && <span style={{ color: '#3EE08F' }}>홈 화면 앱으로 실행 중</span>}
           </div>
@@ -59,7 +59,7 @@ export function WelcomeScreen() {
         </div>
         <div className="status-item">
           <label className="status-head" style={{ cursor: 'pointer' }}>
-            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} style={{ width: 22, height: 22, accentColor: '#FFB224' }} />
+            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} style={{ width: 22, height: 22, accentColor: '#aacae6' }} />
             <strong style={{ fontSize: 14, lineHeight: 1.5 }}>공도에서는 교통법규를 지키고, 주행 중에는 앱을 조작하지 않겠습니다.</strong>
           </label>
         </div>

@@ -111,20 +111,20 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     vi.useRealTimers();
   });
 
-  it('종료는 2초 길게 눌러야 한다', () => {
+  it('종료는 1초 길게 눌러야 한다 (사용자 요청으로 2초에서 줄임)', () => {
     vi.useFakeTimers();
     const onEnd = vi.fn();
     render(<DriveView {...props({ onEnd })} />);
     const btn = screen.getByRole('button', { name: /길게 눌러 종료/ });
     fireEvent.pointerDown(btn, { pointerId: 1 });
     act(() => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(700);
     });
     fireEvent.pointerUp(btn, { pointerId: 1 });
     expect(onEnd).not.toHaveBeenCalled();
     fireEvent.pointerDown(btn, { pointerId: 1 });
     act(() => {
-      vi.advanceTimersByTime(2100);
+      vi.advanceTimersByTime(1100);
     });
     expect(onEnd).toHaveBeenCalledTimes(1);
     vi.useRealTimers();

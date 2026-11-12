@@ -59,38 +59,50 @@ export function MainScreen() {
             {drive.phase === 'idle' ? '센서 기록 테스트가 진행 중이에요 · 돌아가기' : drive.replay ? '재생 중이에요 · 돌아가기' : '진행 중인 주행이 있어요 · 돌아가기'}
           </a>
         )}
-        <div className="card card-row">
-          <div className="card-col">
-            <span className="label-row">
-              <IconPin size={14} />
-              {course ? '현재 위치에서 감지됨' : fix ? '근처에 저장된 코스 없음' : '현재 위치 확인 중'}
-            </span>
-            <span className="title">{course ? course.name : '새 코스'}</span>
-            <span className="sub">
-              {course ? (
-                <>
-                  {course.kind === 'loop' ? '랩' : '편도'} · {formatLength(course.lengthM)}
-                  {best[course.id] != null && (
-                    <>
-                      {' · 내 베스트 '}
-                      <span className="mono">{formatLapTime(best[course.id]!, 3)}</span>
-                    </>
-                  )}
-                </>
-              ) : permission === 'denied' ? (
-                '위치 권한이 꺼져 있어요. 설정에서 허용해 주세요'
-              ) : permission !== 'granted' && !fix ? (
-                '주행 시작을 누르면 위치 권한을 물어봐요'
-              ) : (
-                '달리면 자동으로 코스를 만들어요'
-              )}
-            </span>
-          </div>
+        {course ? (
+          <div className="card card-row">
+            <div className="card-col">
+              <span className="label-row">
+                <IconPin size={14} />
+                현재 위치에서 감지됨
+              </span>
+              <span className="title">{course.name}</span>
+              <span className="sub">
+                {course.kind === 'loop' ? '랩' : '편도'} · {formatLength(course.lengthM)}
+                {best[course.id] != null && (
+                  <>
+                    {' · 내 베스트 '}
+                    <span className="mono">{formatLapTime(best[course.id]!, 3)}</span>
+                  </>
+                )}
+              </span>
+            </div>
           <span className="gps-badge">
             <IconGps size={16} color={fix ? (fix.hAcc <= 10 ? '#3EE08F' : '#FFB224') : '#5E656D'} />
             GPS <span className="mono">{fix ? `${Math.round(fix.hAcc)}m` : '—'}</span>
           </span>
-        </div>
+          </div>
+        ) : (
+          // 근처에 코스가 없으면 한 줄로 작게 (사용자 요청)
+          <div className="card compact" aria-label="새 코스">
+            <div className="card-row">
+              <span className="label-row compact-line">
+                <IconPin size={14} />
+                <strong>새 코스</strong>
+                <span className="dim">· {fix ? '근처 코스 없음' : '위치 확인 중'}</span>
+              </span>
+              <span className="gps-badge">
+                <IconGps size={16} color={fix ? (fix.hAcc <= 10 ? '#3EE08F' : '#FFB224') : '#5E656D'} />
+                GPS <span className="mono">{fix ? `${Math.round(fix.hAcc)}m` : '—'}</span>
+              </span>
+            </div>
+            {permission === 'denied' ? (
+              <span className="sub">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>
+            ) : permission !== 'granted' && !fix ? (
+              <span className="sub">주행 시작을 누르면 위치 권한을 물어봐요</span>
+            ) : null}
+          </div>
+        )}
         {acc.status === 'none' && acc.lost && (
           <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>
             <IconWarn size={20} />

@@ -29,7 +29,7 @@ const STYLE = {
 export function CourseMap({ course, me, ghost, path, variant, insetBottom = 0, label }: CourseMapProps) {
   const { ref, width: W, height: H } = useElementSize<HTMLDivElement>();
   const st = STYLE[variant];
-  const accent = '#FFB224';
+  const accent = '#aacae6';
 
   const line = useMemo<XY[]>(() => {
     if (!course?.centerline) return [];

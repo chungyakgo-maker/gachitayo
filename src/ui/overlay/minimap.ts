@@ -180,7 +180,7 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     ctx.setLineDash([]);
     ctx.beginPath();
     ctx.arc(x, y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = '#5cb8ff';
+    ctx.fillStyle = th.friend;
     ctx.fill();
     ctx.strokeStyle = '#0d0e10';
     ctx.lineWidth = 2;
@@ -188,14 +188,14 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     ctx.font = `700 12px ${th.sans}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#5cb8ff';
+    ctx.fillStyle = th.friend;
     ctx.fillText(opts.friend.label, x, y - 16);
   }
 
   if (f.me) {
     const x = v.X(f.me.x);
     const y = v.Y(f.me.y);
-    ctx.fillStyle = 'rgba(255, 178, 36, 0.16)';
+    ctx.fillStyle = th.accentSoft;
     ctx.beginPath();
     ctx.arc(x, y, f.me.psi !== undefined ? 15 : 16, 0, Math.PI * 2);
     ctx.fill();

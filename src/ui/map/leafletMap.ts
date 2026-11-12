@@ -43,7 +43,8 @@ export interface MainMapController {
   destroy(): void;
 }
 
-const ACCENT = '#ffb224';
+const ACCENT = '#aacae6';
+const FRIEND = '#b78cff';
 
 export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => void): MainMapController {
   const map = L.map(el, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, fadeAnimation: false });
@@ -170,7 +171,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       for (const f of list) {
         const stale = f.ageMs > 30_000;
         const at = L.latLng(f.lat, f.lon);
-        L.circleMarker(at, { radius: 7, color: '#0d0e10', weight: 2, fillColor: '#5cb8ff', fillOpacity: stale ? 0.45 : 1, opacity: stale ? 0.45 : 1, interactive: false }).addTo(friendLayer);
+        L.circleMarker(at, { radius: 7, color: '#0d0e10', weight: 2, fillColor: FRIEND, fillOpacity: stale ? 0.45 : 1, opacity: stale ? 0.45 : 1, interactive: false }).addTo(friendLayer);
         const label = document.createElement('span');
         label.textContent = f.nickname; // 닉네임은 글자로만 (HTML로 해석하지 않는다)
         L.marker(at, { icon: L.divIcon({ className: `map-label friend${stale ? ' stale' : ''}`, html: label, iconSize: [120, 16], iconAnchor: [60, 26] }), interactive: false, keyboard: false }).addTo(friendLayer);

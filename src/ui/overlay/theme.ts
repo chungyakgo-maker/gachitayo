@@ -16,6 +16,10 @@ export interface OverlayTheme {
   tileLine: string;
   cardLine: string;
   accent: string;
+  /** 내 위치 둘레 (강조색 옅게) */
+  accentSoft: string;
+  /** 친구 점·닉네임 */
+  friend: string;
   sans: string;
   mono: string;
 }
@@ -28,7 +32,9 @@ const BASE = {
   tile: '#101114',
   tileLine: '#22262b',
   cardLine: '#2a2e33',
-  accent: '#ffb224',
+  accent: '#aacae6',
+  accentSoft: 'rgba(170, 202, 230, 0.22)',
+  friend: '#b78cff',
   sans: "'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif",
   mono: "'IBM Plex Mono', ui-monospace, Menlo, monospace",
 };

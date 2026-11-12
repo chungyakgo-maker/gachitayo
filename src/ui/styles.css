@@ -1,4 +1,6 @@
-/* 승인된 디자인 시안(2026-11-12)의 색·크기. 사양서 8장: 어두운 배경, 고대비 큰 글씨, 터치 영역 44px 이상 */
+/* 승인된 디자인 시안(2026-11-12)의 색·크기. 사양서 8장: 어두운 배경, 고대비 큰 글씨, 터치 영역 44px 이상.
+   강조색은 사용자 요청으로 노랑(#ffb224)에서 N 퍼포먼스 블루 컨셉의 #AACAE6(사용자가 고른 값)으로 바꿈. 밝은 색이라 그 위 글자는 짙은 남색.
+   경고(--warn)는 노랑 그대로, 친구는 보라(--friend)로 나눈다. */
 :root {
   --bg: #0d0e10;
   --bg-drive: #050506;
@@ -14,8 +16,11 @@
   --fg-dim: #9aa1a9;
   --fg-faint: #8a9199;
   --fg-off: #5e656d;
-  --accent: #ffb224;
-  --on-accent: #1a1200;
+  --accent: #aacae6;
+  --accent-soft: rgba(170, 202, 230, 0.16);
+  --on-accent: #0d1a26;
+  --friend: #b78cff;
+  --friend-soft: rgba(183, 140, 255, 0.25);
   --ok: #3ee08f;
   --warn: #ffb224;
   --bad: #ff5b4f;
@@ -269,6 +274,23 @@ html.app-h .modal-backdrop {
 .title {
   font-size: 18px;
   font-weight: 700;
+}
+
+/* 메인: 근처에 코스가 없을 때의 작은 카드 (한 줄) */
+.card.compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+}
+
+.compact-line {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sub {
@@ -1310,7 +1332,7 @@ html.app-h .modal-backdrop {
   margin: 0 -8px;
   padding: 0 8px;
   border-radius: 8px;
-  background: rgba(255, 178, 36, 0.1);
+  background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
 }
@@ -1469,7 +1491,7 @@ html.app-h .modal-backdrop {
 }
 
 .friend-list .sub.sharing {
-  color: #5cb8ff;
+  color: var(--friend);
 }
 
 /* 메인 지도 위 버튼들: 왼쪽 위 (위치 공유, 안내), 왼쪽 아래 (공유 중인 친구 N명) */
@@ -1517,13 +1539,13 @@ html.app-h .modal-backdrop {
 }
 
 .map-share[aria-pressed='true'] {
-  border-color: #5cb8ff;
-  color: #5cb8ff;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .map-share[aria-pressed='true'] .dot {
-  background: #5cb8ff;
-  box-shadow: 0 0 0 4px rgba(92, 184, 255, 0.25);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 .map-friends {
@@ -1534,9 +1556,9 @@ html.app-h .modal-backdrop {
   min-height: 40px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(92, 184, 255, 0.5);
+  border: 1px solid var(--friend-soft);
   background: rgba(23, 25, 28, 0.92);
-  color: #5cb8ff;
+  color: var(--friend);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -1573,7 +1595,7 @@ html.app-h .modal-backdrop {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5cb8ff;
+  background: var(--friend);
 }
 
 .stepper {
@@ -1603,7 +1625,7 @@ html.app-h .modal-backdrop {
 }
 
 .map-label.friend {
-  color: #5cb8ff;
+  color: var(--friend);
   font-size: 12px;
   font-weight: 700;
   text-shadow: 0 0 3px #000;

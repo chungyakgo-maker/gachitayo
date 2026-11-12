@@ -164,7 +164,7 @@ export function PrepareScreen() {
         </div>
         <div className="status-item">
           <div className="status-head">
-            <IconPhone color="#FFB224" />
+            <IconPhone color="#aacae6" />
             <strong>거치 보정</strong>
             <span style={{ color: mount.right === '완료' ? '#3EE08F' : 'var(--accent)' }}>{mount.right}</span>
           </div>
