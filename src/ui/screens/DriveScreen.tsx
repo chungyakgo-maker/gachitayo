@@ -1,17 +1,22 @@
 // 주행 화면 (사양서 8.4, 디자인 시안 DriveMap·DriveMinimal·DriveDashboard)
 // 두 번 탭하면 모드 전환(지도 → 미니멀 → 대시보드), 2초 길게 눌러 종료. 그 밖의 터치는 무시한다.
-import { useRef } from 'react';
+// 지도 모드의 델타·고른 값·미니맵은 오버레이 그리기 함수(src/ui/overlay)로 캔버스에 그린다 (사양서 13.1 확장 지점).
+import { useMemo, useRef } from 'react';
 import { cycleDriveMode, endDrive, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { useSettings, WIDGET_LABEL, type DriveMode, type Settings, type WidgetId } from '../../app/settings';
+import { useSettings, type DriveMode, type Settings, type WidgetId } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { LiveState } from '../../engine/live/liveEngine';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
-import { CourseMap } from '../components/CourseMap';
-import { GMeter, gLabel } from '../components/GMeter';
+import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
+import { OverlayCanvas } from '../components/OverlayCanvas';
 import { formatDelta, formatLapTime } from '../format';
 import { IconGps } from '../icons';
+import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
+import { frameFromLive, gLabel, headline, widgetValue, type OverlayFrame } from '../overlay/frame';
+import { drawMiniMap, mapModel } from '../overlay/minimap';
+import { overlayTheme, type OverlayTheme } from '../overlay/theme';
 
 export interface DriveViewProps {
   snap: LiveSnapshot | null;
@@ -30,22 +35,12 @@ const DOUBLE_TAP_MS = 350;
 const LAP_FLASH_MS = 3000;
 
 const deltaClass = (d: number | null) => (d === null ? '' : d < 0 ? 'fast' : d > 0 ? 'slow' : '');
-const deltaWord = (d: number | null) => (d === null ? '' : d < 0 ? '빠름' : d > 0 ? '느림' : '같음');
 const kmh = (v: number | null | undefined) => (v === null || v === undefined ? '—' : String(Math.round(v)));
 
 /** 섹터 시간: 1분 미만이면 41.803, 넘으면 1:02.345 */
 function sectorTime(ms: number | null): string {
   if (ms === null) return '—';
   return ms < 60_000 ? (Math.floor(ms) / 1000).toFixed(3) : formatLapTime(ms, 3);
-}
-
-/** 델타 패널에 보여줄 것: 첫 주행이면 출발 뒤 경과, 아니면 델타 */
-function headline(st: LiveState | null, course: Course | null, ref: RefLapRecord | null) {
-  if (!course) return { label: '코스 기록 중 · 출발 뒤', text: formatLapTime(st?.lapElapsedMs ?? null, 1), cls: '', word: '' };
-  if (!ref) return { label: '비교 랩 없음', text: '—', cls: '', word: '' };
-  if (!st || st.lapNo === 0) return { label: '출발선을 지나면 시작', text: '—', cls: '', word: '' };
-  const d = st.delta;
-  return { label: '베스트 대비', text: formatDelta(d), cls: deltaClass(d), word: deltaWord(d) };
 }
 
 function StatusBar({ snap, mode, course, replay }: { snap: LiveSnapshot | null; mode: DriveMode; course: Course | null; replay: DriveState['replay'] }) {
@@ -76,61 +71,22 @@ function StatusBar({ snap, mode, course, replay }: { snap: LiveSnapshot | null; 
   );
 }
 
-function Widget({ id, st, snap }: { id: WidgetId; st: LiveState | null; snap: LiveSnapshot | null }) {
+/** 지도 모드 상단의 고른 값 한 칸 (캔버스) */
+function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th: OverlayTheme }) {
   if (id === 'g') {
-    const l = gLabel(st?.gx ?? null, st?.gy ?? null);
-    return (
-      <div className="tile g">
-        <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} size={64} />
-        <div className="card-col" style={{ gap: 2 }}>
-          <span className="label">G</span>
-          <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>
-            {l.lat} <span className="mono" style={{ color: 'var(--fg)' }}>{l.latV}</span>
-          </span>
-          <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>
-            {l.long} <span className="mono" style={{ color: 'var(--fg)' }}>{l.longV}</span>
-          </span>
-        </div>
-      </div>
-    );
+    return <OverlayCanvas className="tile g" label={gMeterLabel(frame)} draw={(ctx, w, h) => drawGTile(ctx, w, h, frame, th)} />;
   }
-  let value: string;
-  let unit = '';
-  let cls = '';
-  if (id === 'speed') {
-    value = kmh(st?.speedKmh ?? (snap ? 0 : null));
-    unit = 'km/h';
-  } else if (id === 'vmax') {
-    value = kmh(st?.maxSpeedKmh);
-    unit = 'km/h';
-  } else if (id === 'lap') {
-    value = formatLapTime(st?.lapElapsedMs ?? null, 1);
-  } else if (id === 'lapno') {
-    value = st && st.lapNo > 0 ? String(st.lapNo) : '—';
-    unit = st && st.lapNo > 0 ? '랩' : '';
-  } else {
-    const i = st?.currentSector ?? null;
-    const d = i === null ? null : (st?.sectorDeltas[i] ?? null);
-    value = i === null ? '—' : `S${i + 1} ${formatDelta(d)}`;
-    cls = deltaClass(d);
-  }
-  return (
-    <div className="tile">
-      <span className="label">{WIDGET_LABEL[id]}</span>
-      <span className={`tile-big ${cls}`} style={id === 'sector' ? { fontSize: 30 } : undefined}>
-        <span className={id === 'sector' ? `sector-delta ${cls}` : ''} style={id === 'sector' ? { fontSize: 'inherit' } : undefined}>
-          {value}
-        </span>
-        {unit && <small>{unit}</small>}
-      </span>
-    </div>
-  );
+  const v = widgetValue(id, frame);
+  return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
 export function DriveView({ snap, course, refLap, mode, settings, replay, error, onCycle, onEnd }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   const st = snap?.state ?? null;
-  const h = headline(st, course, refLap);
+  const frame = frameFromLive(snap, course !== null, refLap !== null);
+  const hl = headline(frame);
+  const h = { label: hl.label, text: hl.text, word: hl.word, cls: hl.tone === 'none' ? '' : hl.tone };
+  const th = useMemo(() => overlayTheme(settings.deltaPalette), [settings.deltaPalette]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.end-btn')) return;
@@ -299,48 +255,28 @@ export function DriveView({ snap, course, refLap, mode, settings, replay, error,
     );
   }
 
-  // 지도 모드
+  // 지도 모드: 델타·고른 값·미니맵은 캔버스 (겉모습은 시안 그대로)
+  const lapText = lapNo ? `랩 ${lapNo}` : '랩';
+  const deltaLabel = `${h.label}${h.word ? ` · ${h.word}` : ''} ${h.text}${course ? `, ${lapText} ${formatLapTime(st?.lapElapsedMs ?? null, 1)}` : ''}`;
+  const model = mapModel(course);
   return (
     <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
       <div className="drive-pad">
-        <div className={`delta-panel delta-map ${h.cls}`}>
-          <div className="card-col">
-            <span style={{ fontSize: 13, color: 'var(--fg-2)' }}>
-              {h.label}
-              {h.word && (
-                <>
-                  {' · '}
-                  <b className={`delta-word ${h.cls}`}>{h.word}</b>
-                </>
-              )}
-            </span>
-            <span className="delta-text" style={!course ? { color: 'var(--fg)' } : undefined}>
-              {h.text}
-            </span>
-          </div>
-          {course && (
-            <div className="card-col" style={{ alignItems: 'flex-end' }}>
-              <span className="label">{lapNo ? `랩 ${lapNo}` : '랩'}</span>
-              <span className="mono" style={{ fontSize: 24, fontWeight: 500 }}>
-                {formatLapTime(st?.lapElapsedMs ?? null, 1)}
-              </span>
-            </div>
-          )}
-        </div>
+        <OverlayCanvas
+          className={`delta-panel delta-map ${h.cls}`}
+          label={deltaLabel}
+          draw={(ctx, w, hh) => drawDeltaPanel(ctx, w, hh, frame, th, { deltaPx: hh >= 104 ? 64 : 48 })}
+        />
         <div className="widget-row">
-          <Widget id={settings.widgets[0]} st={st} snap={snap} />
-          <Widget id={settings.widgets[1]} st={st} snap={snap} />
+          <WidgetCanvas id={settings.widgets[0]} frame={frame} th={th} />
+          <WidgetCanvas id={settings.widgets[1]} frame={frame} th={th} />
         </div>
       </div>
       <div className="drive-map">
-        <CourseMap
-          variant="drive"
-          course={course}
-          me={snap?.pos ?? null}
-          ghost={course && refLap ? (snap?.ghost ?? null) : null}
-          path={course ? undefined : snap?.path}
-          insetBottom={120}
-          label="코스 지도: 내 위치와 베스트 고스트"
+        <OverlayCanvas
+          style={{ position: 'absolute', inset: 0 }}
+          label={frame.ghost ? '코스 지도: 내 위치와 베스트 고스트' : '코스 지도: 내 위치'}
+          draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120 })}
         />
         <div className="drive-bottom">
           <StatusBar snap={snap} mode={mode} course={course} replay={replay} />

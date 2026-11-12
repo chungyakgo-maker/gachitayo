@@ -724,16 +724,12 @@ a {
   color: var(--slow);
 }
 
+/* 지도 모드 델타 패널: 내용은 캔버스가 그린다 (overlay/draw.ts) */
 .delta-map {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+  height: 112px;
+  flex-shrink: 0;
 }
 
-.delta-map .delta-text {
-  font-size: 64px;
-}
 
 .widget-row {
   display: grid;
@@ -1025,8 +1021,8 @@ a {
     border-top: 0;
     border-left: 1px solid #1a1d21;
   }
-  .delta-map .delta-text {
-    font-size: 48px;
+  .delta-map {
+    height: 92px;
   }
   .dash-delta {
     height: 110px;

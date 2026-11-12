@@ -1,19 +1,14 @@
 // G미터: 원 안에서 움직이는 점 (사양서 8.4). 바깥 원 1 g, 안쪽 원 0.5 g. 위가 제동, 왼쪽이 좌.
+// 대시보드 모드용 SVG. 지도 모드는 같은 모양을 캔버스로 그린다 (overlay/draw.ts drawGMeter)
+import { gLabel } from '../overlay/frame';
+
+export { gLabel };
 export interface GMeterProps {
   /** 앞(+)·뒤 g */
   gx: number | null;
   /** 왼쪽(+)·오른쪽 g */
   gy: number | null;
   size: number;
-}
-
-export function gLabel(gx: number | null, gy: number | null): { lat: string; long: string; latV: string; longV: string } {
-  return {
-    lat: gy !== null && gy < 0 ? '우' : '좌',
-    latV: gy === null ? '—' : Math.abs(gy).toFixed(2),
-    long: gx !== null && gx > 0 ? '가속' : '제동',
-    longV: gx === null ? '—' : Math.abs(gx).toFixed(2),
-  };
 }
 
 export function GMeter({ gx, gy, size }: GMeterProps) {

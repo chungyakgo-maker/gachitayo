@@ -73,23 +73,21 @@ const props = (p: Partial<DriveViewProps> = {}): DriveViewProps => ({
 });
 
 describe('주행 화면 (사양서 8.4, 시안)', () => {
-  it('지도 모드: 델타(빠름, 둘째 자리), 랩·진행 중 랩타임(첫째 자리), 상단 두 칸(G미터·속도), 고스트', () => {
+  it('지도 모드: 델타·랩·상단 두 칸·미니맵을 캔버스로 그린다 (사양서 8.4, 13.1 오버레이 함수)', () => {
     render(<DriveView {...props()} />);
-    expect(screen.getByText('−0.31')).toBeInTheDocument();
-    expect(screen.getByText('빠름')).toBeInTheDocument();
-    expect(screen.getByText('랩 4')).toBeInTheDocument();
-    expect(screen.getByText('1:12.4')).toBeInTheDocument();
+    const delta = screen.getByRole('img', { name: '베스트 대비 · 빠름 −0.31, 랩 4 1:12.4' });
+    expect(delta.closest('.delta-panel')).toHaveClass('fast');
     expect(screen.getByRole('img', { name: /G미터: 좌 0.82g, 제동 0.31g/ })).toBeInTheDocument();
-    expect(screen.getByText('142')).toBeInTheDocument();
-    expect(screen.getByText('베스트 고스트')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '속도 142 km/h' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '코스 지도: 내 위치와 베스트 고스트' })).toBeInTheDocument();
     expect(screen.getByText('두 번 탭하면 미니멀')).toBeInTheDocument();
-    expect(screen.getByText('−0.31').closest('.delta-panel')).toHaveClass('fast');
   });
 
-  it('느리면 느림 색', () => {
-    render(<DriveView {...props({ snap: snap(state({ delta: 0.425 })) })} />);
-    expect(screen.getByText('+0.43').closest('.delta-panel')).toHaveClass('slow');
-    expect(screen.getByText('느림')).toBeInTheDocument();
+  it('느리면 느림 색, 고른 값은 설정을 따른다', () => {
+    render(<DriveView {...props({ snap: snap(state({ delta: 0.425 })), settings: { ...DEFAULT_SETTINGS, widgets: ['sector', 'vmax'] } })} />);
+    expect(screen.getByRole('img', { name: /베스트 대비 · 느림 \+0.43/ }).closest('.delta-panel')).toHaveClass('slow');
+    expect(screen.getByRole('img', { name: '구간 기록 S2 −0.19' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '최고 속도 186 km/h' })).toBeInTheDocument();
   });
 
   it('두 번 탭하면 다음 모드, 한 번은 무시', () => {
@@ -155,7 +153,8 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
   it('첫 주행(코스 없음): 델타 대신 출발 뒤 경과 시간과 "코스 기록 중"', () => {
     render(<DriveView {...props({ course: null, refLap: null, snap: snap(state({ delta: null, lapNo: 0, status: { gpsWeak: false, offCourse: false, gNotCalibrated: false, courseRecording: true } })) })} />);
     expect(screen.getAllByText(/코스 기록 중/).length).toBeGreaterThan(0);
-    expect(screen.queryByText('베스트 고스트')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /^코스 기록 중 · 출발 뒤 1:12.4$/ })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '코스 지도: 내 위치' })).toBeInTheDocument();
   });
 
   it('GPS 약함·코스 이탈 상태를 보여준다', () => {
