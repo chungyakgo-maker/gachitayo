@@ -1,0 +1,10 @@
+# 파일 게이트웨이 (사양서 6.6): 웹앱은 R2에 직접 접근하지 않고 이 Worker를 거친다.
+# SUPABASE_URL, ALLOWED_ORIGIN은 배포 때 GitHub Actions 변수에서 넣는다 (.github/workflows/ci.yml).
+# 예전 방식(대칭 키) 프로젝트면 SUPABASE_JWT_SECRET 비밀값도 배포 때 넣는다.
+name = "gachitayo-files"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[[r2_buckets]]
+binding = "SESSION_FILES"
+bucket_name = "gachitayo-sessions"
