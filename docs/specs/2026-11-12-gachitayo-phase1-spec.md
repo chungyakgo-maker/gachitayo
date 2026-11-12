@@ -259,7 +259,7 @@ docs/specs/
 | `results` | 세션별 랩·구간·축약 데이터·처리된 궤적 |
 | `courses` | 서버 코스 캐시와 아직 업로드하지 않은 로컬 코스 |
 | `refLaps` | 비교 랩 축약 데이터 캐시 (코스별) |
-| `uploadQueue` | 종류, 대상 id, 시도 횟수, 마지막 오류 |
+| `uploadQueue` | 종류(`session` 올리기, `session-delete` 서버에서 지우기), 대상 id, 시도 횟수, 마지막 오류 |
 
 - `status` 값: `recording`, `interrupted`, `finished`, `processed`, `uploaded`
 - 업로드가 끝난 세션의 원본(`chunks`)은 7일 뒤 폰에서 정리한다. 서버 사본은 계속 유지한다.
@@ -333,7 +333,7 @@ docs/specs/
 
 - 업로드는 id 기준 upsert로 한다. 같은 세션을 다시 올려도 중복이 생기지 않는다. 다른 사람의 id면 403이다. 랩은 `(session_id, lap_no)`가 기본 키이고, 세션의 랩을 한 번에(트랜잭션) 통째로 바꿔서 다시 처리해 랩이 줄어도 옛 랩이 남지 않는다.
 - 세션의 `course_id`는 본인 코스만, `raw_key`·`processed_key`는 본인 폴더의 그 세션 파일만 가리킬 수 있다.
-- **API** (`Authorization: Bearer <폰 열쇠>`): `POST /auth/signup {nickname}` → `{userId, token}`, `GET·PUT /api/me`, `GET /api/courses`, `PUT /api/courses/{id}`, `PUT /api/sessions/{id}`, `PUT /api/sessions/{id}/laps`. 친구(M8): `GET /api/friends`(내 코드·친구 목록), `POST /api/friends {code}`, `DELETE /api/friends/{id}`, `GET /api/friends/presence`, `PUT·DELETE /api/presence`. 앞 친구 간격(M9): `GET /live/{userId}` WebSocket (열쇠는 하위 프로토콜 `['gachitayo', 열쇠]`로, 브라우저 WebSocket은 머리글을 못 붙여서). 본인 방이면 보내기, 친구 방이면 받기, 친구가 아니면 403. 응답 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것, 404, 413, 429 가입 제한·친구 코드 짐작 제한.
+- **API** (`Authorization: Bearer <폰 열쇠>`): `POST /auth/signup {nickname}` → `{userId, token}`, `GET·PUT /api/me`, `GET /api/courses`, `PUT /api/courses/{id}`, `PUT /api/sessions/{id}`, `PUT /api/sessions/{id}/laps`, `DELETE /api/sessions/{id}`(기록 지우기: 랩·세션 행과 원본·처리된 파일, 서버에 없어도 성공, M10). 친구(M8): `GET /api/friends`(내 코드·친구 목록), `POST /api/friends {code}`, `DELETE /api/friends/{id}`, `GET /api/friends/presence`, `PUT·DELETE /api/presence`. 앞 친구 간격(M9): `GET /live/{userId}` WebSocket (열쇠는 하위 프로토콜 `['gachitayo', 열쇠]`로, 브라우저 WebSocket은 머리글을 못 붙여서). 본인 방이면 보내기, 친구 방이면 받기, 친구가 아니면 403. 응답 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것, 404, 413, 429 가입 제한·친구 코드 짐작 제한.
 
 **친구 (M8, `worker/migrations/0002_friends.sql`)**
 - `users.friend_code`: 8자리(헷갈리는 0·O·1·I·L 없는 31글자, 약 8.5×10¹¹가지), 처음 친구 화면을 열 때 만든다. 화면에는 `K7P2-Q9XM`처럼 4자리씩 보여주고, 넣을 때는 소문자·하이픈·공백을 다듬는다.
@@ -692,6 +692,12 @@ docs/specs/
 - "홈으로", "분석 보기" (분석 화면이 생기면)
 
 ### 8.6 분석
+
+**기록 지우기 (M10, 사용자 요청):** 기록 탭 목록의 각 줄 오른쪽 휴지통 → 확인 창("폰과 서버에서 모두 지워요. 되돌릴 수 없어요") → 지우기.
+- 폰: 세션, 원본 덩어리, 처리 결과, 비교 랩을 지운다. 그 랩이 비교 랩(베스트)이었으면 다음으로 빠른 랩이 비교 랩이 된다. 코스는 남는다.
+- 서버: 올리기 대기를 빼고 "서버에서 지우기"를 대기열에 넣는다. 통신이 없으면 연결될 때 지운다(재시도 간격은 올리기와 같음).
+- 기록 중인 주행은 지울 수 없다.
+
 - **랩 목록:** 랩타임, 구간 기록, 베스트·무효 표시, 이론상 베스트
 - **두 랩 비교 (같은 세션 또는 같은 코스의 다른 세션):**
   - 속도, 델타, 고도 그래프. 가로축은 코스 거리다.
@@ -949,3 +955,4 @@ docs/specs/
 | 2026-11-12 | 앞 친구 간격(초)을 3단계에서 1단계로 앞당김 (사용자 결정: 어디서나·목표 1초 이상·처음 안전 안내, 큰 델타 자리에 표시): 2장, 6.5 실시간 방, 8.3 준비, 8.3.1, 8.4, 12장 (M9) |
 | 2026-11-12 | 나중 반영 항목 기록 (사용자 요청): 3단계 방장이 그룹 주행 순서·차간 목표 간격을 정하고 방 인원끼리 공유, 2단계 로그인 뒤 개인 정보(이름·차종 등) (2장) |
 | 2026-11-12 | 사용자 요청: 강조색을 `#AACAE6`(N 퍼포먼스 블루 컨셉)으로, 친구 보라·경고 노랑으로 나눔, 길게 눌러 종료 1초, 메인 새 코스 카드 한 줄 (8장, 8.2, 8.4) |
+| 2026-11-12 | 기록 지우기 (사용자 요청): 6.4 대기열 종류, 6.5 DELETE /api/sessions/{id}, 8.6 (M10) |

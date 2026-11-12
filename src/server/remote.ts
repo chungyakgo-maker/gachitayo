@@ -22,6 +22,7 @@ export function createRemote(): Remote {
     upsertCourse: (row) => call('PUT', `/api/courses/${row.id}`, row, '코스 저장'),
     upsertSession: (row) => call('PUT', `/api/sessions/${row.id}`, row, '세션 저장'),
     replaceLaps: (sessionId, rows) => call('PUT', `/api/sessions/${sessionId}/laps`, rows, '랩 저장'),
+    deleteSession: (sessionId) => call('DELETE', `/api/sessions/${sessionId}`, undefined, '기록 지우기'),
     async putFile(key, bytes, token) {
       const r = await fetch(`${serverConfig.apiUrl}/files/${key}`, {
         method: 'PUT',

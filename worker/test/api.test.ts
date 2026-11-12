@@ -154,6 +154,24 @@ describe('기록 표 (사양서 6.5): 본인 행만, 같은 id는 덮어쓰기',
     expect((await call('PUT', `/api/sessions/${SESSION}/laps`, { token: b.token, body: [] })).status).toBe(403);
     expect((await call('PUT', `/api/sessions/${SESSION}/laps`, { token: a.token, body: [lap(1, 1), lap(1, 2)] })).status).toBe(400);
   });
+
+  it('기록 지우기 (M10): 랩·세션 행과 원본·처리된 파일을 지운다. 남의 것은 403, 없는 것도 성공(다시 보내도 됨)', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    await call('PUT', `/api/sessions/${SESSION}`, { token: a.token, body: session(a.userId) });
+    await call('PUT', `/api/sessions/${SESSION}/laps`, { token: a.token, body: [lap(1, 60_000)] });
+    for (const kind of ['raw', 'processed']) await env.SESSION_FILES.put(`${a.userId}/${SESSION}.${kind}.json.gz`, new Uint8Array([1, 2, 3]));
+    expect((await call('DELETE', `/api/sessions/${SESSION}`, { token: b.token })).status).toBe(403);
+    const r = await call('DELETE', `/api/sessions/${SESSION}`, { token: a.token });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ ok: true, existed: true });
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM laps WHERE session_id = ?').bind(SESSION).first('n')).toBe(0);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE id = ?').bind(SESSION).first('n')).toBe(0);
+    expect(await env.SESSION_FILES.head(`${a.userId}/${SESSION}.raw.json.gz`)).toBeNull();
+    expect(await env.SESSION_FILES.head(`${a.userId}/${SESSION}.processed.json.gz`)).toBeNull();
+    expect(await (await call('DELETE', `/api/sessions/${SESSION}`, { token: a.token })).json()).toEqual({ ok: true, existed: false });
+    expect((await call('DELETE', `/api/sessions/${SESSION}/laps`, { token: a.token })).status).toBe(405);
+  });
 });
 
 describe('파일 게이트웨이 (사양서 6.6, 10.1)', () => {

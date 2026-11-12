@@ -5,7 +5,7 @@ import { createRemote } from '../server/remote';
 import { uploadEnabled } from '../server/config';
 import { cleanupUploaded, syncOnce, type SyncDeps } from '../sync/syncEngine';
 import { ensureAccount, getAccountState, subscribeAccount } from './account';
-import { getDriveRepo, getQueueRepo, getRepo, refreshSessions } from './recording';
+import { getDriveRepo, getQueueRepo, getRecordingState, getRepo, refreshSessions } from './recording';
 
 export interface SyncState {
   /** 서버 설정값이 있어 업로드할 수 있는지 */
@@ -76,6 +76,19 @@ export function kickSync(): Promise<void> {
     }
   })();
   return running;
+}
+
+/** 기록 지우기 (M10, 사용자 요청): 폰에서 세션·덩어리·결과·비교 랩을 지우고, 서버에서도 지우도록 대기열에 넣는다.
+ *  통신이 없으면 연결될 때 지운다. 기록 중인 세션은 지울 수 없다 */
+export async function deleteSessionRecord(sessionId: string): Promise<void> {
+  if (getRecordingState().sessionId === sessionId) throw new Error('기록 중인 주행은 지울 수 없어요');
+  await getDriveRepo().deleteSession(sessionId);
+  const q = getQueueRepo();
+  await q.remove(`session:${sessionId}`);
+  if (state.enabled) await q.enqueue('session-delete', sessionId, Date.now());
+  await refreshSessions();
+  await refreshPending();
+  void kickSync();
 }
 
 /** 설정의 "다시 시도": 기다리는 것을 모두 지금 시도한다 */

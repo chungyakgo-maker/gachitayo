@@ -87,6 +87,9 @@ async function setup(remoteOverride: Partial<Remote> = {}) {
       files.set(key, bytes);
     },
     headFile: async (key) => files.get(key)?.byteLength ?? null,
+    deleteSession: async (sid) => {
+      calls.push(`delete ${sid}`);
+    },
     ...remoteOverride,
   };
   let now = 1_800_000_000_000;
@@ -139,6 +142,26 @@ describe('업로드 (사양서 5.4-4, 6.6, 9장)', () => {
       s.files.set(key, bytes);
     };
     expect((await syncOnce(s.deps)).done).toBe(1);
+  });
+
+  it('기록 지우기(M10): 대기열의 지우기 항목은 서버에 지우기를 보내고, 실패하면 다시 시도한다', async () => {
+    const s = await setup({
+      deleteSession: async () => {
+        throw new TypeError('Failed to fetch');
+      },
+    });
+    await s.queue.enqueue('session-delete', SID, s.getNow());
+    let r = await syncOnce(s.deps);
+    expect(r).toMatchObject({ done: 0, failed: 1 });
+    expect((await s.queue.all())[0]).toMatchObject({ kind: 'session-delete', attempts: 1 });
+    s.deps.remote.deleteSession = async (sid) => {
+      s.calls.push(`delete ${sid}`);
+    };
+    s.advance(10_000);
+    r = await syncOnce(s.deps);
+    expect(r).toMatchObject({ done: 1, failed: 0 });
+    expect(s.calls).toEqual([`delete ${SID}`]);
+    expect(await s.queue.count()).toBe(0);
   });
 
   it('백오프: 10초부터 두 배씩, 최대 30분', () => {

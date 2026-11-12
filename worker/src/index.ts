@@ -5,6 +5,7 @@
 //   PUT /api/courses/{id}                코스 올리기 (같은 id면 덮어씀)
 //   PUT /api/sessions/{id}               세션 올리기
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
+//   DELETE /api/sessions/{id}            기록 지우기 (랩·세션 행, 원본·처리된 파일) (M10)
 //   PUT/GET/HEAD /files/{userId}/{sessionId}.{raw|processed}.json.gz
 //   GET /api/friends                     내 친구 코드와 친구 목록 (M8)
 //   POST /api/friends {code}             친구 코드로 친구 맺기 (바로 서로 친구)
@@ -15,7 +16,7 @@
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 413 너무 큼, 429 가입 제한
 import { authenticate, signup, validNickname } from './auth';
-import { getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
+import { deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
@@ -101,8 +102,12 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers): Promi
 
   const session = /^\/api\/sessions\/([^/]+)(\/laps)?$/.exec(path);
   if (session) {
-    if (method !== 'PUT') throw new HttpError(405);
     const id = session[1]!;
+    if (method === 'DELETE' && !session[2]) {
+      if (!UUID_RE.test(id)) throw new HttpError(400, '잘못된 세션 id');
+      return json(200, headers, await deleteSession(env, await authenticate(req, env), id.toLowerCase()));
+    }
+    if (method !== 'PUT') throw new HttpError(405);
     if (!UUID_RE.test(id)) throw new HttpError(400, '잘못된 세션 id');
     const userId = await authenticate(req, env);
     const body = await readJson(req, MAX_JSON_BYTES);

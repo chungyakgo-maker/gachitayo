@@ -19,6 +19,8 @@ export interface Remote {
   putFile(key: string, bytes: Uint8Array<ArrayBuffer>, token: string): Promise<void>;
   /** 파일 크기. 없으면 null */
   headFile(key: string, token: string): Promise<number | null>;
+  /** 기록 지우기: 랩·세션 행과 원본·처리된 파일 (없어도 성공) */
+  deleteSession(sessionId: string): Promise<void>;
 }
 
 export interface SyncDeps {
@@ -49,7 +51,8 @@ export async function syncOnce(deps: SyncDeps): Promise<{ done: number; failed: 
   if (!userId) return { done, failed, lastError };
   for (const item of due) {
     try {
-      await uploadSession(deps, userId, item.targetId);
+      if (item.kind === 'session-delete') await deps.remote.deleteSession(item.targetId);
+      else await uploadSession(deps, userId, item.targetId);
       await deps.queue.remove(item.id);
       done++;
     } catch (e) {

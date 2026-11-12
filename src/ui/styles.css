@@ -616,6 +616,29 @@ html.app-h .modal-backdrop {
   flex-shrink: 0;
 }
 
+/* 기록 목록: 오른쪽 지우기 버튼 */
+.row-with-action {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.row-with-action .row-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-action {
+  flex-shrink: 0;
+  width: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--card-line);
+  background: var(--card);
+  color: var(--fg-dim);
+  display: grid;
+  place-items: center;
+}
+
 /* ── 메인 ─────────────────────────────────── */
 .main-top {
   padding: calc(16px + var(--safe-t)) calc(20px + var(--safe-r)) 16px calc(20px + var(--safe-l));

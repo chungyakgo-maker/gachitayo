@@ -160,6 +160,18 @@ export async function putSession(env: Cloudflare.Env, userId: string, id: string
   return { id };
 }
 
+/** 기록 지우기 (M10, 사용자 요청): 랩·세션 행과 R2의 원본·처리된 파일. 서버에 없는 세션이어도 성공(같은 요청을 다시 보내도 됨) */
+export async function deleteSession(env: Cloudflare.Env, userId: string, id: string) {
+  const owner = await ownerOf(env, 'sessions', id);
+  if (owner !== null && owner !== userId) throw new HttpError(403, '다른 사람의 세션');
+  if (owner !== null) {
+    await env.DB.batch([env.DB.prepare('DELETE FROM laps WHERE session_id = ?').bind(id), env.DB.prepare('DELETE FROM sessions WHERE id = ? AND owner_id = ?').bind(id, userId)]);
+  }
+  // 파일은 본인 폴더의 이 세션 것만 (행 없이 파일만 올라간 경우도 지운다)
+  await env.SESSION_FILES.delete([`${userId}/${id}.raw.json.gz`, `${userId}/${id}.processed.json.gz`]);
+  return { ok: true, existed: owner !== null };
+}
+
 // ── 랩 ───────────────────────────────────────────────
 
 const MAX_LAPS = 500;
