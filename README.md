@@ -7,6 +7,12 @@
 - **구현 계획:** [docs/plans/](docs/plans/)
 - **현재 단계:** 1단계 개발 중 (M1 저장소 뼈대와 자동 배포)
 
+## 처음 한 번 하는 설정
+
+GitHub 저장소 → **Settings** → 왼쪽 **Pages** → **Build and deployment**의 **Source**를 **"GitHub Actions"**로 지정합니다. 이 설정이 없으면 배포 단계가 실패합니다. 설정한 뒤 **Actions** 탭에서 실패한 실행을 열고 **Re-run all jobs**를 누르면 됩니다.
+
+GitHub 무료 플랜에서는 공개 저장소만 Pages를 쓸 수 있습니다.
+
 ## 배포
 
 main에 올라가면 GitHub Actions가 자동으로 다음을 실행합니다. 진행 상황은 저장소의 **Actions** 탭에서 볼 수 있습니다.

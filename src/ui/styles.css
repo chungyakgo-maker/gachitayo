@@ -29,9 +29,6 @@ body {
 
 #root {
   min-height: 100%;
-  /* 아이폰 노치·홈 바 영역 피하기 */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-    env(safe-area-inset-left);
 }
 
 .home {
@@ -41,7 +38,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 24px 16px;
+  /* 아이폰 노치·홈 바 영역을 피하는 여백을 100dvh 안에 포함해서 화면이 스크롤되지 않게 한다 */
+  padding: calc(24px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(24px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
   text-align: center;
 }
 

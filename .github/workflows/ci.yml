@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# 같은 브랜치에 연달아 올리면 이전 실행을 취소한다. 늦게 끝난 옛 커밋이 최신 배포를 덮어쓰지 않게 하기 위해서다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: 타입 검사·테스트
@@ -36,9 +41,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
