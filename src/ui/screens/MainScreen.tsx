@@ -1,4 +1,4 @@
-// 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도 타일 없는 지도.
+// 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도(통신이 되면 OSM 타일, 안 되면 타일 없이).
 // 친구 위치 공유·같이 달리기는 2·3단계라 넣지 않는다.
 import { useEffect, useMemo } from 'react';
 import { beginPrepare, loadCourses, useDrive } from '../../app/drive';
@@ -6,9 +6,8 @@ import { useRecording } from '../../app/recording';
 import { useAccount } from '../../app/account';
 import { useSync } from '../../app/sync';
 import { nearestCourse } from '../../engine/course/nearest';
-import { toLocal } from '../../engine/geo';
 import { buildInfo } from '../buildInfo';
-import { CourseMap } from '../components/CourseMap';
+import { MainMap } from '../components/MainMap';
 import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { formatKst, formatLapTime, formatLength } from '../format';
@@ -31,12 +30,6 @@ export function MainScreen() {
   const near = useMemo(() => (fix ? nearestCourse(drive.courses, fix.lat, fix.lon) : null), [fix, drive.courses]);
   const course = near?.course ?? null;
   const best = useBestTimes(course ? [course] : []);
-  const me = useMemo(() => {
-    if (!fix) return null;
-    const origin = course?.origin ?? { lat: fix.lat, lon: fix.lon };
-    const p = toLocal(origin, fix.lat, fix.lon);
-    return { x: p.x, y: p.y };
-  }, [fix, course]);
 
   return (
     <Tabbed path="/">
@@ -106,13 +99,12 @@ export function MainScreen() {
           <IconArrowRight size={26} />
         </button>
       </div>
-      <div className="main-map">
-        <CourseMap variant="main" course={course} me={me} label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'} />
+      <MainMap course={course} me={fix} label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'}>
         {!course && !fix && <div className="map-chip">위치를 받으면 지도에 표시돼요</div>}
         <footer className="build-info">
           버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
         </footer>
-      </div>
+      </MainMap>
     </Tabbed>
   );
 }

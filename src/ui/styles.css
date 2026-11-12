@@ -585,11 +585,56 @@ a {
   min-height: 240px;
   overflow: hidden;
   border-top: 1px solid #1a1d21;
-  background: var(--bg-map);
+  background-color: var(--bg-map);
+  /* 지도 타일이 없을 때(통신 없음) 보이는 격자 */
+  background-image: linear-gradient(#14171a 1px, transparent 1px), linear-gradient(90deg, #14171a 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: 24px 24px;
+}
+
+/* Leaflet 지도 (src/ui/map/leafletMap.ts) */
+.main-map .leaflet-host {
+  position: absolute;
+  inset: 0;
+}
+
+.main-map .leaflet-container {
+  background: transparent;
+  font-family: var(--sans);
+}
+
+/* OSM 타일을 어두운 화면에 맞게 뒤집어 어둡게 */
+.main-map .osm-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+
+.main-map .leaflet-container .leaflet-control-attribution {
+  background: rgba(13, 14, 16, 0.75);
+  color: var(--fg-faint);
+  font-size: 10px;
+}
+
+.main-map .leaflet-container .leaflet-control-attribution a {
+  color: var(--fg-dim);
+}
+
+.map-label {
+  color: var(--fg-dim);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.map-label.me {
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .map-chip {
   position: absolute;
+  z-index: 1000;
   left: 12px;
   top: 12px;
   display: flex;
@@ -622,8 +667,10 @@ a {
 /* 메인: 지도가 아래 탭까지 채우고, 버전은 지도 오른쪽 아래 구석에 작게 */
 .main-map .build-info {
   position: absolute;
-  right: calc(10px + var(--safe-r));
-  bottom: 6px;
+  z-index: 1000;
+  /* 오른쪽 아래는 지도 출처(OpenStreetMap) 자리 */
+  left: calc(10px + var(--safe-l));
+  bottom: 4px;
   padding: 0;
   font-size: 11px;
   pointer-events: none;
