@@ -161,6 +161,17 @@ describe('주행 중 엔진 (사양서 8.4)', () => {
     expect(st.gx).toBeNull();
     expect(st.status).toMatchObject({ gNotCalibrated: true, gpsWeak: true, offCourse: true });
   });
+
+  it('보정 전이라도 GPS 추정값이면 G를 보여주고 추정이라고 알린다 (사용자 요청)', () => {
+    const live = new LiveEngine(null, null);
+    const st = live.push({ t: 0, x: 0, y: 0, v: 10, sigmaPos: 2, ax: 2 * 9.80665 * 0.1, ay: 0, gpsOk: true, gCalibrated: false, gEstimated: true });
+    expect(st.gx).toBeCloseTo(0.2, 6);
+    expect(st.gy).toBe(0);
+    expect(st.gEstimated).toBe(true);
+    expect(st.status.gNotCalibrated).toBe(true);
+    const cal = live.push({ t: 20, x: 0.2, y: 0, v: 10, sigmaPos: 2, ax: 0, ay: 0, gpsOk: true, gCalibrated: true });
+    expect(cal.gEstimated).toBe(false);
+  });
 });
 
 describe('M4 검토 수정', () => {

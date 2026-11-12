@@ -24,6 +24,8 @@ export interface LiveInput {
   /** 최근에 GPS를 받았는지 */
   gpsOk: boolean;
   gCalibrated: boolean;
+  /** ax, ay가 보정 전 GPS 추정값 (사용자 요청: 보정 전에도 G를 움직이게) */
+  gEstimated?: boolean;
 }
 
 export interface CompletedLap {
@@ -62,6 +64,8 @@ export interface LiveState {
   onCourse: boolean;
   gx: number | null;
   gy: number | null;
+  /** gx, gy가 보정 전 GPS 추정값 */
+  gEstimated: boolean;
   status: { gpsWeak: boolean; offCourse: boolean; gNotCalibrated: boolean; courseRecording: boolean };
 }
 
@@ -94,6 +98,7 @@ export class LiveEngine {
   private maxV = 0;
   /** 구간 경계를 지날 때의 델타 (구간 1 시작은 0) */
   private deltaAtBound: [number | null, number | null] = [null, null];
+  private gEstimated = false;
 
   constructor(
     private readonly geom: CourseGeometry | null,
@@ -106,7 +111,8 @@ export class LiveEngine {
 
   push(p: LiveInput): LiveState {
     this.maxV = Math.max(this.maxV, p.v);
-    const g = p.ax !== null && p.ay !== null && p.gCalibrated ? this.g.push(p.t, p.ax, p.ay) : null;
+    const g = p.ax !== null && p.ay !== null && (p.gCalibrated || p.gEstimated) ? this.g.push(p.t, p.ax, p.ay) : null;
+    this.gEstimated = g !== null && !p.gCalibrated;
     const status = { gpsWeak: !p.gpsOk, offCourse: false, gNotCalibrated: !p.gCalibrated, courseRecording: false };
 
     if (!this.geom) {
@@ -237,6 +243,7 @@ export class LiveEngine {
       onCourse,
       gx: g ? g.gx : null,
       gy: g ? g.gy : null,
+      gEstimated: g !== null && this.gEstimated,
       status,
     };
   }

@@ -25,6 +25,8 @@ export interface OverlayFrame {
   gx: number | null;
   /** 왼쪽(+)·오른쪽 g */
   gy: number | null;
+  /** G가 보정 전 GPS 추정값 */
+  gEstimated?: boolean;
   currentSector: number | null;
   sectorDeltas: ReadonlyArray<number | null>;
   /** 코스 원점 기준 평면 m. psi는 x축에서 반시계 라디안 */
@@ -64,6 +66,7 @@ export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, has
     maxSpeedKmh: st?.maxSpeedKmh ?? null,
     gx: st?.gx ?? null,
     gy: st?.gy ?? null,
+    gEstimated: st?.gEstimated ?? false,
     currentSector: st?.currentSector ?? null,
     sectorDeltas: st?.sectorDeltas ?? [null, null, null],
     me: snap?.pos ?? null,

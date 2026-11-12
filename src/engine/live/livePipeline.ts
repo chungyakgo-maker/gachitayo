@@ -1,6 +1,7 @@
 // 주행 중 계산 묶음 (사양서 5.3): 센서 원본 → 공통 기준(50 Hz, 평면 좌표) → 거치 보정 → 융합(실시간 필터)
 // → 코스 엔진·델타 엔진 → 주행 화면 스냅숏.
 // 기록기와 같은 샘플을 받는다. 화면은 tick(지금 시각)을 100 ms마다 불러 스냅숏을 그린다.
+import { GpsAccelEstimator } from '../derive/gpsAccel';
 import { fromLocal, toLocal, type LatLon } from '../geo';
 import { buildGeometry, type CourseGeometry } from '../course/geometry';
 import { polylinePoint } from '../course/polyline';
@@ -79,6 +80,7 @@ export class LivePipeline {
   private stepT: number | null = null;
   private lastGps: GpsSample | null = null;
   private stillSince: number | null = null;
+  private readonly gpsAccel = new GpsAccelEstimator();
   private state: LiveState | null = null;
   private pos: LiveSnapshot['pos'] = null;
   private path: Array<[number, number]> = [];
@@ -195,6 +197,13 @@ export class LivePipeline {
       ax = c.ax;
       ay = c.ay;
     }
+    // 보정 전에는 융합 속도·진행 방향 변화로 G를 추정해 보여준다 (사용자 요청). 추정기는 늘 채워 둔다
+    const est = this.gpsAccel.push(p.t, Math.max(0, p.v), p.psi);
+    const estimated = !cal?.signsConfirmed;
+    if (estimated) {
+      ax = est.ax;
+      ay = est.ay;
+    }
     const g = this.lastGps;
     const gpsOk = g !== null && p.t - g.tRecv <= GPS_OK_AGE_MS && g.hAcc <= GPS_OK_HACC_M;
     this.state = this.engine.push({
@@ -207,6 +216,7 @@ export class LivePipeline {
       ay,
       gpsOk,
       gCalibrated: cal?.signsConfirmed ?? false,
+      gEstimated: estimated,
     });
     this.pos = { x: d.x, y: d.y, psi: p.psi };
     const last = this.path[this.path.length - 1];

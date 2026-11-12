@@ -6,7 +6,7 @@ import { useFollow, type FollowState } from '../../app/liveLink';
 import { toLocal } from '../../engine/geo';
 import { GapTracker } from '../../engine/live/gap';
 import { cycleDriveMode, endDrive, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { useSettings, type DriveMode, type Settings, type WidgetId } from '../../app/settings';
+import { MAP_VIEW_LABEL, updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { LiveState } from '../../engine/live/liveEngine';
 import type { Course } from '../../types/course';
@@ -37,6 +37,8 @@ export interface DriveViewProps {
   error: string | null;
   onCycle: () => void;
   onEnd: () => void;
+  /** 주행 중 지도 보기 바꾸기 (사용자 요청). 기본: 설정에 저장 */
+  onMapView?: (v: MapViewMode) => void;
 }
 
 const NEXT_LABEL: Record<DriveMode, string> = { map: '미니멀', minimal: '대시보드', dashboard: '지도' };
@@ -100,7 +102,7 @@ function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, gap = null, front = null, course, refLap, mode, settings, replay, error, onCycle, onEnd }: DriveViewProps) {
+export function DriveView({ snap, gap = null, front = null, course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }) }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   const st = snap?.state ?? null;
   const frame: OverlayFrame = { ...frameFromLive(snap, course !== null, refLap !== null), gap };
@@ -303,9 +305,19 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
       <div className="drive-map">
         {replay || settings.mapTiles ? (
           // 바탕 지도(OSM) 위에 그린다 (사용자 요청). 통신이 없거나 타일이 안 오면 타일 없이 그린다
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} initialView={mapView} heading={headSm} viewToggle={replay !== null} />
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} initialView={mapView} heading={headSm} viewToggle={replay !== null} view={replay ? undefined : mapView} />
         ) : (
           <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, view: viewFor(w, hh) })} />
+        )}
+        {!replay && (
+          // 주행 중 지도 보기 (사용자 요청 "주행 중 지도 정렬"): 설정에도 저장해 다음 주행에 그대로
+          <div className="segmented small map-view-toggle" role="group" aria-label="지도 보기">
+            {(['fit', 'follow', 'heading'] as const).map((k) => (
+              <button key={k} type="button" aria-pressed={mapView === k} onClick={() => onMapView(k)}>
+                {MAP_VIEW_LABEL[k]}
+              </button>
+            ))}
+          </div>
         )}
         <div className="drive-bottom">
           <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
@@ -320,6 +332,7 @@ function GText({ st }: { st: LiveState | null }) {
   const l = gLabel(st?.gx ?? null, st?.gy ?? null);
   return (
     <span style={{ fontSize: 12, color: 'var(--fg-2)' }}>
+      {st?.gEstimated ? '추정 · ' : ''}
       {l.lat} <span className="mono">{l.latV}</span> · {l.long} <span className="mono">{l.longV}</span>
     </span>
   );

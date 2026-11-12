@@ -179,7 +179,7 @@ export function drawGTile(ctx: Ctx, w: number, h: number, f: OverlayFrame, th: O
   const top = (h - lines) / 2;
   ctx.textBaseline = 'middle';
   setFont(ctx, 400, 12, th.sans);
-  text(ctx, 'G', x0, top + 7.5, th.fgDim);
+  text(ctx, f.gEstimated ? 'G 추정' : 'G', x0, top + 7.5, th.fgDim);
   const row = (y: number, word: string, val: string) => {
     setFont(ctx, 400, 13, th.sans);
     const x = text(ctx, `${word} `, x0, y, th.fg2);

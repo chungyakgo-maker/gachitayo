@@ -43,6 +43,7 @@ function state(p: Partial<LiveState> = {}): LiveState {
     onCourse: true,
     gx: -0.31,
     gy: 0.82,
+    gEstimated: false,
     status: { gpsWeak: false, offCourse: false, gNotCalibrated: false, courseRecording: false },
     ...p,
   };
@@ -92,6 +93,25 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     const off = render(<DriveView {...props({ settings: { ...DEFAULT_SETTINGS, mapTiles: false } })} />);
     expect(off.container.querySelector('.replay-map')).toBeNull();
     expect(screen.getByRole('img', { name: '코스 지도: 내 위치와 베스트 고스트' })).toBeInTheDocument();
+  });
+
+  it('주행 중 지도 보기 버튼: 누르면 그 보기로 (사용자 요청), 두 번 탭으로 치지 않는다', () => {
+    const onMapView = vi.fn();
+    const onCycle = vi.fn();
+    render(<DriveView {...props({ onMapView, onCycle, settings: { ...DEFAULT_SETTINGS, mapTiles: false } })} />);
+    const group = screen.getByRole('group', { name: '지도 보기' });
+    expect(group.querySelector('[aria-pressed="true"]')).toHaveTextContent('전체 코스');
+    const btn = screen.getByRole('button', { name: '진행 방향 위' });
+    fireEvent.pointerDown(btn);
+    fireEvent.pointerDown(btn);
+    fireEvent.click(btn);
+    expect(onMapView).toHaveBeenCalledWith('heading');
+    expect(onCycle).not.toHaveBeenCalled();
+  });
+
+  it('보정 전 추정 G: G 칸에 "추정"이 붙는다 (대시보드 글자)', () => {
+    render(<DriveView {...props({ mode: 'dashboard', snap: snap(state({ gx: 0, gy: 0, gEstimated: true })) })} />);
+    expect(screen.getByText(/추정 ·/)).toBeInTheDocument();
   });
 
   it('느리면 느림 색, 고른 값은 설정을 따른다', () => {

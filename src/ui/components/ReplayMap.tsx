@@ -25,17 +25,20 @@ export interface ReplayMapProps {
   initialView?: MapViewMode;
   /** 부드럽게 한 진행 방향 (진행 방향 위 보기) */
   heading?: number | null;
-  /** 보기 고르는 버튼 (재생만. 주행 중에는 화면 조작을 받지 않는다, 사양서 8.4) */
+  /** 보기 고르는 버튼 (재생). 주행 중에는 주행 화면이 버튼을 그리고 view로 넘긴다 */
   viewToggle?: boolean;
+  /** 밖에서 정한 보기 (주게 되면 안쪽 버튼 대신 이것을 따른다) */
+  view?: MapViewMode;
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
 
-export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, initialView = 'fit', heading = null, viewToggle = true }: ReplayMapProps) {
+export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, initialView = 'fit', heading = null, viewToggle = true, view: viewProp }: ReplayMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<ReplayMapController | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
-  const [view, setView] = useState<ReplayView>(initialView);
+  const [viewState, setView] = useState<ReplayView>(initialView);
+  const view = viewProp ?? viewState;
   const box = useElementSize<HTMLDivElement>();
 
   useEffect(() => {

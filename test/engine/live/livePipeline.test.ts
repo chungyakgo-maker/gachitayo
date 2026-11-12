@@ -39,6 +39,12 @@ describe('주행 중 계산 묶음 (사양서 5.3)', () => {
     expect(snaps.some((x) => x.calibration.stillProgress >= 1)).toBe(true);
     expect(snaps.at(-1)!.calibration.state).toBe('calibrated');
     expect(snaps.some((x) => x.state && !x.state.status.gNotCalibrated && x.state.gx !== null)).toBe(true);
+    // 보정 전에도 GPS 추정 G가 나오고(사용자 요청), 보정 뒤에는 추정이 아니다
+    const before = snaps.filter((x) => x.state?.status.gNotCalibrated);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.every((x) => x.state!.gx !== null && x.state!.gy !== null && x.state!.gEstimated)).toBe(true);
+    expect(snaps.at(-1)!.state!.gEstimated).toBe(false);
+    expect(snaps.at(-1)!.state!.gx).not.toBeNull();
     expect(snaps.at(-1)!.state!.status.courseRecording).toBe(true);
     expect(snaps.at(-1)!.state!.lapElapsedMs).toBeGreaterThan(100_000);
     expect(snaps[0]!.state).toBeNull();
