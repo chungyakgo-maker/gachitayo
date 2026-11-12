@@ -159,3 +159,17 @@ jobs:
           if [ -z "$url" ]; then echo "::error::Worker 주소(workers.dev)를 찾지 못했습니다. Cloudflare에서 workers.dev 하위 주소를 정했는지 확인해 주세요"; exit 1; fi
           echo "서버 주소: $url"
           echo "api_url=$url" >> "$GITHUB_OUTPUT"
+      - name: 서버 응답 확인 (데이터는 만들지 않음)
+        if: env.HAS_CLOUDFLARE == 'true'
+        env:
+          OWNER: ${{ github.repository_owner }}
+          API_URL: ${{ steps.deploy.outputs.api_url }}
+        run: |
+          origin="https://${OWNER,,}.github.io"
+          check() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@"; }
+          # 새 주소는 퍼지는 데 몇 초 걸릴 수 있어 잠깐 기다리며 다시 묻는다
+          for i in $(seq 1 12); do code=$(check -H "Origin: $origin" "$API_URL/api/me"); [ "$code" = 401 ] && break; sleep 5; done
+          pre=$(check -X OPTIONS -H "Origin: $origin" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
+          other=$(check -H 'Origin: https://example.com' "$API_URL/api/me")
+          echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 다른 주소: $other (403)"
+          [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
