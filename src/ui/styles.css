@@ -1373,6 +1373,165 @@ html.app-h .modal-backdrop {
   text-decoration: line-through;
 }
 
+/* ── 분석 (사양서 8.6) ───────────────────────── */
+.analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* 넓은 화면(태블릿 가로, PC)은 그래프와 지도를 나란히 */
+@media (min-width: 900px) {
+  .page.analysis {
+    max-width: 1280px;
+  }
+  .analysis-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.lap-row.five {
+  grid-template-columns: 40px 96px minmax(0, 1fr);
+}
+
+.lap-row.pick {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  min-height: 40px;
+  padding: 0;
+}
+
+.lap-row.pick[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 8px;
+  margin: 0 -8px;
+  padding: 0 8px;
+  width: calc(100% + 16px);
+}
+
+.lap-row .secs {
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lap-row.foot {
+  border-top: 1px solid var(--card-line);
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.lap-row.foot .t {
+  font-family: var(--mono);
+  color: var(--fg);
+}
+
+.compare-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.a-dot,
+.b-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.b-dot {
+  background: transparent;
+  border: 2px dashed #9aa1a9;
+}
+
+.compare-b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compare-b select {
+  height: 40px;
+  max-width: 220px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.compare-chart {
+  min-height: 200px;
+  touch-action: pan-y;
+}
+
+.compare-chart .u-over {
+  cursor: crosshair;
+}
+
+.analysis-map {
+  position: relative;
+  height: 340px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--card-line);
+  isolation: isolate;
+  background-color: var(--bg-map);
+  background-image: linear-gradient(#14171a 1px, transparent 1px), linear-gradient(90deg, #14171a 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.analysis-map .leaflet-host {
+  position: absolute;
+  inset: 0;
+}
+
+.analysis-map .leaflet-container {
+  background: transparent;
+  font-family: var(--sans);
+}
+
+.analysis-map .leaflet-container .leaflet-control-attribution {
+  background: rgba(13, 14, 16, 0.75);
+  color: var(--fg-faint);
+  font-size: 10px;
+}
+
+.g-diagram {
+  height: 260px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+}
+
+.point-info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  font-size: 14px;
+}
+
+.point-info .wide {
+  grid-column: 1 / -1;
+}
+
 .lap-row .note {
   font-family: var(--sans);
   font-size: 12px;

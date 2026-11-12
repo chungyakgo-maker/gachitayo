@@ -200,6 +200,11 @@ export function SummaryView({
       )}
 
       <div style={{ flex: 1 }} />
+      {result && !busy && (
+        <a className="list-link" href={`#/analysis/${session.id}`}>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>분석 보기 · 그래프·속도 지도·내보내기</span>
+        </a>
+      )}
       <a className="primary-btn" href="#/">
         홈으로
       </a>

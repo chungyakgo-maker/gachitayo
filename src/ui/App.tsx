@@ -14,6 +14,7 @@ import { RecorderTestScreen } from './screens/RecorderTestScreen';
 import { ReplayScreen } from './screens/ReplayScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
+import { AnalysisScreen } from './screens/AnalysisScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 
@@ -21,6 +22,8 @@ import { WelcomeScreen } from './screens/WelcomeScreen';
 function route(path: string): ReactElement {
   const summary = /^\/summary\/([^/]+)$/.exec(path);
   if (summary) return <SummaryScreen sessionId={decodeURIComponent(summary[1]!)} />;
+  const analysis = /^\/analysis\/([^/]+)$/.exec(path);
+  if (analysis) return <AnalysisScreen sessionId={decodeURIComponent(analysis[1]!)} />;
   switch (path) {
     case '/courses':
       return <CoursesScreen />;

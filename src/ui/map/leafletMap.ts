@@ -274,3 +274,73 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     },
   };
 }
+
+// ── 분석 지도 (사양서 8.6): 랩 A는 속도로 색칠, 랩 B는 가는 회색 선, 고른 지점 표시. 누르면 그 위치를 알려 준다 ──
+
+export interface AnalysisLapLine {
+  pts: Array<[number, number]>;
+  /** 점마다 색 (속도 색칠). 없으면 colorAll */
+  colors?: string[];
+  colorAll?: string;
+}
+
+export interface AnalysisMapController {
+  setLines(a: AnalysisLapLine | null, b: AnalysisLapLine | null, fit: boolean): void;
+  setMarker(at: [number, number] | null): void;
+  setOnline(online: boolean): void;
+  destroy(): void;
+}
+
+export function createAnalysisMap(el: HTMLElement, onPick: (lat: number, lon: number) => void): AnalysisMapController {
+  const map = L.map(el, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, fadeAnimation: false, doubleClickZoom: false });
+  map.attributionControl.setPrefix(false);
+  const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
+  const lineLayer = L.layerGroup().addTo(map);
+  const markLayer = L.layerGroup().addTo(map);
+  map.setView([36.5, 127.8], 7);
+  let shown = false;
+  let fails = 0;
+  tiles.on('tileload', () => {
+    fails = 0;
+  });
+  tiles.on('tileerror', () => {
+    if (++fails >= TILE_FAILS_OFFLINE) setTiles(false);
+  });
+  function setTiles(on: boolean) {
+    if (on === shown) return;
+    shown = on;
+    fails = 0;
+    if (on) tiles.addTo(map);
+    else tiles.remove();
+  }
+  map.on('click', (e: L.LeafletMouseEvent) => onPick(e.latlng.lat, e.latlng.lng));
+  return {
+    setLines(a, b, fit) {
+      lineLayer.clearLayers();
+      if (b && b.pts.length >= 2) L.polyline(b.pts, { color: b.colorAll ?? '#9aa1a9', weight: 3, opacity: 0.8, dashArray: '6 5', interactive: false }).addTo(lineLayer);
+      if (a && a.pts.length >= 2) {
+        if (a.colors) {
+          // 이웃한 두 점마다 한 조각, 그 속도 색으로
+          for (let i = 1; i < a.pts.length; i++) L.polyline([a.pts[i - 1]!, a.pts[i]!], { color: a.colors[i]!, weight: 5, opacity: 0.95, interactive: false }).addTo(lineLayer);
+        } else L.polyline(a.pts, { color: a.colorAll ?? ACCENT, weight: 5, interactive: false }).addTo(lineLayer);
+      }
+      if (fit) {
+        const all = [...(a?.pts ?? []), ...(b?.pts ?? [])];
+        map.invalidateSize({ pan: false });
+        if (all.length >= 2) map.fitBounds(L.latLngBounds(all), { padding: [24, 24], animate: false });
+      }
+    },
+    setMarker(at) {
+      markLayer.clearLayers();
+      if (!at) return;
+      L.circleMarker(at, { radius: 14, stroke: false, fillColor: ACCENT, fillOpacity: 0.25, interactive: false }).addTo(markLayer);
+      L.circleMarker(at, { radius: 6, color: '#0d0e10', weight: 2, fillColor: '#eceef0', fillOpacity: 1, interactive: false }).addTo(markLayer);
+    },
+    setOnline(online) {
+      setTiles(online);
+    },
+    destroy() {
+      map.remove();
+    },
+  };
+}

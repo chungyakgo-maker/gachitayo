@@ -1,4 +1,4 @@
-// 기록 탭: 최근 주행 목록 → 종료 요약 다시 보기 (분석 화면은 다음 단계).
+// 기록 탭: 최근 주행 목록 → 분석 (사양서 8.6). 계산 전 기록은 종료 요약에서 계산한다.
 // 기록 지우기 (M10, 사용자 요청): 휴지통 → 확인 창 → 폰과 서버에서 지운다.
 import { useState } from 'react';
 import { useRecording } from '../../app/recording';
@@ -50,7 +50,7 @@ export function HistoryScreen() {
               const sum = s.summary;
               return (
                 <li key={s.id} className="row-with-action">
-                  <a className="row-card" href={`#/summary/${s.id}`}>
+                  <a className="row-card" href={s.status === 'processed' || s.status === 'uploaded' ? `#/analysis/${s.id}` : `#/summary/${s.id}`}>
                     <span className="card-col">
                       <strong style={{ fontSize: 15 }} className="mono">
                         {formatKst(s.startedAt)}
