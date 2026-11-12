@@ -10,6 +10,8 @@ export interface DriveOpts {
   endStopS: number;
   /** 바퀴마다 출발선에서 정차하는 시간 s (0이면 정차 없음) */
   lapStopS?: number;
+  /** 지정한 거리에서 멈췄다 가기 (예: 편도 끝에서 돌아서기) */
+  stops?: Array<{ s: number; durationS: number }>;
   vMax: number;
   aLatMax: number;
   aAccel: number;
@@ -45,8 +47,20 @@ export function simulateDrive(track: Track, opts: DriveOpts): Truth {
   const isStop = new Uint8Array(n + 1);
   isStop[0] = 1;
   isStop[n] = 1;
+  const dwell = new Map<number, number>();
   if (track.closed && opts.lapStopS) {
-    for (let lap = 1; lap < opts.laps; lap++) isStop[Math.round((lap * track.length) / ds)] = 1;
+    for (let lap = 1; lap < opts.laps; lap++) {
+      const i = Math.round((lap * track.length) / ds);
+      isStop[i] = 1;
+      dwell.set(i, opts.lapStopS);
+    }
+  }
+  for (const st of opts.stops ?? []) {
+    const i = Math.round(st.s / ds);
+    if (i > 0 && i < n) {
+      isStop[i] = 1;
+      dwell.set(i, st.durationS);
+    }
   }
 
   // 속도 프로필 (거리 기준): 코너 한계 → 앞으로 가속 한계 → 뒤로 제동 한계
@@ -64,9 +78,9 @@ export function simulateDrive(track: Track, opts: DriveOpts): Truth {
   let t = opts.startStopS;
   nodes.push({ t: 0, s: 0, v: 0, a: 0 });
   for (let i = 0; i < n; i++) {
-    if (i > 0 && isStop[i] && opts.lapStopS) {
+    if (i > 0 && dwell.has(i)) {
       nodes.push({ t, s: i * ds, v: 0, a: 0 });
-      t += opts.lapStopS;
+      t += dwell.get(i)!;
     }
     const a = (v[i + 1]! ** 2 - v[i]! ** 2) / (2 * ds);
     nodes.push({ t, s: i * ds, v: v[i]!, a });

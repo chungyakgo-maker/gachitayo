@@ -17,7 +17,7 @@ export function makePolyline(xs: ArrayLike<number>, ys: ArrayLike<number>): Poly
 }
 
 /**
- * 경로를 따라 windowM 길이 안의 점들을 평균한다 (이동 평균).
+ * 경로를 따라 windowM 길이 안의 점들을 평균한다 (이동 평균, 누적합으로 O(n log n)).
  * closed면 시작과 끝이 이어진 것으로 본다 (마지막 점 = 첫 점이어도 된다).
  */
 export function smoothPath(
@@ -28,28 +28,49 @@ export function smoothPath(
 ): { x: number[]; y: number[] } {
   const p = makePolyline(xs, ys);
   const n = xs.length;
+  if (n === 0) return { x: [], y: [] };
   const half = windowM / 2;
   const L = p.length;
+  // 닫힌 경로는 마지막(=첫) 점을 빼고 앞뒤로 한 바퀴씩 이어 붙여 감싼다
+  const m = closed && n > 1 ? n - 1 : n;
+  const reps = closed ? 3 : 1;
+  const S = new Float64Array(m * reps);
+  const X = new Float64Array(m * reps);
+  const Y = new Float64Array(m * reps);
+  for (let r = 0; r < reps; r++)
+    for (let i = 0; i < m; i++) {
+      const k = r * m + i;
+      S[k] = p.s[i]! + (closed ? (r - 1) * L : 0);
+      X[k] = p.x[i]!;
+      Y[k] = p.y[i]!;
+    }
+  const cx = new Float64Array(S.length + 1);
+  const cy = new Float64Array(S.length + 1);
+  for (let k = 0; k < S.length; k++) {
+    cx[k + 1] = cx[k]! + X[k]!;
+    cy[k + 1] = cy[k]! + Y[k]!;
+  }
+  const lower = (v: number) => {
+    let lo = 0;
+    let hi = S.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (S[mid]! < v) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
   const outX: number[] = [];
   const outY: number[] = [];
   for (let i = 0; i < n; i++) {
-    let sx = 0;
-    let sy = 0;
-    let c = 0;
-    for (let j = 0; j < n; j++) {
-      let d = Math.abs(p.s[j]! - p.s[i]!);
-      if (closed) d = Math.min(d, L - d);
-      if (d <= half) {
-        sx += p.x[j]!;
-        sy += p.y[j]!;
-        c++;
-      }
-    }
-    outX.push(sx / c);
-    outY.push(sy / c);
+    const si = p.s[i]!;
+    const a = lower(si - half);
+    const b = lower(si + half + 1e-12);
+    const c = Math.max(1, b - a);
+    outX.push((cx[b]! - cx[a]!) / c);
+    outY.push((cy[b]! - cy[a]!) / c);
   }
   if (closed && n > 1) {
-    // 닫힌 경로는 끝점을 첫 점과 같게 둔다
     outX[n - 1] = outX[0]!;
     outY[n - 1] = outY[0]!;
   }
@@ -108,4 +129,44 @@ export function closestOnSegment(
   let f = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
   f = Math.min(1, Math.max(0, f));
   return { f, d: Math.hypot(px - (ax + dx * f), py - (ay + dy * f)) };
+}
+
+/** 점에서 가장 가까운 꺾은선 위치 s와 거리 (전체 검색) */
+export function nearestOnPolyline(p: Polyline, x: number, y: number): { s: number; d: number } {
+  let best = { s: 0, d: Infinity };
+  for (let i = 0; i + 1 < p.s.length; i++) {
+    const r = closestOnSegment(x, y, p.x[i]!, p.y[i]!, p.x[i + 1]!, p.y[i + 1]!);
+    if (r.d < best.d) best = { s: p.s[i]! + (p.s[i + 1]! - p.s[i]!) * r.f, d: r.d };
+  }
+  return best;
+}
+
+/** [s0, s1] 부분을 spacingM 간격으로 */
+export function slicePolyline(p: Polyline, s0: number, s1: number, spacingM: number): Polyline {
+  const len = Math.max(0, s1 - s0);
+  const n = Math.max(2, Math.round(len / spacingM) + 1);
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const q = polylinePoint(p, s0 + (len * i) / (n - 1));
+    xs[i] = q.x;
+    ys[i] = q.y;
+  }
+  return makePolyline(xs, ys);
+}
+
+/** 닫힌 꺾은선을 s0에서 시작하도록 돌린다 (끝점 = 시작점) */
+export function rotateClosed(p: Polyline, s0: number, spacingM: number): Polyline {
+  const L = p.length;
+  const n = Math.max(3, Math.round(L / spacingM) + 1);
+  const xs = new Float64Array(n);
+  const ys = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const q = polylinePoint(p, (s0 + (L * i) / (n - 1)) % L);
+    xs[i] = q.x;
+    ys[i] = q.y;
+  }
+  xs[n - 1] = xs[0]!;
+  ys[n - 1] = ys[0]!;
+  return makePolyline(xs, ys);
 }

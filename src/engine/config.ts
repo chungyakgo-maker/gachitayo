@@ -115,6 +115,10 @@ export const config = {
       loopMinTravelM: 500,
       loopReturnRadiusM: 30,
       loopHeadingDeg: 45,
+      /** 돌아온 뒤 이전 경로와 이 거리 안으로 실제로 겹쳐야 랩 코스로 본다 (헤어핀 옆 다리를 잘못 잇지 않게) */
+      loopMatchM: 8,
+      /** 처음 돌아온 곳에서 겹치는 지점을 찾는 범위 */
+      loopRefineM: 100,
     },
     /** 코스 다듬기에 필요한 유효 랩 수 */
     refineMinLaps: 3,

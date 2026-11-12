@@ -177,3 +177,48 @@ export function closeParallelTrack(): Track {
     { arc: 10, angleDeg: 180 },
   ]);
 }
+
+/**
+ * 진입로(편도) 끝에 랩 코스를 붙여 laps 바퀴 도는 경로 (피트에서 출발하는 서킷 흉내).
+ * 랩 코스는 진입로 끝 위치·방향에 맞춰 옮겨 놓는다.
+ */
+export function concatTracks(lead: Track, loop: Track, laps: number): Track & { loopAt: (s: number) => TrackPoint } {
+  const e = lead.pointAt(lead.length);
+  const s0 = loop.pointAt(0);
+  const rot = e.psi - s0.psi;
+  const c = Math.cos(rot);
+  const sn = Math.sin(rot);
+  const loopAt = (s: number): TrackPoint => {
+    const p = loop.pointAt(s);
+    const dx = p.x - s0.x;
+    const dy = p.y - s0.y;
+    return { x: e.x + c * dx - sn * dy, y: e.y + sn * dx + c * dy, psi: p.psi + rot, curvature: p.curvature };
+  };
+  return {
+    length: lead.length + laps * loop.length,
+    closed: false,
+    pointAt: (s) => (s <= lead.length ? lead.pointAt(s) : loopAt(s - lead.length)),
+    loopAt,
+  };
+}
+
+/** 같은 길을 거꾸로 */
+export function reversedTrack(t: Track): Track {
+  return {
+    length: t.length,
+    closed: t.closed,
+    pointAt(s) {
+      const p = t.pointAt(t.length - s);
+      return { x: p.x, y: p.y, psi: p.psi + Math.PI, curvature: -p.curvature };
+    },
+  };
+}
+
+/** 두 편도를 그대로 잇는다 (b는 이미 a의 끝에서 시작하는 좌표) */
+export function joinTracks(a: Track, b: Track): Track {
+  return {
+    length: a.length + b.length,
+    closed: false,
+    pointAt: (s) => (s <= a.length ? a.pointAt(s) : b.pointAt(s - a.length)),
+  };
+}
