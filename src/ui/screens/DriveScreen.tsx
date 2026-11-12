@@ -16,6 +16,7 @@ import { LongPressButton } from '../components/LongPressButton';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { ReplayMap } from '../components/ReplayMap';
 import { MapViewButton } from '../components/MapViewButton';
+import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { IconGps } from '../icons';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
@@ -106,7 +107,10 @@ function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th
 export function DriveView({ snap, gap = null, front = null, course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }) }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   const st = snap?.state ?? null;
-  const frame: OverlayFrame = { ...frameFromLive(snap, course !== null, refLap !== null), gap };
+  // 최근 G 궤적 (사용자 요청: 부드럽게 그린다). 스냅숏 시각 순서로 모은다
+  const trailBuf = useRef(new GTrailBuffer());
+  trailBuf.current.push(snap?.t ?? 0, st?.gx ?? null, st?.gy ?? null);
+  const frame: OverlayFrame = { ...frameFromLive(snap, course !== null, refLap !== null), gap, gMax: settings.gMaxG, gTrail: trailBuf.current.points() };
   const hl = headline(frame);
   const h = { label: hl.label, text: hl.text, word: hl.word, cls: hl.tone === 'none' ? '' : hl.tone };
   const th = useMemo(() => overlayTheme(settings.deltaPalette), [settings.deltaPalette]);
@@ -227,9 +231,9 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
             </div>
             <div className="dash-tile" style={{ alignItems: 'center', padding: '14px 16px' }}>
               <span style={{ alignSelf: 'flex-start', fontSize: 13 }} className="dim">
-                G
+                {st?.gEstimated ? 'G 추정' : 'G'}
               </span>
-              <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} size={124} />
+              <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} size={124} max={settings.gMaxG} trail={frame.gTrail} />
               <GText st={st} />
             </div>
           </div>
@@ -326,8 +330,7 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
 function GText({ st }: { st: LiveState | null }) {
   const l = gLabel(st?.gx ?? null, st?.gy ?? null);
   return (
-    <span style={{ fontSize: 12, color: 'var(--fg-2)' }}>
-      {st?.gEstimated ? '추정 · ' : ''}
+    <span style={{ fontSize: 12, color: 'var(--fg-2)', whiteSpace: 'nowrap' }}>
       {l.lat} <span className="mono">{l.latV}</span> · {l.long} <span className="mono">{l.longV}</span>
     </span>
   );

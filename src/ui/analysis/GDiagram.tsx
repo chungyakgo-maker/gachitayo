@@ -1,10 +1,11 @@
 // G 다이어그램 (사양서 8.6): 랩 A의 좌우 G(가로, 왼쪽 +는 왼쪽)와 앞뒤 G(세로, 위가 제동) 점들. 고른 지점은 크게.
 import type { ProcessedTrack } from '../../engine/process/processDrive';
 import { OverlayCanvas } from '../components/OverlayCanvas';
+import { G_MAX_DEFAULT, gRings } from '../overlay/gmeter';
 
 const G = 9.80665;
 
-export function GDiagram({ p, lapNo, selected }: { p: ProcessedTrack; lapNo: number; selected: number | null }) {
+export function GDiagram({ p, lapNo, selected, max = G_MAX_DEFAULT }: { p: ProcessedTrack; lapNo: number; selected: number | null; max?: number }) {
   return (
     <OverlayCanvas
       className="g-diagram"
@@ -13,12 +14,12 @@ export function GDiagram({ p, lapNo, selected }: { p: ProcessedTrack; lapNo: num
         const c = Math.min(w, h) / 2;
         const cx = w / 2;
         const cy = h / 2;
-        const R = c - 18; // 1.5 g
+        const R = c - 18; // 최대값 (설정의 G미터 최대값)
         if (R <= 4) return; // 아직 크기가 정해지지 않음
-        const scale = R / 1.5;
+        const scale = R / max;
         ctx.strokeStyle = '#2a2e33';
         ctx.lineWidth = 1;
-        for (const g of [0.5, 1, 1.5]) {
+        for (const g of gRings(max)) {
           ctx.beginPath();
           ctx.arc(cx, cy, g * scale, 0, Math.PI * 2);
           ctx.stroke();
@@ -42,6 +43,7 @@ export function GDiagram({ p, lapNo, selected }: { p: ProcessedTrack; lapNo: num
         ctx.textAlign = 'right';
         ctx.fillText('우', cx + R + 14, cy);
         ctx.fillText('1g', cx + scale - 2, cy - 8);
+        ctx.fillText(`${max}g`, cx + R - 2, cy - 8);
         ctx.fillStyle = 'rgba(170, 202, 230, 0.35)';
         for (let k = 0; k < p.n; k++) {
           if (p.lapNo[k] !== lapNo) continue;

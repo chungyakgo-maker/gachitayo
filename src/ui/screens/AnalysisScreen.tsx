@@ -6,6 +6,7 @@ import { loadAnalysis, loadProcessedOf, type AnalysisData } from '../../app/anal
 import { loadCalDiagnosis, prepareRawExport } from '../../app/rawTransfer';
 import { calDiagnosisLines, type DiagLine } from '../../engine/diagnose/calibration';
 import { getRepo } from '../../app/recording';
+import { useSettings } from '../../app/settings';
 import { loadRaw } from '../../app/sessionProcessing';
 import type { GpsSample } from '../../types/samples';
 import type { ProcessedTrack } from '../../engine/process/processDrive';
@@ -25,6 +26,7 @@ type Other = { kind: 'lap'; lapNo: number } | { kind: 'ref'; id: string } | null
 const sectorText = (ms: number | null) => (ms === null ? '—' : ms < 60_000 ? (Math.floor(ms) / 1000).toFixed(3) : formatLapTime(ms, 3));
 
 export function AnalysisScreen({ sessionId }: { sessionId: string }) {
+  const { gMaxG } = useSettings();
   const [data, setData] = useState<AnalysisData | null | 'missing'>(null);
   const [lapA, setLapA] = useState<number | null>(null);
   const [other, setOther] = useState<Other>(null);
@@ -298,7 +300,7 @@ export function AnalysisScreen({ sessionId }: { sessionId: string }) {
               }}
             />
             <span className="sub">지도: 랩 A 속도 색(느림 파랑 → 빠름 빨강), 랩 B 점선. 그래프나 지도를 누르면 그 지점을 보여줘요.</span>
-            {p && lapA !== null && <GDiagram p={p} lapNo={lapA} selected={selK} />}
+            {p && lapA !== null && <GDiagram p={p} lapNo={lapA} selected={selK} max={gMaxG} />}
           </div>
         </div>
       )}

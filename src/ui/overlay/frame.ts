@@ -25,8 +25,12 @@ export interface OverlayFrame {
   gx: number | null;
   /** 왼쪽(+)·오른쪽 g */
   gy: number | null;
-  /** G가 보정 전 GPS 추정값 */
+  /** G가 보정 전 임시값 */
   gEstimated?: boolean;
+  /** G미터 바깥 원 g (설정, 기본 2) */
+  gMax?: number;
+  /** 최근 G 궤적 [앞뒤 g, 좌우 g] (오래된 것부터, 마지막이 지금) */
+  gTrail?: ReadonlyArray<readonly [number, number]>;
   currentSector: number | null;
   sectorDeltas: ReadonlyArray<number | null>;
   /** 코스 원점 기준 평면 m. psi는 x축에서 반시계 라디안 */

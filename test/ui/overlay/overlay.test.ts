@@ -129,7 +129,8 @@ describe('오버레이 그리기 (캔버스)', () => {
   it('G 칸: G미터 점과 "좌 0.82 / 제동 0.31", 값이 없으면 점을 그리지 않는다', () => {
     const a = fakeCtx();
     drawGTile(a.ctx, 170, 100, frame(), th);
-    expect(a.texts().map((x) => x.text)).toEqual(['G', '좌 ', '0.82', '제동 ', '0.31']);
+    // 바깥 원 값(기본 2g)이 먼저
+    expect(a.texts().map((x) => x.text)).toEqual(['2g', 'G', '좌 ', '0.82', '제동 ', '0.31']);
     const dots = a.calls.filter((c) => c.op === 'fill');
     expect(dots.length).toBe(1);
     expect(gMeterLabel(frame())).toBe('G미터: 좌 0.82g, 제동 0.31g');
@@ -137,6 +138,30 @@ describe('오버레이 그리기 (캔버스)', () => {
     drawGTile(b.ctx, 170, 100, frame({ gx: null, gy: null }), th);
     expect(b.calls.filter((c) => c.op === 'fill').length).toBe(0);
     expect(b.texts().map((x) => x.text)).toContain('—');
+  });
+
+  it('G미터 최대값(사용자 요청): 눈금 원과 점 위치가 최대값을 따르고, 최근 궤적은 곡선으로 옅게→진하게', () => {
+    const arcs = (max: number, gx: number) => {
+      const c = fakeCtx();
+      drawGTile(c.ctx, 170, 100, frame({ gx, gy: 0, gMax: max }), th);
+      return c.calls.filter((x) => x.op === 'arc').map((x) => x.args[2] as number);
+    };
+    // 64 px 미터, 반지름 28: 3g면 원 1·2·3g, 점(1.5g 가속)은 가운데에서 아래로 14 px
+    const three = arcs(3, 1.5);
+    expect(three.slice(0, 3).map((r) => Math.round(r))).toEqual([9, 19, 28]);
+    const c3 = fakeCtx();
+    drawGTile(c3.ctx, 170, 100, frame({ gx: 1.5, gy: 0, gMax: 3 }), th);
+    const dot = c3.calls.filter((x) => x.op === 'arc').at(-1)!;
+    expect((dot.args[1] as number) - 50).toBeCloseTo(14, 6);
+    expect(c3.texts()[0]!.text).toBe('3g');
+    // 궤적
+    const t = fakeCtx();
+    drawGTile(t.ctx, 170, 100, frame({ gTrail: [[0, 0], [0.2, 0.1], [0.3, 0.4], [-0.31, 0.82]] }), th);
+    const curves = t.calls.filter((x) => x.op === 'bezierCurveTo');
+    expect(curves.length).toBe(3);
+    const alphas = t.calls.filter((x) => x.op === 'stroke' && String(x.strokeStyle).startsWith('rgba(170, 202, 230')).map((x) => Number(/,\s*([\d.]+)\)$/.exec(String(x.strokeStyle))![1]));
+    expect(alphas.length).toBe(3);
+    expect(alphas[0]).toBeLessThan(alphas[2]!);
   });
 });
 

@@ -1,6 +1,7 @@
 // 오버레이 그리기 (사양서 13.1 확장 지점, 5.1의 12번): "시각 t의 상태 → 캔버스".
 // 주행 화면 지도 모드가 쓰고, 나중에 영상에 입히기가 영상 프레임 위에 같은 함수를 부른다.
 // 크기·글꼴은 디자인 시안(styles.css)과 같게 맞췄다. 좌표는 CSS px (호출하는 쪽이 기기 배율을 맞춘다).
+import { G_MAX_DEFAULT, gRings, gToUnit, gTrailCurves, trailAlpha } from './gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { gLabel, headline, type OverlayFrame, type Tone, type ValueTile } from './frame';
 import type { OverlayTheme } from './theme';
@@ -122,23 +123,31 @@ export function drawValueTile(ctx: Ctx, w: number, h: number, v: ValueTile, th: 
 }
 
 /** G미터: 원 안에서 움직이는 점. 바깥 원 1 g, 안쪽 원 0.5 g. 위가 제동, 왼쪽이 좌 (사양서 8.4) */
-export function drawGMeter(ctx: Ctx, cx: number, cy: number, size: number, gx: number | null, gy: number | null, th: OverlayTheme): void {
+export function drawGMeter(
+  ctx: Ctx,
+  cx: number,
+  cy: number,
+  size: number,
+  gx: number | null,
+  gy: number | null,
+  th: OverlayTheme,
+  opts: { max?: number; trail?: ReadonlyArray<readonly [number, number]> } = {},
+): void {
   const big = size >= 100;
   const R = size * (big ? 52 / 124 : 28 / 64);
-  const clamp = (v: number) => Math.max(-1.2, Math.min(1.2, v));
-  const dx = gy === null ? 0 : -clamp(gy) * R;
-  const dy = gx === null ? 0 : clamp(gx) * R;
+  const max = opts.max ?? G_MAX_DEFAULT;
+  const rings = gRings(max);
   ctx.setLineDash([]);
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = '#3A3F45';
-  ctx.beginPath();
-  ctx.arc(cx, cy, R, 0, Math.PI * 2);
-  ctx.stroke();
+  // 눈금 원: 바깥(최대값)은 진하게, 1 g는 조금 진하게
+  rings.forEach((g, i) => {
+    const outer = i === rings.length - 1;
+    ctx.lineWidth = outer ? 1.5 : 1;
+    ctx.strokeStyle = outer ? '#3A3F45' : g === 1 ? '#30353B' : '#24282D';
+    ctx.beginPath();
+    ctx.arc(cx, cy, (R * g) / max, 0, Math.PI * 2);
+    ctx.stroke();
+  });
   ctx.lineWidth = 1;
-  ctx.strokeStyle = '#2A2E33';
-  ctx.beginPath();
-  ctx.arc(cx, cy, R / 2, 0, Math.PI * 2);
-  ctx.stroke();
   ctx.strokeStyle = '#22262B';
   ctx.beginPath();
   ctx.moveTo(cx, cy - R);
@@ -146,24 +155,34 @@ export function drawGMeter(ctx: Ctx, cx: number, cy: number, size: number, gx: n
   ctx.moveTo(cx - R, cy);
   ctx.lineTo(cx + R, cy);
   ctx.stroke();
+  // 바깥 원 값 (오른쪽 위)
+  ctx.textBaseline = 'middle';
+  setFont(ctx, 400, big ? 9 : 8, th.mono);
+  text(ctx, `${max}g`, cx + R * 0.74, cy - R * 0.74 - (big ? 6 : 4), '#5E656D', 'left');
   if (big) {
     ctx.textBaseline = 'top';
     setFont(ctx, 400, 9, th.sans);
     text(ctx, '제동', cx, cy - size / 2 + 2, '#8A9199', 'center');
     ctx.textBaseline = 'middle';
     text(ctx, '좌', cx - size / 2 + 2, cy, '#8A9199');
-    ctx.strokeStyle = 'rgba(236, 238, 240, 0.35)';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + dx, cy + dy);
-    ctx.stroke();
   }
+  // 최근 궤적: 다듬은 곡선, 오래된 것부터 옅게
+  const curves = gTrailCurves(opts.trail, max);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  curves.forEach((c, i) => {
+    ctx.strokeStyle = `rgba(170, 202, 230, ${trailAlpha(i, curves.length).toFixed(3)})`;
+    ctx.lineWidth = big ? 3 : 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + c.from[0] * R, cy + c.from[1] * R);
+    ctx.bezierCurveTo(cx + c.c1[0] * R, cy + c.c1[1] * R, cx + c.c2[0] * R, cy + c.c2[1] * R, cx + c.to[0] * R, cy + c.to[1] * R);
+    ctx.stroke();
+  });
   if (gx !== null && gy !== null) {
+    const [ux, uy] = gToUnit(gx, gy, max);
     ctx.fillStyle = th.fg;
     ctx.beginPath();
-    ctx.arc(cx + dx, cy + dy, big ? 7 : 5, 0, Math.PI * 2);
+    ctx.arc(cx + ux * R, cy + uy * R, big ? 7 : 5, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -172,7 +191,7 @@ export function drawGMeter(ctx: Ctx, cx: number, cy: number, size: number, gx: n
 export function drawGTile(ctx: Ctx, w: number, h: number, f: OverlayFrame, th: OverlayTheme, opts: { panel?: boolean } = {}): void {
   if (opts.panel) drawPanel(ctx, w, h, th, 'none', 16);
   const size = 64;
-  drawGMeter(ctx, 12 + size / 2, h / 2, size, f.gx, f.gy, th);
+  drawGMeter(ctx, 12 + size / 2, h / 2, size, f.gx, f.gy, th, { max: f.gMax, trail: f.gTrail });
   const l = gLabel(f.gx, f.gy);
   const x0 = 12 + size + 10;
   const lines = 15 + 2 + 18 + 2 + 18;

@@ -7,8 +7,21 @@ describe('설정 (폰 보관)', () => {
     updateSettings(DEFAULT_SETTINGS);
   });
 
-  it('기본값: 지도 모드, 상단 값 G미터·속도, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m, 주행 중 바탕 지도 보이기', () => {
-    expect(getSettings()).toEqual({ defaultMode: 'map', widgets: ['g', 'speed'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true });
+  it('기본값: 지도 모드, 상단 값 G미터·속도, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m, 주행 중 바탕 지도 보이기, G미터 최대 2g', () => {
+    expect(getSettings()).toEqual({ defaultMode: 'map', widgets: ['g', 'speed'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2 });
+  });
+
+  it('G미터 최대값은 1.5·2·2.5·3 g만 (저장된 값이 이상하면 2g)', async () => {
+    updateSettings({ gMaxG: 3 });
+    expect(getSettings().gMaxG).toBe(3);
+    const { vi } = await import('vitest');
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ gMaxG: 1.5 }));
+    vi.resetModules();
+    expect((await import('../../src/app/settings')).getSettings().gMaxG).toBe(1.5);
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ gMaxG: 7 }));
+    vi.resetModules();
+    expect((await import('../../src/app/settings')).getSettings().gMaxG).toBe(2);
+    localStorage.removeItem('gachitayo.settings');
   });
 
   it('바탕 지도는 저장된 값이 false일 때만 끈다', () => {

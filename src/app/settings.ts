@@ -1,5 +1,8 @@
 // 설정 (사양서 8.8 일부): 기본 화면 모드, 상단 표시 값 두 칸, 델타 색. 폰(localStorage)에 보관한다.
 import { useSyncExternalStore } from 'react';
+import { G_MAX_DEFAULT, G_MAX_OPTIONS } from '../ui/overlay/gmeter';
+
+export { G_MAX_DEFAULT, G_MAX_OPTIONS };
 
 export type DriveMode = 'map' | 'minimal' | 'dashboard';
 export type WidgetId = 'g' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap';
@@ -21,6 +24,8 @@ export interface Settings {
   mapView: MapViewMode;
   /** 주행 중 지도 모드에 바탕 지도(OSM)를 깐다 (사용자 요청). 끄면 코스 선과 점만 그린다 */
   mapTiles: boolean;
+  /** G미터 바깥 원 = 이 값 g (사용자 요청: 1.5·2·2.5·3, 기본 2) */
+  gMaxG: number;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -37,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gateWidthM: 30,
   mapView: 'fit',
   mapTiles: true,
+  gMaxG: G_MAX_DEFAULT,
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -78,6 +84,7 @@ function load(): Settings {
           : DEFAULT_SETTINGS.gateWidthM,
       mapView: raw.mapView === 'follow' || raw.mapView === 'heading' ? raw.mapView : 'fit',
       mapTiles: raw.mapTiles !== false,
+      gMaxG: (G_MAX_OPTIONS as readonly number[]).includes(raw.gMaxG as number) ? raw.gMaxG! : G_MAX_DEFAULT,
     };
   } catch {
     return DEFAULT_SETTINGS;

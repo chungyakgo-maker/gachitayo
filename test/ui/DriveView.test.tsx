@@ -117,9 +117,20 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByRole('button', { name: /^지도 보기: 전체 코스/ })).toBeInTheDocument();
   });
 
-  it('보정 전 추정 G: G 칸에 "추정"이 붙는다 (대시보드 글자)', () => {
+  it('G미터 궤적: 스냅숏이 이어지면 최근 G를 곡선 조각으로 그린다, 최대값은 설정을 따른다', () => {
+    const at = (t: number, gx: number) => ({ ...snap(state({ gx, gy: 0.1 })), t });
+    const settings = { ...DEFAULT_SETTINGS, gMaxG: 3 };
+    const r = render(<DriveView {...props({ mode: 'dashboard', settings, snap: at(1000, 0.1) })} />);
+    r.rerender(<DriveView {...props({ mode: 'dashboard', settings, snap: at(1100, 0.3) })} />);
+    r.rerender(<DriveView {...props({ mode: 'dashboard', settings, snap: at(1200, 0.5) })} />);
+    expect(r.container.querySelectorAll('.g-trail').length).toBe(2);
+    expect(screen.getByRole('img', { name: /\(최대 3g\)$/ })).toBeInTheDocument();
+  });
+
+  it('보정 전 추정 G: 대시보드 G 제목이 "G 추정", G미터에 최대값(기본 2g)', () => {
     render(<DriveView {...props({ mode: 'dashboard', snap: snap(state({ gx: 0, gy: 0, gEstimated: true })) })} />);
-    expect(screen.getByText(/추정 ·/)).toBeInTheDocument();
+    expect(screen.getByText('G 추정')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /^G미터: .*\(최대 2g\)$/ })).toBeInTheDocument();
   });
 
   it('느리면 느림 색, 고른 값은 설정을 따른다', () => {
