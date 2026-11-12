@@ -5,3 +5,4 @@ coverage/
 .superpowers/
 *.log
 .DS_Store
+report-out/
