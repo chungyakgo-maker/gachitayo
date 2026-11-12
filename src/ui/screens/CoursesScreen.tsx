@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { importGpx } from '../../app/courses';
 import { loadCourses, useDrive } from '../../app/drive';
-import { parseGpx } from '../../gpx/parse';
+import { parseGpx, suggestedCourseName } from '../../gpx/parse';
 import { Sheet } from '../components/Sheet';
 import { IconChevron } from '../icons';
 import { Tabbed } from '../components/TabBar';
@@ -25,8 +25,9 @@ export function CoursesScreen() {
     try {
       const text = await f.text();
       const g = parseGpx(text);
-      setGpx({ text, name: g.name ?? f.name.replace(/\.gpx$/i, ''), hasTime: g.hasTime });
-      setGpxName(g.name ?? f.name.replace(/\.gpx$/i, ''));
+      const name = suggestedCourseName(g, f.name);
+      setGpx({ text, name, hasTime: g.hasTime });
+      setGpxName(name);
     } catch (e) {
       setError(`GPX를 읽지 못했어요: ${e instanceof Error ? e.message : String(e)}`);
     }
