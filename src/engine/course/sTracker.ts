@@ -62,11 +62,21 @@ export class STracker {
     const step = L / (n - 1);
     let bestS = 0;
     let bestD = Infinity;
+    const ref = this.sPrev;
+    // 랩 코스에서 s는 [0, L)로 둔다 (둘레 끝 = 출발선 = 0)
+    const norm = (v: number) => (wrap && v >= L - 1e-9 ? v - L : v);
+    const far = (v: number) => {
+      if (ref === null) return v;
+      const d = Math.abs(v - ref);
+      return wrap ? Math.min(d, L - d) : d;
+    };
     const visit = (i: number) => {
       const r = closestOnSegment(x, y, cl.x[i]!, cl.y[i]!, cl.x[i + 1]!, cl.y[i + 1]!);
-      if (r.d < bestD) {
+      const sv = norm(cl.s[i]! + (cl.s[i + 1]! - cl.s[i]!) * r.f);
+      // 거리가 같으면(출발선처럼 같은 점이 두 번 나오는 곳) 이전 s에 가까운 쪽을 고른다
+      if (r.d < bestD - 1e-9 || (Math.abs(r.d - bestD) <= 1e-9 && far(sv) < far(bestS))) {
         bestD = r.d;
-        bestS = cl.s[i]! + (cl.s[i + 1]! - cl.s[i]!) * r.f;
+        bestS = sv;
       }
     };
     if (!wrap) {
