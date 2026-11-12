@@ -142,6 +142,16 @@ export function segmentTrack(segments: Segment[]): Track {
   return resampleUniform(s, x, y, psi, k);
 }
 
+/** 직선 두 개와 반원 두 개로 된 오벌 서킷. 직선 시작점에서 동쪽으로 출발 */
+export function stadiumTrack(straight = 400, radius = 80): Track {
+  return segmentTrack([
+    { straight },
+    { arc: radius, angleDeg: 180 },
+    { straight },
+    { arc: radius, angleDeg: 180 },
+  ]);
+}
+
 /** 헤어핀이 있는 와인딩 편도 (헤어핀 양쪽 길이 24 m 떨어져 있음) */
 export function windingWithHairpins(): Track {
   return segmentTrack([
