@@ -7,6 +7,8 @@ import { useFriends, watchFriendPositions } from '../../app/friends';
 import { useFollow, type FollowState } from '../../app/liveLink';
 import { toLocal } from '../../engine/geo';
 import { GapTracker } from '../../engine/live/gap';
+import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
+import { makePolyline } from '../../engine/course/polyline';
 import { cycleDriveMode, endDrive, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
 import { updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
@@ -310,28 +312,41 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
 }
 
 /** 받은 앞 친구 위치로 간격을 계산한다 (그릴 때마다, 1초 동안 부드럽게) */
-export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targetS: number): { gap: GapInfo | null; front: DriveViewProps['front'] } {
+export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targetS: number, course: Course | null = null): { gap: GapInfo | null; front: DriveViewProps['front'] } {
   const tracker = useRef(new GapTracker());
+  // 친구 아이콘: 받은 마지막 위치에서 일정 속도로 도로(코스 선)를 따라 지금 위치를 예측하고, 새 위치가 와도 튀지 않게 (사용자 요청)
+  const marker = useRef(new FriendMarker());
   const fed = useRef<{ key: string; n: number; lastT: number }>({ key: '', n: 0, lastT: 0 });
+  const road = useMemo<FriendRoad | null>(() => {
+    const line = mapModel(course).line;
+    return line.length >= 2 ? { line: makePolyline(line.map((p) => p[0]), line.map((p) => p[1])), loop: course?.kind === 'loop' } : null;
+  }, [course]);
   if (!follow.friendId) return { gap: null, front: null };
   const nickname = follow.nickname ?? '앞 친구';
   const origin = snap?.origin;
   if (!origin) return { gap: { nickname, targetS, gapS: null, stale: true }, front: null };
-  // 좌표계(원점)가 바뀌면 다시 넣고, 아니면 새로 온 것만 넣는다
+  // 좌표계(원점)가 바뀌면 다시 넣고, 아니면 새로 온 것만 넣는다. 친구 GPS 속도도 같이 (지금 간격 예측에 쓴다)
   const key = `${follow.friendId}:${origin.lat}:${origin.lon}`;
   const pts = follow.points;
+  const toPt = (p: (typeof pts)[number]) => ({ t: p.t, ...toLocal(origin, p.lat, p.lon), v: p.speed });
   if (fed.current.key !== key || (pts.length > 0 && pts[pts.length - 1]!.t < fed.current.lastT)) {
-    tracker.current.reset(pts.map((p) => ({ t: p.t, ...toLocal(origin, p.lat, p.lon) })));
+    tracker.current.reset(pts.map(toPt));
+    marker.current.reset(pts.map(toPt));
     fed.current = { key, n: pts.length, lastT: pts.at(-1)?.t ?? 0 };
   } else {
-    for (const p of pts) if (p.t > fed.current.lastT) tracker.current.push({ t: p.t, ...toLocal(origin, p.lat, p.lon) });
+    for (const p of pts)
+      if (p.t > fed.current.lastT) {
+        tracker.current.push(toPt(p));
+        marker.current.push(toPt(p));
+      }
     fed.current.lastT = pts.at(-1)?.t ?? fed.current.lastT;
   }
   const pos = snap?.pos;
   const me = pos && snap.utcOffsetMs !== null ? { x: pos.x, y: pos.y, psi: pos.psi, t: snap.t + snap.utcOffsetMs } : null;
   const r = me ? tracker.current.update(me, Date.now()) : { gapS: null, stale: tracker.current.latest() === null || Date.now() - tracker.current.latest()!.t > 5000 };
-  const last = tracker.current.latest();
-  return { gap: { nickname, targetS, gapS: r.gapS, stale: r.stale }, front: last && !r.stale ? { x: last.x, y: last.y, label: nickname } : null };
+  // 아이콘은 내 위치와 같은 시각(GPS 기준)으로 예측해야 지도에서 둘의 거리가 맞다
+  const f = me && !r.stale ? marker.current.position(me.t, road) : null;
+  return { gap: { nickname, targetS, gapS: r.gapS, stale: r.stale }, front: f ? { x: f.x, y: f.y, label: nickname } : null };
 }
 
 /** 주행 중 위치를 공유 중인 친구들 (사용자 요청): 5초마다 받아 와 주행 지도 평면으로. 앞 친구(간격)는 따로 그리므로 뺀다 */
@@ -351,7 +366,7 @@ export function DriveScreen() {
   const snap = useLiveSnapshot();
   const settings = useSettings();
   const follow = useFollow();
-  const { gap, front } = useFrontGap(d.replay ? null : snap, d.replay ? { ...follow, friendId: null } : follow, settings.gap.targetS);
+  const { gap, front } = useFrontGap(d.replay ? null : snap, d.replay ? { ...follow, friendId: null } : follow, settings.gap.targetS, d.course);
   const friends = useDriveFriends(d.replay ? null : snap, follow.friendId);
   if (d.phase === 'idle' && !d.replay) {
     return (

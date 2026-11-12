@@ -33,16 +33,21 @@ const follow = (upTo: number): FollowState => ({
 });
 
 describe('주행 화면의 앞 친구 간격 계산 (받은 위치 → 평면 좌표 → 간격)', () => {
-  it('2초 늦게 같은 길을 가면 간격 2.0초, 앞 친구 점은 마지막 위치', () => {
+  it('2초 늦게 같은 길을 가면 간격 2.0초, 앞 친구 점은 받은 마지막 위치가 아니라 지금 있을 위치 (사용자 요청: 부드럽게)', () => {
     const realNow = Date.now;
     let t = 10;
     Date.now = () => START + t * 1000;
     try {
       const { result, rerender } = renderHook(({ s, f }) => useFrontGap(s, f, 2), { initialProps: { s: snap(t), f: follow(t) } });
-      for (t = 10.1; t < 20; t += 0.1) rerender({ s: snap(t), f: follow(t) });
+      let last = t;
+      for (t = 10.1; t < 20; t += 0.1) {
+        rerender({ s: snap(t), f: follow(t) });
+        last = t;
+      }
       expect(result.current.gap).toMatchObject({ nickname: '지훈', targetS: 2, stale: false });
       expect(result.current.gap!.gapS!).toBeCloseTo(2, 1);
-      expect(result.current.front!.x).toBeCloseTo(20 * 19, 0);
+      // 마지막으로 받은 건 19초 위치(380 m)지만, 지금(약 19.9초) 친구는 20 m/s로 더 가 있다
+      expect(result.current.front!.x).toBeCloseTo(20 * last, 0);
       // 앞 친구를 고르지 않았으면 없음
       rerender({ s: snap(t), f: { ...follow(t), friendId: null } });
       expect(result.current.gap).toBeNull();

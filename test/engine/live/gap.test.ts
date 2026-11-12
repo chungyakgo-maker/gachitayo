@@ -123,3 +123,39 @@ describe('앞 친구 간격 (초): 앞 친구가 지금 내 자리를 몇 초 �
     expect(lag).toBeLessThan(0.7);
   });
 });
+
+describe('친구 GPS 속도로 지금 간격 예측 (사용자 요청: 최대한 예민하게)', () => {
+  const T0 = 1_800_000_000_000;
+  it('친구가 느려져 간격이 줄 때, 친구 위치가 늦게 와도 속도 비율로 지연을 줄인다', () => {
+    // 나: 20 m/s 직진. 친구: 처음 2.0초 앞, 10초부터 18 m/s로 느려져 간격이 준다. 친구 위치는 1초마다, 1.8초 늦게 도착
+    const vMe = 20;
+    const friendX = (t: number) => (t <= 10 ? vMe * (t + 2) : vMe * 12 + 18 * (t - 10));
+    const truthGap = (t: number) => {
+      // 친구가 내 지금 자리(20t)를 지난 시각 tf: friendX(tf) = 20t
+      const x = vMe * t;
+      const tf = x <= vMe * 12 ? x / vMe - 2 : 10 + (x - vMe * 12) / 18;
+      return t - tf;
+    };
+    const run = (withSpeed: boolean) => {
+      const trail: TrailPoint[] = [];
+      const mine: TrailPoint[] = [];
+      const errs: number[] = [];
+      for (let t = 4; t < 22; t += 0.1) {
+        for (let k = 0; k <= Math.floor(t - 1.8); k++) {
+          if (trail.length > k) continue;
+          const v = k <= 10 ? vMe : 18;
+          trail.push({ t: T0 + k * 1000, x: friendX(k), y: 0, v: withSpeed ? v : null });
+        }
+        const me = { x: vMe * t, y: 0, psi: 0, t: T0 + t * 1000 };
+        const g = gapSeconds(trail, me, mine.filter((q) => q.t > me.t - 30_000));
+        mine.push({ t: me.t, x: me.x, y: me.y });
+        if (g !== null && t > 12) errs.push(g - truthGap(t));
+      }
+      return rms(errs);
+    };
+    const without = run(false);
+    const withV = run(true);
+    expect(withV).toBeLessThan(without * 0.5);
+    expect(withV).toBeLessThan(0.05);
+  });
+});

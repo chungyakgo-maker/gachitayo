@@ -8,6 +8,8 @@ export interface TrailPoint {
   t: number;
   x: number;
   y: number;
+  /** GPS 속도 m/s (앞 친구가 보낸 값. 모르면 없음) */
+  v?: number | null;
 }
 
 export interface GapMe {
@@ -29,6 +31,10 @@ const MIN_HEADING_COS = 0.5;
 const MAX_EXTRAPOLATE_SEGMENTS = 1.5;
 /** 앞 친구의 마지막 위치보다 이 거리 안쪽에서 앞서 있으면 "내가 앞섬"으로 본다 */
 const AHEAD_CHECK_M = 300;
+
+/** 속도 비율을 쓰는 최소 속도 m/s, 비율 상한 (GPS 잡음·정차 때 튀지 않게) */
+const MIN_RATIO_SPEED = 3;
+const MAX_SPEED_RATIO = 1.4;
 
 /** 친구 최근 위치가 가까운데 이보다 오래전 통과를 고르면 한 바퀴 전 기록으로 본다 */
 const OLD_PASS_MS = 20_000;
@@ -108,7 +114,7 @@ const OUTLIER_M = 30;
  * 친구 점 j가 튄 점인지: 주변 점 두 개로 그 시각의 자리를 예상한다 (앞뒤 사이, 앞의 두 점으로 늘림 등).
  * 예상이 하나라도 30 m 안에 맞으면 정상 (예상에 쓴 점이 튄 점일 수도 있어서, 모두 어긋날 때만 튄 점)
  */
-function isOutlier(trail: readonly TrailPoint[], j: number): boolean {
+export function isOutlier(trail: readonly TrailPoint[], j: number): boolean {
   const b = trail[j]!;
   const pairs: Array<[number, number]> = [
     [j - 1, j + 1],
@@ -195,6 +201,16 @@ function passedGap(path: readonly TrailPoint[], trail: readonly TrailPoint[], j:
     if (((meNow.x - b.x) * dx + (meNow.y - b.y) * dy) / L <= 0) return 'not_passed';
     const along = ((b.x - path[k]!.x) * dx + (b.y - path[k]!.y) * dy) / L;
     tPass += (along / L) * dt;
+    // 그 점에서의 간격을 "지금"으로 옮긴다 (사용자 요청 "최대한 예민하게"): 친구가 그 점 뒤에도 그때의 속도 비율로
+    // 같은 길을 달린다고 보고, 내가 그 점에서 지금 자리까지 온 시간을 친구 속도로 바꿔 뺀다.
+    // 친구가 나보다 느리면 간격이 줄고, 빠르면 는다. 친구 GPS 속도가 없으면 같은 속도로 본다
+    const vMe = (L / dt) * 1000;
+    const vF = b.v;
+    if (vF !== undefined && vF !== null && Number.isFinite(vF) && vF > MIN_RATIO_SPEED && vMe > MIN_RATIO_SPEED) {
+      const ratio = Math.max(1 / MAX_SPEED_RATIO, Math.min(MAX_SPEED_RATIO, vMe / vF));
+      const dMe = (meNow.t - tPass) / 1000;
+      return (tPass - b.t) / 1000 + dMe * (1 - ratio);
+    }
   }
   return (tPass - b.t) / 1000;
 }
@@ -220,7 +236,7 @@ const TRAIL_KEEP_MS = 180_000;
 /** 앞 친구 위치가 이만큼 넘게 안 오면 "신호 없음" */
 export const GAP_STALE_MS = 5000;
 /** 부드럽게 하는 시간 상수 (초) */
-const SMOOTH_S = 0.5;
+const SMOOTH_S = 0.15;
 
 /** 받은 앞 친구 위치를 모아 두고, 그릴 때마다 간격을 부드럽게 계산한다 */
 export class GapTracker {
