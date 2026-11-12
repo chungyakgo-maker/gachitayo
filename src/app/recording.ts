@@ -360,6 +360,17 @@ export function markRecordingEvent(type: SessionEventType, payload?: Record<stri
 
 /** 기록을 끝내고 지운다 (주행 준비에서 취소, 사양서 8.3) */
 export async function discardRecording(): Promise<void> {
+  // 아직 시작하는 중이면(권한 확인·세션 만들기) 끝날 때까지 기다렸다가 지운다. 안 그러면 나중에 혼자 기록이 시작된다
+  if (state.phase === 'starting') {
+    await new Promise<void>((resolve) => {
+      const off = subscribe(() => {
+        if (state.phase !== 'starting') {
+          off();
+          resolve();
+        }
+      });
+    });
+  }
   const a = active;
   if (!a) return;
   if (state.phase === 'recording') a.teardown();

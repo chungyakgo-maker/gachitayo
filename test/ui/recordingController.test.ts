@@ -69,4 +69,35 @@ describe('기록 컨트롤러', () => {
     const sessions = await c.getRepo().list();
     expect(sessions.map((s) => s.status)).toEqual(['finished', 'finished']);
   });
+
+  it('주행 준비 취소: 기록을 지운다. 시작하는 중에 취소해도 나중에 혼자 시작되지 않는다', async () => {
+    const c = await load();
+    c.startRecording();
+    // 아직 starting
+    expect(c.getRecordingState().phase).toBe('starting');
+    await c.discardRecording();
+    expect(c.getRecordingState().phase).toBe('idle');
+    expect(await c.getRepo().list()).toEqual([]);
+    // 시작 뒤 취소
+    c.startRecording();
+    await until(c, 'recording');
+    c.markRecordingEvent('drive_start');
+    await c.discardRecording();
+    expect(c.getRecordingState().phase).toBe('idle');
+    expect(await c.getRepo().list()).toEqual([]);
+  });
+
+  it('기록 중 샘플을 구독할 수 있고, 종료하면 세션 id를 돌려준다', async () => {
+    const c = await load();
+    const seen: string[] = [];
+    const off = c.subscribeSamples((e) => seen.push(e.kind));
+    c.startRecording();
+    await until(c, 'recording');
+    const watch = (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0] as PositionCallback;
+    watch({ coords: { latitude: 37.2, longitude: 127.1, accuracy: 5, altitude: null, altitudeAccuracy: null, speed: 0, heading: null }, timestamp: Date.now() } as unknown as GeolocationPosition);
+    expect(seen).toContain('gps');
+    const id = await c.stopRecording();
+    expect(id).toBe((await c.getRepo().list())[0]!.id);
+    off();
+  });
 });
