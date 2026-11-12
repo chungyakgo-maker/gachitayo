@@ -2085,6 +2085,35 @@ html.app-h .modal-backdrop {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
+/* 코스 상세: 출발점·도착점을 내비 앱으로 열기 */
+.nav-open {
+  gap: 10px;
+}
+
+.nav-open-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-open-label {
+  font-size: 14px;
+  color: var(--fg-dim, #9aa1a9);
+}
+
+.nav-open-row .btn {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  text-decoration: none;
+}
+
+.nav-open .sub a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 /* 메인 지도: GPS 아이콘을 누르면 내 위치로 */
 button.map-gps {
   padding: 0;

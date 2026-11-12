@@ -1,5 +1,5 @@
 // 코스 상세 (사양서 8.7): 지도(중심선·출발선·도착선·구간 경계), 이름 바꾸기, 출발선·도착선 옮기기(지도에서 누르기),
-// 코스 다듬기, GPX 내보내기, 코스 지우기(내 코스만). 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
+// 코스 다듬기, GPX 내보내기, 코스 지우기(내 코스만), 출발점·도착점을 내비 앱으로 열기. 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
 import { useEffect, useMemo, useState } from 'react';
 import { courseGpxFile, deleteCourse, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
 import { loadCourses, useDrive } from '../../app/drive';
@@ -14,7 +14,46 @@ import { Sheet } from '../components/Sheet';
 import { formatLapTime, formatLength } from '../format';
 import { IconBack } from '../icons';
 import type { MapShape } from '../map/leafletMap';
+import { NAV_APP_LABEL, NAV_APP_WITH, navUrl, platformOf, storeUrl, type NavApp } from '../navLinks';
 import { useBestTimes } from './useBestTimes';
+
+/** 출발점·도착점을 네이버 지도·카카오맵으로 열기 (사용자 요청). 앱이 없으면 설치 화면 링크 */
+function NavOpen({ course }: { course: Course }) {
+  const platform = platformOf(typeof navigator === 'undefined' ? '' : navigator.userAgent);
+  const appname = typeof window === 'undefined' ? 'gachitayo' : `${window.location.origin}${window.location.pathname}`;
+  const loop = course.kind === 'loop';
+  const points = [
+    { label: loop ? '출발·도착점' : '출발점', at: course.startGate, name: `${course.name} ${loop ? '출발·도착' : '출발'}` },
+    ...(loop ? [] : [{ label: '도착점', at: course.finishGate, name: `${course.name} 도착` }]),
+  ];
+  const apps: NavApp[] = ['naver', 'kakao'];
+  return (
+    <section className="card card-col nav-open" aria-label="내비로 가기">
+      <span className="label">내비로 가기</span>
+      {points.map((p) => (
+        <div key={p.label} className="nav-open-row">
+          <span className="nav-open-label">{p.label}</span>
+          {apps.map((app) => (
+            <a key={app} className="btn small" href={navUrl(app, { lat: p.at.lat, lon: p.at.lon, name: p.name }, platform, appname)} aria-label={`${p.label}까지 ${NAV_APP_WITH[app]} 길안내`}>
+              {NAV_APP_LABEL[app]}
+            </a>
+          ))}
+        </div>
+      ))}
+      <span className="sub">
+        카카오맵은 길찾기 화면이 열려요. "안내 시작"을 누르면 길안내를 해요. 앱이 없으면 설치:{' '}
+        {apps.map((app, i) => (
+          <span key={app}>
+            {i > 0 ? ' · ' : ''}
+            <a href={storeUrl(app, platform)} target="_blank" rel="noreferrer">
+              {NAV_APP_LABEL[app]}
+            </a>
+          </span>
+        ))}
+      </span>
+    </section>
+  );
+}
 
 const SOURCE: Record<Course['source'], string> = { auto: '첫 주행으로 자동', map: '지도에서', gpx: 'GPX' };
 
@@ -125,6 +164,7 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
           if (mode) setPending({ lat, lon });
         }}
       />
+      {!mode && <NavOpen course={course} />}
       {mode ? (
         <div className="notice">
           {mode === 'start' ? '출발선' : '도착선'}을 옮길 곳을 지도에서 누르세요. 코스 선 위 가장 가까운 곳으로 붙어요.

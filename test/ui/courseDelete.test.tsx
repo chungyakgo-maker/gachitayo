@@ -57,6 +57,26 @@ describe('코스 지우기 (사용자 요청)', () => {
   });
 });
 
+describe('내비로 가기 (사용자 요청)', () => {
+  it('편도: 출발점·도착점마다 네이버 지도(바로 길안내)·카카오맵(자동차 길찾기)', () => {
+    courses = [course];
+    render(<CourseDetailScreen courseId="c1" />);
+    const nav = screen.getByRole('region', { name: '내비로 가기' });
+    const start = screen.getByRole('link', { name: '출발점까지 네이버 지도로 길안내' }).getAttribute('href')!;
+    expect(start).toMatch(/^nmap:\/\/navigation\?dlat=37\.500000&dlng=127\.000000&dname=/);
+    expect(decodeURIComponent(start)).toContain('dname=내 와인딩 출발');
+    expect(screen.getByRole('link', { name: '도착점까지 카카오맵으로 길안내' }).getAttribute('href')).toBe('kakaomap://route?ep=37.510000,127.000000&by=CAR');
+    expect(nav.querySelectorAll('a.btn')).toHaveLength(4);
+  });
+
+  it('랩 코스는 출발·도착점 한 줄', () => {
+    courses = [{ ...course, kind: 'loop', finishGate: course.startGate }];
+    render(<CourseDetailScreen courseId="c1" />);
+    expect(screen.getByRole('region', { name: '내비로 가기' }).querySelectorAll('a.btn')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: '출발·도착점까지 네이버 지도로 길안내' })).toBeInTheDocument();
+  });
+});
+
 describe('GPS 아이콘 (메인 지도)', () => {
   it('누를 수 있으면 "내 위치로" 버튼, 색은 GPS 상태 그대로 (약하면 빨강)', () => {
     const go = vi.fn();
