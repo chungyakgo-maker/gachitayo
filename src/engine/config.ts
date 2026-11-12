@@ -67,6 +67,8 @@ export const config = {
       imuNoGyro: { pos: 0.05 ** 2, psi: 0.5 ** 2, v: 0.3 ** 2, b: 0.05 ** 2 },
       gpsOnly: { pos: 0.5 ** 2, psi: 0.5 ** 2, v: 3 ** 2, b: 0 },
     },
+    /** GPS 속도를 위치 차이로 계산한 점이 이 비율을 넘으면 "속도 품질 낮음" */
+    speedQualityLowFraction: 0.2,
     /** 처음 상태의 표준편차 */
     init: { psiUnknownRad: Math.PI, psiKnownRad: 0.1, vUnknownMps: 3, vKnownMps: 0.5, b: 0.5 },
   },
