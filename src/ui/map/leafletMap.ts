@@ -36,6 +36,8 @@ export interface MainMapController {
   setFriends(list: FriendMarker[]): void;
   /** 친구들(과 나)이 다 보이게 */
   fitFriends(me: MapFix | null): void;
+  /** 지도 위에 얹은 칸이 가리는 높이 (px). 내 위치·맞추기는 가려지지 않은 영역 기준 (사용자 요청) */
+  setInsets(top: number, bottom: number): void;
   /** 타일을 보여주는 중인지 (시험용) */
   tilesShown(): boolean;
   /** Leaflet 지도 (시험용) */
@@ -75,6 +77,12 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
   }
 
   let courseKey: string | null = null;
+  let lastCourse: Course | null = null;
+  let lastMe: MapFix | null = null;
+  let inset = { top: 0, bottom: 0 };
+  /** 이 점이 가려지지 않은 영역의 가운데에 오게 하는 지도 중심 */
+  const centerFor = (ll: L.LatLngExpression, zoom: number) => map.unproject(map.project(ll, zoom).add([0, (inset.bottom - inset.top) / 2]), zoom);
+  const pad = (n: number) => ({ paddingTopLeft: L.point(n, n + inset.top), paddingBottomRight: L.point(n, n + inset.bottom) });
   let haveMe = false;
   let userMoved = false;
   let programmatic = false;
@@ -137,13 +145,15 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     if (me) pts.push(L.latLng(me.lat, me.lon));
     if (pts.length === 0) return;
     move(() => {
-      if (pts.length === 1 || !course) map.setView(pts[pts.length - 1]!, 16, { animate: false });
-      else map.fitBounds(L.latLngBounds(pts), { padding: [44, 44], maxZoom: 17, animate: false });
+      if (pts.length === 1 || !course) map.setView(centerFor(pts[pts.length - 1]!, 16), 16, { animate: false });
+      else map.fitBounds(L.latLngBounds(pts), { ...pad(44), maxZoom: 17, animate: false });
     });
   }
 
   return {
     update(course, me) {
+      lastCourse = course;
+      lastMe = me;
       const key = course ? `${course.id}:${course.version}` : null;
       const courseChanged = key !== courseKey;
       if (courseChanged) {
@@ -159,7 +169,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
         fit(course, me);
       } else if (me && !course && !userMoved) {
         // 코스가 없으면 내 위치를 따라간다 (사용자가 지도를 옮기면 멈추고, "내 위치"를 누르면 다시)
-        move(() => map.panTo([me.lat, me.lon], { animate: false }));
+        move(() => map.panTo(centerFor([me.lat, me.lon], map.getZoom()), { animate: false }));
       }
     },
     setOnline(online) {
@@ -183,13 +193,21 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       if (pts.length === 0) return;
       userMoved = true; // 친구를 보는 동안은 내 위치를 따라가지 않는다 ("내 위치"를 누르면 다시)
       move(() => {
-        if (pts.length === 1) map.setView(pts[0]!, 16, { animate: false });
-        else map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: false });
+        if (pts.length === 1) map.setView(centerFor(pts[0]!, 16), 16, { animate: false });
+        else map.fitBounds(L.latLngBounds(pts), { ...pad(56), maxZoom: 16, animate: false });
       });
     },
     locate(me) {
       userMoved = false;
-      move(() => map.setView([me.lat, me.lon], Math.max(map.getZoom(), 16), { animate: false }));
+      const z = Math.max(map.getZoom(), 16);
+      move(() => map.setView(centerFor([me.lat, me.lon], z), z, { animate: false }));
+    },
+    setInsets(top, bottom) {
+      if (top === inset.top && bottom === inset.bottom) return;
+      inset = { top, bottom };
+      map.invalidateSize({ pan: false });
+      // 사용자가 지도를 옮기지 않았으면 새 영역에 맞춰 다시
+      if (!userMoved && (lastCourse || lastMe)) fit(lastCourse, lastMe);
     },
     tilesShown: () => shown,
     map,
@@ -204,10 +222,10 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
 // 코스·고스트·내 위치는 오버레이 그리기 함수(캔버스)가 이 지도의 좌표 변환으로 그 위에 그린다.
 
 export interface ReplayMapController {
-  /** 점들이 화면을 꽉 채우게 (아래 띠 높이만큼 비움) */
-  fit(points: Array<[number, number]>, insetBottom: number): void;
-  /** 내 위치를 아래 띠를 뺀 화면 가운데에, 가깝게 */
-  follow(lat: number, lon: number, insetBottom: number): void;
+  /** 점들이 가려지지 않은 영역을 꽉 채우게 */
+  fit(points: Array<[number, number]>, inset: { top: number; bottom: number }): void;
+  /** 내 위치를 가려지지 않은 영역의 가운데에, 가깝게 */
+  follow(lat: number, lon: number, inset: { top: number; bottom: number }): void;
   /** 지도 한가운데에 놓기 (진행 방향 위 보기: 지도판을 크게 만들어 돌리므로 가운데 = 나) */
   centerOn(lat: number, lon: number): void;
   /** 위경도 → 지도 안의 화면 좌표 (px) */
@@ -219,10 +237,11 @@ export interface ReplayMapController {
 export const FOLLOW_ZOOM = 17;
 
 export function createReplayMap(el: HTMLElement): ReplayMapController {
-  // 재생 화면은 두 번 탭으로 모드를 바꾸므로 지도 조작은 모두 끈다
+  // 재생 화면은 두 번 탭으로 모드를 바꾸므로 지도 조작은 모두 끈다.
+  // 지도 출처는 지도판이 돌아가도 바로 보이게 바깥(ReplayMap)에서 글자로 쓴다
   const map = L.map(el, {
     zoomControl: false,
-    attributionControl: true,
+    attributionControl: false,
     zoomSnap: 0,
     fadeAnimation: false,
     dragging: false,
@@ -232,8 +251,6 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     boxZoom: false,
     keyboard: false,
   });
-  map.attributionControl.setPrefix(false);
-  map.attributionControl.setPosition('topright');
   const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
   map.setView([36.5, 127.8], 7);
   let shown = false;
@@ -252,16 +269,16 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     else tiles.remove();
   }
   return {
-    fit(points, insetBottom) {
+    fit(points, inset) {
       if (points.length === 0) return;
       map.invalidateSize({ pan: false });
-      if (points.length === 1) map.setView(points[0]!, FOLLOW_ZOOM, { animate: false });
-      else map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20], paddingBottomRight: [20, 20 + insetBottom], maxZoom: 18, animate: false });
+      if (points.length === 1) map.setView(map.unproject(map.project(points[0]!, FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]), FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
+      else map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20 + inset.top], paddingBottomRight: [20, 20 + inset.bottom], maxZoom: 18, animate: false });
     },
-    follow(lat, lon, insetBottom) {
+    follow(lat, lon, inset) {
       map.invalidateSize({ pan: false });
-      // 아래 띠에 가리지 않게 위로 띠 높이의 절반만큼
-      const c = map.project([lat, lon], FOLLOW_ZOOM).add([0, insetBottom / 2]);
+      // 가려지지 않은 영역의 가운데에 오게 (위·아래 가림 차이의 절반만큼 옮긴다)
+      const c = map.project([lat, lon], FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]);
       map.setView(map.unproject(c, FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
     },
     centerOn(lat, lon) {

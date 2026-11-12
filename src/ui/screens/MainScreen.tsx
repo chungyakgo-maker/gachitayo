@@ -1,6 +1,6 @@
 // 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도(통신이 되면 OSM 타일, 안 되면 타일 없이),
 // 위치 공유 켜기/끄기와 공유 중인 친구 (M8: 사용자 요청으로 2단계에서 앞당김). 같이 달리기는 3단계라 넣지 않는다.
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
 import { beginPrepare, loadCourses, useDrive } from '../../app/drive';
 import { useRecording } from '../../app/recording';
@@ -13,7 +13,9 @@ import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { formatLapTime, formatLength } from '../format';
 import { useLocationPreview } from '../hooks/useLocationPreview';
-import { IconArrowRight, IconCloud, IconGps, IconPin, IconSettings, IconWarn } from '../icons';
+import { IconArrowRight, IconCloud, IconPin, IconSettings, IconWarn } from '../icons';
+import type { GpsState } from '../components/GpsIcon';
+import { useOverlayInsets } from '../hooks/useOverlayInsets';
 import { usePwaUpdate } from '../pwa/usePwaUpdate';
 import { useBestTimes } from './useBestTimes';
 
@@ -43,11 +45,18 @@ export function MainScreen() {
   const near = useMemo(() => (fix ? nearestCourse(drive.courses, fix.lat, fix.lon) : null), [fix, drive.courses]);
   const course = near?.course ?? null;
   const best = useBestTimes(course ? [course] : []);
+  const baseRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+  const tabRef = useRef<HTMLElement>(null);
+  const ins = useOverlayInsets(baseRef, topRef, tabRef);
 
+  // 지도가 화면 전체, 위 카드·아래 탭은 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
+  const gps: GpsState = permission === 'denied' ? 'weak' : !fix ? 'none' : fix.hAcc <= 10 ? 'good' : fix.hAcc <= 30 ? 'wait' : 'weak';
   return (
-    <Tabbed path="/">
+    <Tabbed path="/" overlay tabbarRef={tabRef}>
       <UpdateBanner visible={needRefresh && !busy} onUpdate={update} />
-      <div className="main-top">
+      <div className="main-full" ref={baseRef}>
+      <div className="main-top overlay" ref={topRef}>
         <header className="page-head">
           <h1 className="big">같이타요</h1>
           <a className="icon-btn" href="#/settings" aria-label="설정">
@@ -81,10 +90,6 @@ export function MainScreen() {
                 )}
               </span>
             </div>
-          <span className="gps-badge">
-            <IconGps size={16} color={fix ? (fix.hAcc <= 10 ? '#3EE08F' : '#FFB224') : '#5E656D'} />
-            GPS <span className="mono">{fix ? `${Math.round(fix.hAcc)}m` : '—'}</span>
-          </span>
           </div>
         ) : (
           // 근처에 코스가 없으면 한 줄로 작게 (사용자 요청)
@@ -94,10 +99,6 @@ export function MainScreen() {
                 <IconPin size={14} />
                 <strong>새 코스</strong>
                 <span className="dim">· {fix ? '근처 코스 없음' : '위치 확인 중'}</span>
-              </span>
-              <span className="gps-badge">
-                <IconGps size={16} color={fix ? (fix.hAcc <= 10 ? '#3EE08F' : '#FFB224') : '#5E656D'} />
-                GPS <span className="mono">{fix ? `${Math.round(fix.hAcc)}m` : '—'}</span>
               </span>
             </div>
             {permission === 'denied' ? (
@@ -124,13 +125,23 @@ export function MainScreen() {
           <IconArrowRight size={26} />
         </button>
       </div>
-      <MainMap course={course} me={fix} label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'} friends={friendsOn ? fr.positions : []}>
+      <MainMap
+        course={course}
+        me={fix}
+        label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'}
+        friends={friendsOn ? fr.positions : []}
+        insetTop={ins.top}
+        insetBottom={ins.bottom}
+        gps={gps}
+        gpsAcc={fix?.hAcc ?? null}
+      >
         <div className="map-controls">
           {friendsOn && <ShareToggle variant="map" />}
           {!course && !fix && <div className="map-chip">위치를 받으면 지도에 표시돼요</div>}
           {friendsOn && fr.error && fr.sharing && <div className="map-chip">{fr.error}</div>}
         </div>
       </MainMap>
+      </div>
     </Tabbed>
   );
 }

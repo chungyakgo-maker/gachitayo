@@ -2042,3 +2042,173 @@ html.app-h .modal-backdrop {
   min-height: 0;
   width: 100%;
 }
+
+/* ── 지도 모드 (세로): 지도가 화면 전체, 델타·고른 값·종료 버튼은 반투명으로 위에 얹는다 (사용자 요청) ──
+   내 위치는 얹은 칸에 가려지지 않은 영역의 가운데 (useOverlayInsets). 가로 화면은 예전처럼 옆에 나란히 */
+@media not all and (orientation: landscape) and (max-height: 520px) {
+  .drive.mode-map .drive-map {
+    position: absolute;
+    inset: 0;
+    border-top: 0;
+  }
+  .drive.mode-map .drive-pad {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1100;
+  }
+}
+
+.drive.mode-map .delta-panel,
+.drive.mode-map .tile {
+  background-color: rgba(14, 15, 18, 0.82);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.drive.mode-map .delta-panel.fast {
+  background: linear-gradient(var(--fast-bg), var(--fast-bg)), rgba(14, 15, 18, 0.82);
+}
+
+.drive.mode-map .delta-panel.slow {
+  background: linear-gradient(var(--slow-bg), var(--slow-bg)), rgba(14, 15, 18, 0.82);
+}
+
+.drive.mode-map .drive-map .drive-bottom {
+  z-index: 1100;
+  background: transparent;
+  border-top: 0;
+}
+
+.drive.mode-map .end-btn {
+  background: rgba(14, 15, 18, 0.86);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+/* GPS 아이콘 (사용자 요청: 아래 상태 줄 대신 색만). 지도 오른쪽 위 모서리, 나침반 버튼과 마주 보게 */
+.gps-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.map-gps {
+  position: absolute;
+  z-index: 1000;
+  right: calc(12px + var(--safe-r, 0px));
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(16, 17, 20, 0.9);
+  border: 1px solid #3a3f45;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* 미니멀·대시보드: 종료 버튼 위 오른쪽에 GPS 아이콘만 */
+.gps-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: 32px;
+}
+
+/* 지도 출처 (돌아가는 지도판 밖에 글자로, 종료 버튼 바로 위 오른쪽) */
+.map-attr {
+  position: absolute;
+  z-index: 1000;
+  right: calc(8px + var(--safe-r, 0px));
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(13, 14, 16, 0.75);
+  color: var(--fg-faint);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+/* ── 메인 (사용자 요청): 지도가 화면 전체, 위 카드·아래 탭은 반투명으로 얹는다 ── */
+.tabbed.overlay {
+  position: relative;
+}
+
+.tabbed.overlay .tabbed-body {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.tabbed.overlay .tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: rgba(11, 12, 14, 0.86);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.main-full {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.main-full .main-map {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  border-top: 0;
+}
+
+.main-top.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: calc(8px + var(--safe-t)) calc(12px + var(--safe-r)) 0 calc(12px + var(--safe-l));
+  gap: 8px;
+}
+
+.main-top.overlay .page-head,
+.main-top.overlay .card,
+.main-top.overlay .notice {
+  background: rgba(14, 15, 18, 0.84);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.main-top.overlay .page-head {
+  margin: 0;
+  padding: 8px 8px 8px 16px;
+  border-radius: 18px;
+}
+
+/* 지도 위 버튼은 가려지지 않은 영역 기준 (--inset-t, --inset-b는 MainMap이 정한다) */
+.main-map .map-controls {
+  top: calc(var(--inset-t, 0px) + 10px);
+}
+
+.main-map .map-gps.main {
+  top: calc(var(--inset-t, 0px) + 10px);
+}
+
+.main-map .map-locate {
+  top: auto;
+  bottom: calc(var(--inset-b, 0px) + 30px);
+}
+
+.main-map .map-friends {
+  bottom: calc(var(--inset-b, 0px) + 30px);
+}
+
+.main-map .leaflet-top {
+  top: var(--inset-t, 0px);
+}
+
+.main-map .leaflet-bottom {
+  bottom: var(--inset-b, 0px);
+}

@@ -19,6 +19,8 @@ export interface ReplayMapProps {
   frame: OverlayFrame;
   origin: LatLon | null;
   th: OverlayTheme;
+  /** 지도 위에 얹은 칸이 위·아래에서 가리는 높이 (px). 내 위치는 가려지지 않은 영역 가운데 (사용자 요청) */
+  insetTop: number;
   insetBottom: number;
   label: string;
   friend?: MiniMapOpts['friend'];
@@ -31,7 +33,7 @@ export interface ReplayMapProps {
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
 
-export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, friends, heading = null, view }: ReplayMapProps) {
+export function ReplayMap({ model, frame, origin, th, insetTop, insetBottom, label, friend, friends, heading = null, view }: ReplayMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<ReplayMapController | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -65,24 +67,25 @@ export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend
         const ll = fromLocal(origin, x, y);
         return [ll.lat, ll.lon] as [number, number];
       }),
-      insetBottom,
+      { top: insetTop, bottom: insetBottom },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, model, origin?.lat, origin?.lon, view, insetBottom, model.line.length ? 0 : Math.floor(pathLen / 20), box.width, box.height]);
+  }, [state, model, origin?.lat, origin?.lon, view, insetTop, insetBottom, model.line.length ? 0 : Math.floor(pathLen / 20), box.width, box.height]);
 
   // 진행 방향 위: 지도판을 대각선 크기로 키워 내 위치(보이는 곳 가운데)에 두고, 진행 방향이 위로 오게 돌린다
   const psi = heading ?? frame.me?.psi ?? null;
   const rotating = view === 'heading' && psi !== null;
   const W = box.width;
   const H = box.height;
-  const vc = (H - insetBottom) / 2;
-  const D = Math.ceil(Math.hypot(W, H)) + 8;
+  const vc = insetTop + (H - insetTop - insetBottom) / 2;
+  // 돌려도 화면 네 모서리가 다 덮이게: 돌리는 중심(내 위치 자리)에서 가장 먼 모서리까지가 반지름
+  const D = Math.ceil(2 * Math.hypot(W / 2, Math.max(vc, H - vc))) + 8;
   const rotDeg = rotating ? -(90 - (psi! * 180) / Math.PI) : 0;
 
   if (state === 'ready' && frame.me && origin && view !== 'fit') {
     const ll = fromLocal(origin, frame.me.x, frame.me.y);
     if (rotating) ctl.current?.centerOn(ll.lat, ll.lon);
-    else ctl.current?.follow(ll.lat, ll.lon, insetBottom);
+    else ctl.current?.follow(ll.lat, ll.lon, { top: insetTop, bottom: insetBottom });
   }
 
   // 평면 좌표 → 화면 좌표. 위도는 y에만, 경도는 x에만 달려 있어(fromLocal, 북쪽이 위) 축마다 바꾼 뒤, 돌렸으면 같이 돌린다
@@ -126,8 +129,13 @@ export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend
         className="overlay-layer"
         style={{ position: 'absolute', inset: 0 }}
         label={label}
-        draw={(ctx, w, h) => drawMiniMap(ctx, w, h, model, frame, th, { insetBottom, margin: 28, view: mapView, friend, friends, north: false })}
+        draw={(ctx, w, h) => drawMiniMap(ctx, w, h, model, frame, th, { insetBottom, top: insetTop + 20, margin: 28, view: mapView, friend, friends, north: false })}
       />
+      {state === 'ready' && isOnline() && (
+        <span className="map-attr" style={{ bottom: insetBottom + 6 }}>
+          © OpenStreetMap
+        </span>
+      )}
     </div>
   );
 }

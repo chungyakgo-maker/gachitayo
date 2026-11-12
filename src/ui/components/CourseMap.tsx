@@ -17,6 +17,8 @@ export interface CourseMapProps {
   variant: 'main' | 'drive' | 'mini';
   /** 아래쪽을 가리는 띠 높이 (px) */
   insetBottom?: number;
+  /** 위쪽을 가리는 칸 높이 (px, 메인 지도 위에 얹은 카드) */
+  insetTop?: number;
   label?: string;
 }
 
@@ -26,7 +28,7 @@ const STYLE = {
   mini: { wide: '#24282D', wideW: 8, thin: '#4A5057', gate: '#ECEEF0', bg: '#0B0C0E', grid: null },
 } as const;
 
-export function CourseMap({ course, me, ghost, path, variant, insetBottom = 0, label }: CourseMapProps) {
+export function CourseMap({ course, me, ghost, path, variant, insetBottom = 0, insetTop = 0, label }: CourseMapProps) {
   const { ref, width: W, height: H } = useElementSize<HTMLDivElement>();
   const st = STYLE[variant];
   const accent = '#aacae6';
@@ -74,7 +76,7 @@ export function CourseMap({ course, me, ghost, path, variant, insetBottom = 0, l
       maxY = c + span / 2;
     }
     const m = variant === 'mini' ? 16 : 44;
-    const top = variant === 'drive' ? 24 : m;
+    const top = (variant === 'drive' ? 24 : m) + insetTop;
     const aw = W - 2 * m;
     const ah = H - top - m - insetBottom;
     const sc = Math.max(1e-6, Math.min(aw / (maxX - minX), ah / (maxY - minY)));
@@ -83,7 +85,7 @@ export function CourseMap({ course, me, ghost, path, variant, insetBottom = 0, l
     return { sc, X: (x: number) => ox + (x - minX) * sc, Y: (y: number) => oy + (maxY - y) * sc };
     // 경로는 같은 배열이 늘어나므로 길이로 다시 계산한다. 코스가 있으면 코스로만 맞춘다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [line, gates, W, H, insetBottom, variant, line.length ? 0 : pathLen, line.length ? 0 : Math.round((me?.x ?? 0) / 50), line.length ? 0 : Math.round((me?.y ?? 0) / 50)]);
+  }, [line, gates, W, H, insetTop, insetBottom, variant, line.length ? 0 : pathLen, line.length ? 0 : Math.round((me?.x ?? 0) / 50), line.length ? 0 : Math.round((me?.y ?? 0) / 50)]);
 
   const courseD = useMemo(() => {
     if (!view || line.length < 2) return '';

@@ -123,3 +123,33 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     m.destroy();
   });
 });
+
+describe('가려지지 않은 영역 가운데 (사용자 요청: 지도는 화면 전체, 칸들은 위에 얹는다)', () => {
+  it('메인 지도: 위 카드 190 px, 아래 탭 70 px이면 내 위치는 (190 + 430) / 2 = 310 px 높이에', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    m.setInsets(190, 70);
+    const me = { lat: 37.39, lon: 126.95, hAcc: 5 };
+    m.update(null, me);
+    const p = m.map.latLngToContainerPoint([me.lat, me.lon]);
+    expect(p.x).toBeCloseTo(195, 0);
+    expect(p.y).toBeCloseTo((190 + (500 - 70)) / 2, 0);
+    m.locate(me);
+    expect(m.map.latLngToContainerPoint([me.lat, me.lon]).y).toBeCloseTo(310, 0);
+    m.destroy();
+  });
+
+  it('주행·재생 지도: 나를 가운데 보기도 게이지 아래 ~ 종료 버튼 위의 가운데에', async () => {
+    const { createReplayMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const r = createReplayMap(el);
+    r.follow(37.2, 127.1, { top: 240, bottom: 80 });
+    const p = r.project(37.2, 127.1);
+    expect(p.x).toBeCloseTo(195, 0);
+    expect(p.y).toBeCloseTo((240 + (500 - 80)) / 2, 0);
+    // 지도 출처는 지도판 밖 글자로 (돌아가도 바로 보이게)
+    expect(el.querySelector('.leaflet-control-attribution')).toBeNull();
+    r.destroy();
+  });
+});

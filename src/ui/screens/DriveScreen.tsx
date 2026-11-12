@@ -17,9 +17,10 @@ import { LongPressButton } from '../components/LongPressButton';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { ReplayMap } from '../components/ReplayMap';
 import { MapViewButton } from '../components/MapViewButton';
+import { GpsIcon, type GpsState } from '../components/GpsIcon';
+import { useOverlayInsets } from '../hooks/useOverlayInsets';
 import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
-import { IconGps } from '../icons';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
 import { drawMiniMap, followView, mapModel } from '../overlay/minimap';
@@ -46,7 +47,6 @@ export interface DriveViewProps {
   onMapView?: (v: MapViewMode) => void;
 }
 
-const NEXT_LABEL: Record<DriveMode, string> = { map: '미니멀', minimal: '대시보드', dashboard: '지도' };
 const DOUBLE_TAP_MS = 350;
 const LAP_FLASH_MS = 3000;
 
@@ -59,43 +59,11 @@ function sectorTime(ms: number | null): string {
   return ms < 60_000 ? (Math.floor(ms) / 1000).toFixed(3) : formatLapTime(ms, 3);
 }
 
-/** G 보정이 어디서 멈췄는지 (정차 3초 → 직진 가감속 → 가감속·코너 확인) */
-export function gCalText(snap: LiveSnapshot | null): string {
-  const p = snap?.calibration.progress;
-  if (!p) return 'G 보정 안 됨';
-  if (p.stage === 'stationary') return `G 보정: 정차 ${Math.floor((snap?.calibration.stillProgress ?? 0) * 3)}/3초`;
-  if (p.stage === 'forward') return `G 보정: 직진 가감속 ${p.fwd}/${p.fwdNeed}`;
-  if (p.stage === 'signs') return `G 보정: 가감속 ${Math.min(p.fwd, p.fwdNeed)}/${p.fwdNeed} · 코너 ${Math.min(p.turns, p.turnsNeed)}/${p.turnsNeed}`;
-  return 'G 보정 안 됨';
-}
-
-function StatusBar({ snap, mode, course, replay, gap }: { snap: LiveSnapshot | null; mode: DriveMode; course: Course | null; replay: DriveState['replay']; gap?: GapInfo | null }) {
-  const st = snap?.state;
-  const hAcc = snap?.gps.hAcc;
-  const weak = !snap || st?.status.gpsWeak || (snap.gps.ageMs ?? Infinity) > 3000;
-  const flags: Array<{ text: string; cls: string }> = [];
-  if (replay) flags.push({ text: `재생 ${replay.speed}×${replay.ended ? ' · 끝' : ''}`, cls: 'warn' });
-  if (gap?.stale) flags.push({ text: '앞 친구 신호 없음', cls: 'warn' });
-  if (!course) flags.push({ text: '코스 기록 중', cls: '' });
-  if (st?.status.offCourse && course) flags.push({ text: '코스 이탈', cls: 'bad' });
-  if (snap && !snap.calibration.motionActive) flags.push({ text: 'G 없음', cls: '' });
-  else if (st?.status.gNotCalibrated) flags.push({ text: gCalText(snap), cls: '' });
-  return (
-    <div className="drive-status">
-      <span className="flags">
-        <IconGps size={18} color={weak ? '#FF5B4F' : '#3EE08F'} />
-        <span>
-          {weak ? 'GPS 약함' : 'GPS'} <span className="mono gps-m">{hAcc === null || hAcc === undefined ? '—' : `${Math.round(Math.min(hAcc, 999))}m`}</span>
-        </span>
-        {flags.map((f) => (
-          <span key={f.text} className={`flag ${f.cls}`}>
-            {f.text}
-          </span>
-        ))}
-      </span>
-      <span className="hint">두 번 탭하면 {NEXT_LABEL[mode]}</span>
-    </div>
-  );
+/** GPS 아이콘 색 (사용자 요청: 아래 상태 줄 대신 아이콘 색만). 끊기거나 약하면 빨강, 준비 전이면 노랑 */
+export function gpsStateOf(snap: LiveSnapshot | null): GpsState {
+  if (!snap) return 'none';
+  if (snap.state?.status.gpsWeak || (snap.gps.ageMs ?? Infinity) > 3000) return 'weak';
+  return snap.gps.ready ? 'good' : 'wait';
 }
 
 /** 지도 모드 상단의 고른 값 한 칸 (캔버스) */
@@ -109,6 +77,11 @@ function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th
 
 export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }) }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
+  // 지도 모드: 위에 얹은 칸들이 지도를 가리는 높이 (다른 모드에서는 0)
+  const mapRef = useRef<HTMLDivElement>(null);
+  const padRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const ins = useOverlayInsets(mapRef, padRef, bottomRef);
   const st = snap?.state ?? null;
   // 최근 G 궤적 (사용자 요청: 부드럽게 그린다). 스냅숏 시각 순서로 모은다
   const trailBuf = useRef(new GTrailBuffer());
@@ -199,7 +172,9 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
               </>
             )}
           </div>
-          <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
+          <div className="gps-row">
+            <GpsIcon state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
+          </div>
           {end(true)}
         </div>
       </div>
@@ -277,7 +252,9 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
           </div>
           <div style={{ flex: 1 }} />
           <div className="full">
-            <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
+            <div className="gps-row">
+              <GpsIcon state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
+            </div>
             {end(true)}
           </div>
         </div>
@@ -295,10 +272,29 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   const headPsi = headSm ?? me?.psi ?? null;
   const mapRot = mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
   const viewFor = (w: number, hh: number) =>
-    mapView === 'fit' || !me ? undefined : followView(me, w, hh, { spanM, insetBottom: 120, top: 0, headingUp: mapView === 'heading' ? (headSm ?? me.psi ?? null) : null });
+    mapView === 'fit' || !me ? undefined : followView(me, w, hh, { spanM, insetBottom: ins.bottom, top: ins.top, headingUp: mapView === 'heading' ? (headSm ?? me.psi ?? null) : null });
   return (
+    // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
     <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
-      <div className="drive-pad">
+      <div className="drive-map" ref={mapRef}>
+        {replay || settings.mapTiles ? (
+          // 바탕 지도(OSM) 위에 그린다 (사용자 요청). 통신이 없거나 타일이 안 오면 타일 없이 그린다
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetTop={ins.top} insetBottom={ins.bottom} label={mapLabel} friend={front} friends={friends} heading={headSm} view={mapView} />
+        ) : (
+          <OverlayCanvas
+            style={{ position: 'absolute', inset: 0 }}
+            label={mapLabel}
+            draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: ins.bottom, top: ins.top + 20, margin: 28, friend: front, friends, view: viewFor(w, hh), north: false })}
+          />
+        )}
+        {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
+        <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />
+        <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 13 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
+        <div className="drive-bottom" ref={bottomRef}>
+          {end(false)}
+        </div>
+      </div>
+      <div className="drive-pad" ref={padRef}>
         <OverlayCanvas
           className={`delta-panel delta-map ${h.cls}`}
           label={deltaLabel}
@@ -307,20 +303,6 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         <div className="widget-row">
           <WidgetCanvas id={settings.widgets[0]} frame={frame} th={th} />
           <WidgetCanvas id={settings.widgets[1]} frame={frame} th={th} />
-        </div>
-      </div>
-      <div className="drive-map">
-        {replay || settings.mapTiles ? (
-          // 바탕 지도(OSM) 위에 그린다 (사용자 요청). 통신이 없거나 타일이 안 오면 타일 없이 그린다
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} friends={friends} heading={headSm} view={mapView} />
-        ) : (
-          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, friends, view: viewFor(w, hh), north: false })} />
-        )}
-        {/* 지도 보기 나침반 버튼 (사용자 요청): 누를 때마다 전체 코스 → 나를 가운데 → 진행 방향 위. 재생·주행 같음, 설정에 저장 */}
-        <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} />
-        <div className="drive-bottom">
-          <StatusBar snap={snap} mode={mode} course={course} replay={replay} gap={gap} />
-          {end(false)}
         </div>
       </div>
     </div>

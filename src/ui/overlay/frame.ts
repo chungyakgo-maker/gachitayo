@@ -96,14 +96,15 @@ export interface Headline {
 export function headline(f: OverlayFrame): Headline {
   if (f.gap) {
     const g = f.gap;
-    const target = `목표 ${g.targetS.toFixed(1)}초`;
-    if (g.stale) return { label: `앞 ${g.nickname} · 신호 없음`, text: '—', word: '', tone: 'none', plain: false };
-    if (g.gapS === null) return { label: `앞 ${g.nickname} · ${target}`, text: '—', word: '', tone: 'none', plain: false };
+    // 델타 칸 = 친구와의 델타, 제목 "Delta (친구이름)" (사용자 요청). 목표 간격은 오른쪽에 작게
+    const label = `Delta (${g.nickname})`;
+    if (g.stale) return { label: `${label} · 신호 없음`, text: '—', word: '', tone: 'none', plain: false };
+    if (g.gapS === null) return { label, text: '—', word: '', tone: 'none', plain: false };
     const d = g.gapS - g.targetS;
     // 목표보다 가까우면 빨강(느림 색), 멀면 초록(빠름 색), 0.2초 안이면 유지
     const tone: Tone = d < -GAP_HOLD_S ? 'slow' : d > GAP_HOLD_S ? 'fast' : 'none';
     const word = tone === 'slow' ? '가까움' : tone === 'fast' ? '멂' : '유지';
-    return { label: `앞 ${g.nickname} · ${target}`, text: formatDelta(d, 1), word, tone, plain: false };
+    return { label, text: formatDelta(d, 1), word, tone, plain: false };
   }
   if (!f.hasCourse) return { label: '코스 기록 중 · 출발 뒤', text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
   if (!f.hasRef) return { label: '비교 랩 없음', text: '—', word: '', tone: 'none', plain: false };
