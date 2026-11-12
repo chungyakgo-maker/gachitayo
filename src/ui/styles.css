@@ -99,8 +99,9 @@ a {
 }
 
 /* ── 앱 틀: 아래 탭 ─────────────────────────── */
+/* 앱 높이: --app-h는 아이폰 홈 화면 앱에서만 정해진다 (src/ui/viewport.ts). 없으면 100dvh */
 .tabbed {
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -153,7 +154,7 @@ a {
 }
 
 .page-full {
-  min-height: 100dvh;
+  min-height: var(--app-h, 100dvh);
   padding-bottom: calc(24px + var(--safe-b));
 }
 
@@ -470,6 +471,8 @@ a {
 .sheet-backdrop {
   position: fixed;
   inset: 0;
+  bottom: auto;
+  height: var(--app-h, 100%);
   z-index: 20;
   display: flex;
   align-items: flex-end;
@@ -616,6 +619,16 @@ a {
   color: var(--fg-faint);
 }
 
+/* 메인: 지도가 아래 탭까지 채우고, 버전은 지도 오른쪽 아래 구석에 작게 */
+.main-map .build-info {
+  position: absolute;
+  right: calc(10px + var(--safe-r));
+  bottom: 6px;
+  padding: 0;
+  font-size: 11px;
+  pointer-events: none;
+}
+
 .update-banner {
   position: fixed;
   top: calc(12px + var(--safe-t));
@@ -648,6 +661,8 @@ a {
 .drive {
   position: fixed;
   inset: 0;
+  bottom: auto;
+  height: var(--app-h, 100%);
   display: flex;
   flex-direction: column;
   background: var(--bg-drive);
@@ -1327,6 +1342,8 @@ a {
 .modal-backdrop {
   position: fixed;
   inset: 0;
+  bottom: auto;
+  height: var(--app-h, 100%);
   display: flex;
   align-items: center;
   justify-content: center;

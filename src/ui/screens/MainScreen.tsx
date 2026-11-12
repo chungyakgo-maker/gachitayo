@@ -109,10 +109,10 @@ export function MainScreen() {
       <div className="main-map">
         <CourseMap variant="main" course={course} me={me} label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'} />
         {!course && !fix && <div className="map-chip">위치를 받으면 지도에 표시돼요</div>}
+        <footer className="build-info">
+          버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
+        </footer>
       </div>
-      <footer className="build-info">
-        버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
-      </footer>
     </Tabbed>
   );
 }
