@@ -6,17 +6,18 @@ import type { Course } from '../../src/types/course';
 const built = BUILTIN_COURSES.map((b) => builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: crypto.randomUUID(), gateWidthM: 30 }));
 
 describe('기본 코스 (사양서 7.5)', () => {
-  it('사용자가 준 카카오맵 GPX 다섯 개: 배후령 · 미시령 옛길 · 만항재 · 말티재 · 구룡령, 모두 편도', () => {
-    expect(BUILTIN_COURSES.map((b) => b.name)).toEqual(['배후령', '미시령 옛길', '만항재', '말티재', '구룡령']);
+  it('사용자가 준 카카오맵 GPX 아홉 개, 모두 편도', () => {
+    expect(BUILTIN_COURSES.map((b) => b.name)).toEqual(['배후령', '미시령 옛길', '만항재', '말티재', '구룡령', '가평 복장리–상천리', '하오고개', '북악스카이웨이', '남한산성']);
     for (const b of BUILTIN_COURSES) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(200);
+    expect(new Set(BUILTIN_COURSES.map((b) => b.key)).size).toBe(BUILTIN_COURSES.length);
     expect(new Set(built.map((c) => c.kind))).toEqual(new Set(['point_to_point']));
     expect(new Set(built.map((c) => c.source))).toEqual(new Set(['gpx']));
-    expect(built.map((c) => c.builtin)).toEqual(['baehuryeong', 'misiryeong-old', 'manhangjae', 'maltijae', 'guryongnyeong']);
+    expect(built.map((c) => c.builtin)).toEqual(BUILTIN_COURSES.map((b) => b.key));
   });
 
-  it('길이는 카카오맵 경로 길이와 같다 (8.48 · 10.09 · 10.69 · 2.10 · 16.97 km, ±3%)', () => {
+  it('길이는 카카오맵 경로 길이와 같다 (±3%)', () => {
     const km = built.map((c) => c.lengthM! / 1000);
-    [8.48, 10.09, 10.69, 2.1, 16.97].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
+    [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
   });
 
   it('출발선은 출발점, 도착선은 도착점 근처. 선 폭은 설정값', () => {
@@ -33,9 +34,9 @@ describe('기본 코스 (사양서 7.5)', () => {
 
   it('목록에 없는 기본 코스만 넣고, 내 코스 다음에 정한 순서로 보인다', () => {
     const mine = { ...built[0]!, id: 'mine', builtin: undefined, name: '내 코스' } as Course;
-    expect(missingBuiltins([mine]).map((b) => b.key)).toEqual(['baehuryeong', 'misiryeong-old', 'manhangjae', 'maltijae', 'guryongnyeong']);
+    expect(missingBuiltins([mine]).map((b) => b.key)).toEqual(BUILTIN_COURSES.map((b) => b.key));
     // 나중에 추가된 기본 코스만 더 넣는다
-    expect(missingBuiltins([mine, ...built.slice(0, 3)]).map((b) => b.key)).toEqual(['maltijae', 'guryongnyeong']);
+    expect(missingBuiltins([mine, ...built.slice(0, 5)]).map((b) => b.key)).toEqual(['gapyeong-bokjang-sangcheon', 'haogogae', 'bukak-skyway', 'namhansanseong']);
     const sorted = sortCourses([built[2]!, built[4]!, built[0]!, mine, built[1]!, built[3]!]);
     expect(sorted.map((c) => c.name)).toEqual(['내 코스', '배후령', '미시령 옛길', '만항재', '말티재', '구룡령']);
     expect(builtinInfo(built[1]!)?.route).toBe('인제 → 고성');

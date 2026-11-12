@@ -18,6 +18,10 @@ export const BUILTIN_COURSES: readonly BuiltinCourse[] = [
   { key: 'manhangjae', name: '만항재', route: '태백 → 만항재 쉼터' },
   { key: 'maltijae', name: '말티재', route: '보은 → 말티재 전망대' },
   { key: 'guryongnyeong', name: '구룡령', route: '홍천 → 양양' },
+  { key: 'gapyeong-bokjang-sangcheon', name: '가평 복장리–상천리', route: '가평읍 → 청평면' },
+  { key: 'haogogae', name: '하오고개', route: '의왕 청계 → 분당 운중' },
+  { key: 'bukak-skyway', name: '북악스카이웨이', route: '부암동 → 정릉' },
+  { key: 'namhansanseong', name: '남한산성', route: '성남 산성동 → 남한산성' },
 ];
 
 const byKey = new Map(BUILTIN_COURSES.map((b, i) => [b.key, { ...b, rank: i }]));
