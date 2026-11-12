@@ -65,7 +65,7 @@ async function setup(remoteOverride: Partial<Remote> = {}) {
   const queue = createQueueRepo(db);
   const files = new Map<string, Uint8Array>();
   const calls: string[] = [];
-  const rows = { courses: [] as unknown[], sessions: [] as unknown[], laps: [] as unknown[], deletes: [] as Array<[string, number]> };
+  const rows = { courses: [] as unknown[], sessions: [] as unknown[], laps: [] as unknown[], replaced: [] as Array<[string, number]> };
   const remote: Remote = {
     userId: async () => USER,
     token: async () => 'tok',
@@ -77,12 +77,10 @@ async function setup(remoteOverride: Partial<Remote> = {}) {
       calls.push('session');
       rows.sessions.push(r);
     },
-    upsertLaps: async (r) => {
+    replaceLaps: async (sid, r) => {
       calls.push('laps');
       rows.laps.push(...r);
-    },
-    deleteLapsAbove: async (sid, max) => {
-      rows.deletes.push([sid, max]);
+      rows.replaced.push([sid, r.length]);
     },
     putFile: async (key, bytes) => {
       calls.push(`put ${key.split('.').at(-3)}`);
@@ -112,7 +110,7 @@ describe('업로드 (사양서 5.4-4, 6.6, 9장)', () => {
     expect(raw.sessionId).toBe(SID);
     expect(raw.gps.lat).toEqual([37.2]);
     expect(s.rows.sessions[0]).toMatchObject({ id: SID, course_id: CID, raw_key: `${USER}/${SID}.raw.json.gz`, processed_key: `${USER}/${SID}.processed.json.gz` });
-    expect(s.rows.deletes).toEqual([[SID, 2]]);
+    expect(s.rows.replaced).toEqual([[SID, 2]]);
     expect(await s.queue.count()).toBe(0);
     const sess = await s.sessions.get(SID);
     expect(sess!.status).toBe('uploaded');

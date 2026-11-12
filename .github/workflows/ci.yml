@@ -49,8 +49,9 @@ jobs:
 
   deploy:
     name: GitHub Pages 배포
-    needs: [test, worker-test]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [test, worker-test, deploy-worker]
+    # 서버 배포가 실패하거나 건너뛰어도 웹앱은 배포한다 (그때는 폰에만 저장하는 빌드)
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.worker-test.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,10 +70,8 @@ jobs:
       - name: 빌드
         run: npm run build
         env:
-          # Settings → Secrets and variables → Actions → Variables 에 등록한 값 (M6에서 등록, 그 전에는 비어 있음)
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_FILES_API_URL: ${{ vars.VITE_FILES_API_URL }}
+          # 방금 배포한 서버(Worker) 주소. 서버 배포를 건너뛰었으면 Actions 변수 VITE_API_URL(있으면), 둘 다 없으면 폰에만 저장
+          VITE_API_URL: ${{ needs.deploy-worker.outputs.api_url || vars.VITE_API_URL }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
@@ -81,44 +80,79 @@ jobs:
         uses: actions/deploy-pages@v5
 
   deploy-worker:
-    name: 파일 게이트웨이(Worker) 배포
+    name: 서버(Worker·D1·R2) 배포
     needs: [test, worker-test]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      api_url: ${{ steps.deploy.outputs.api_url }}
     env:
-      # Settings → Secrets and variables → Actions 에 등록한 값 (사양서 11장). 없으면 배포를 건너뛴다
-      HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' && vars.VITE_SUPABASE_URL != '' }}
-      HAS_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET != '' }}
+      # Settings → Secrets and variables → Actions → Secrets 에 등록한 값 (사양서 11장). 없으면 건너뛴다
+      HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: 설정값 확인
         if: env.HAS_CLOUDFLARE != 'true'
-        run: echo "::notice::Cloudflare 비밀값(CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID)이나 VITE_SUPABASE_URL 변수가 아직 없어 Worker 배포를 건너뜁니다."
+        run: echo "::notice::Cloudflare 비밀값(CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID)이 아직 없어 서버 배포를 건너뜁니다. 웹앱은 폰에만 저장합니다."
       - uses: actions/checkout@v7
         if: env.HAS_CLOUDFLARE == 'true'
-      - name: 허용할 웹앱 출처 (GitHub Pages)
+      - uses: actions/setup-node@v7
         if: env.HAS_CLOUDFLARE == 'true'
-        run: echo "ALLOWED_ORIGIN=https://${OWNER,,}.github.io" >> "$GITHUB_ENV"
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: 준비
+        if: env.HAS_CLOUDFLARE == 'true'
+        working-directory: worker
+        run: npm ci
+      - name: R2 버킷 (없으면 만들기)
+        if: env.HAS_CLOUDFLARE == 'true'
+        working-directory: worker
+        run: |
+          if npx wrangler r2 bucket list | grep -q 'gachitayo-sessions'; then
+            echo "R2 버킷 gachitayo-sessions 있음"
+          else
+            npx wrangler r2 bucket create gachitayo-sessions
+          fi
+      - name: D1 데이터베이스 (없으면 만들기)
+        if: env.HAS_CLOUDFLARE == 'true'
+        working-directory: worker
+        run: |
+          find_id() {
+            npx wrangler d1 list --json | node -e "
+              let s = ''; process.stdin.on('data', (d) => (s += d)).on('end', () => {
+                // 경고 줄이 섞여 있어도 JSON 배열을 찾는다
+                for (let i = s.indexOf('['); i >= 0; i = s.indexOf('[', i + 1)) {
+                  try {
+                    const list = JSON.parse(s.slice(i));
+                    if (Array.isArray(list)) return process.stdout.write((list.find((d) => d.name === 'gachitayo') || {}).uuid || '');
+                  } catch {}
+                }
+              });"
+          }
+          id=$(find_id)
+          if [ -z "$id" ]; then
+            npx wrangler d1 create gachitayo
+            id=$(find_id)
+          fi
+          if [ -z "$id" ]; then echo "::error::D1 데이터베이스 gachitayo를 찾거나 만들지 못했습니다"; exit 1; fi
+          sed -i "s/00000000-0000-0000-0000-000000000000/$id/" wrangler.toml
+          echo "D1 gachitayo: $id"
+      - name: 표 만들기·고치기 (D1 마이그레이션)
+        if: env.HAS_CLOUDFLARE == 'true'
+        working-directory: worker
+        run: npx wrangler d1 migrations apply gachitayo --remote
+      - name: Worker 배포
+        id: deploy
+        if: env.HAS_CLOUDFLARE == 'true'
+        working-directory: worker
         env:
           OWNER: ${{ github.repository_owner }}
-      - name: Worker 배포
-        if: env.HAS_CLOUDFLARE == 'true' && env.HAS_JWT_SECRET != 'true'
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker
-          wranglerVersion: '4.155.0'
-          command: deploy --var SUPABASE_URL:${{ vars.VITE_SUPABASE_URL }} --var ALLOWED_ORIGIN:${{ env.ALLOWED_ORIGIN }}
-      - name: Worker 배포 (예전 방식 JWT 비밀값 포함)
-        if: env.HAS_CLOUDFLARE == 'true' && env.HAS_JWT_SECRET == 'true'
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker
-          wranglerVersion: '4.155.0'
-          command: deploy --var SUPABASE_URL:${{ vars.VITE_SUPABASE_URL }} --var ALLOWED_ORIGIN:${{ env.ALLOWED_ORIGIN }}
-          secrets: |
-            SUPABASE_JWT_SECRET
-        env:
-          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+        run: |
+          npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          if [ -z "$url" ]; then echo "::error::Worker 주소(workers.dev)를 찾지 못했습니다. Cloudflare에서 workers.dev 하위 주소를 정했는지 확인해 주세요"; exit 1; fi
+          echo "서버 주소: $url"
+          echo "api_url=$url" >> "$GITHUB_OUTPUT"

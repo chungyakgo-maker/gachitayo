@@ -1,5 +1,5 @@
 // 업로드 (사양서 5.4-4): 원본·처리된 궤적 파일을 먼저 파일 게이트웨이로 R2에 올리고(크기 확인),
-// 성공하면 코스·세션·랩을 Supabase 표에 upsert한다. 그래서 표가 없는 파일을 가리키는 일이 없다.
+// 성공하면 코스·세션·랩을 서버 표(D1)에 올린다(같은 id면 덮어씀). 그래서 표가 없는 파일을 가리키는 일이 없다.
 // 실패하면 대기열에 남기고 지수 백오프로 다시 시도한다 (9장). 업로드 7일 뒤 원본 덩어리를 정리한다 (6.4).
 import { buildRawFile } from '../storage/rawFile';
 import { gzipJson } from '../storage/gzip';
@@ -14,9 +14,8 @@ export interface Remote {
   token(): Promise<string | null>;
   upsertCourse(row: CourseRow): Promise<void>;
   upsertSession(row: SessionRow): Promise<void>;
-  upsertLaps(rows: LapRow[]): Promise<void>;
-  /** 다시 처리해서 랩이 줄었을 때 남는 랩 행 지우기 */
-  deleteLapsAbove(sessionId: string, maxLapNo: number): Promise<void>;
+  /** 세션의 랩을 통째로 바꾼다 (다시 처리해서 랩이 줄어도 옛 랩이 남지 않게) */
+  replaceLaps(sessionId: string, rows: LapRow[]): Promise<void>;
   putFile(key: string, bytes: Uint8Array<ArrayBuffer>, token: string): Promise<void>;
   /** 파일 크기. 없으면 null */
   headFile(key: string, token: string): Promise<number | null>;
@@ -97,9 +96,7 @@ async function uploadSession(deps: SyncDeps, userId: string, sessionId: string):
   await put(processedKey, await gzipJson(processedFile(result)));
 
   await remote.upsertSession(sessionRow(session, result, rawKey, processedKey));
-  const laps = lapRows(sessionId, result);
-  if (laps.length) await remote.upsertLaps(laps);
-  await remote.deleteLapsAbove(sessionId, laps.length);
+  await remote.replaceLaps(sessionId, lapRows(sessionId, result));
   await sessions.update(sessionId, { status: 'uploaded', uploadedAt: deps.now() });
 }
 

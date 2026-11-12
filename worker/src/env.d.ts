@@ -3,11 +3,11 @@ declare namespace Cloudflare {
   interface Env {
     /** R2 버킷 gachitayo-sessions */
     SESSION_FILES: R2Bucket;
-    /** https://xxxx.supabase.co */
-    SUPABASE_URL: string;
+    /** D1 데이터베이스 gachitayo */
+    DB: D1Database;
     /** 웹앱 출처 (GitHub Pages): https://{주인}.github.io */
     ALLOWED_ORIGIN: string;
-    /** 예전 방식(대칭 키) 프로젝트만: JWT secret */
-    SUPABASE_JWT_SECRET?: string;
+    /** 테스트에서만: 적용할 D1 마이그레이션 */
+    TEST_MIGRATIONS?: import('cloudflare:test').D1Migration[];
   }
 }

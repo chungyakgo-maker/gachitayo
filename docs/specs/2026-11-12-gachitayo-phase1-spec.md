@@ -15,7 +15,7 @@
 
 - 사용자는 개발 초보다. **로컬 PC에서 터미널, PowerShell, 스크립트를 실행하지 않는다.**
   - 빌드, 테스트, 배포: 전부 GitHub Actions에서 돌아가야 한다.
-  - 서버 설정: 전부 브라우저(Supabase 대시보드, SQL 편집기, Cloudflare 대시보드, GitHub 웹)에서 할 수 있어야 한다.
+  - 서버 설정: 전부 브라우저(Cloudflare 대시보드, GitHub 웹)에서 할 수 있어야 한다.
 - 사용자가 직접 실행할 SQL은 **채팅에 코드 블록으로 붙여서** 전달한다. 파일로 주지 않는다. 저장소에 참고용 사본은 둬도 된다.
 - 코드를 작성하거나 수정하기 전에 계획을 먼저 보여주고 확인을 받는다.
 - 이 문서의 숫자 기준값(임계값)은 **초기값**이다. 한 곳(`src/engine/config.ts`)에 모아서 실측 후 조정할 수 있게 한다.
@@ -69,10 +69,10 @@
 | 위치 센서 | 폰 내장 GPS만 사용 | 외부 GPS는 쓰지 않음. 아이폰 사파리는 웹 블루투스를 지원하지 않음 |
 | 정확도 확보 | 센서 융합, 게이트 통과 보간, 코스 선 투영, 주행 후 재계산 | 1Hz GPS의 한계 보완 |
 | 저장 | 폰에 먼저 저장 → 서버에 동기화 | 서킷 통신 끊김 대비, 데이터 보존, 2단계 기반 |
-| 서버 역할 분담 | Supabase: 로그인과 표 / Cloudflare R2: 큰 파일(원본, 처리된 궤적) | Supabase 무료 파일 저장은 1GB. R2 무료는 10GB이고 다운로드 비용이 없음 |
+| 서버 역할 분담 | Cloudflare 하나: Worker(익명 계정·API·파일 게이트웨이), D1(표), R2(큰 파일: 원본, 처리된 궤적). M6 결정: 사용자의 Supabase 무료 프로젝트 한도가 차서 Supabase를 쓰지 않음 | 한 곳에서 관리, 무료 한도(D1 5GB, R2 10GB, 다운로드 비용 없음)로 충분, 일시정지 없음 |
 | R2 접근 | Cloudflare Worker(파일 게이트웨이)를 거쳐서만 | R2 접근 키를 브라우저에 두지 않기 위해 |
-| 서버 깨우기 | GitHub Actions 예약 작업으로 주기적 요청 | Supabase 무료 프로젝트는 1주일 동안 활동이 없으면 일시정지됨 |
-| 로그인 | Supabase 익명 로그인 + 닉네임 | 데모 사용 마찰 최소화. 나중에 정식 로그인을 연결해도 user id가 유지됨 |
+| 서버 깨우기 | 필요 없음 (D1·Worker는 일시정지가 없다) | Supabase를 쓰지 않으므로 (M6) |
+| 로그인 | 익명 계정 + 닉네임. 첫 실행에 Worker가 이 폰 전용 열쇠를 발급 | 데모 사용 마찰 최소화. 2단계 정식 로그인(구글·카카오)은 Worker에 붙이고, 지금 user id를 그대로 이어 간다 |
 | 코스 만들기 | 첫 주행 자동 생성, 지도 등록, GPX 불러오기 | 지도는 보조이므로 "그냥 달리기"가 기본 |
 | 코스 종류 | 랩(서킷), 편도(와인딩) | 출발점과 도착점 거리로 자동 구분하고 사용자가 확인 |
 | 주행 화면 | 미니멀과 대시보드, 전환 가능 | |
@@ -90,7 +90,7 @@
   - 새 버전은 홈 화면의 "업데이트" 버튼을 눌러야 적용한다. 주행 중에 앱이 저절로 새로고침되어 기록이 끊기는 것을 막기 위해서다. 같은 앱을 연 다른 창에서 업데이트해도 주행 중인 창은 새로고침하지 않는다. 기록 중에는 업데이트 안내를 숨긴다.
 - **라우팅:** 해시 라우팅. GitHub Pages 하위 경로와 새로고침 404 문제를 피한다.
 - **폰 저장소:** IndexedDB (Dexie 같은 래퍼 사용)
-- **서버:** Supabase (Auth 익명 로그인, Postgres), supabase-js
+- **서버:** Cloudflare Worker(TypeScript: 익명 계정, 표 API, 파일 게이트웨이) + D1(SQLite, 표) + R2(파일). M6 결정 (원래 Supabase)
 - **파일 저장:** Cloudflare R2 + Cloudflare Worker (TypeScript, 파일 게이트웨이)
 - **지도:** Leaflet + OSM 타일
   - OSM 타일 이용 정책은 소규모 데모 수준에서 지킨다.
@@ -100,14 +100,13 @@
 - **테스트:** Vitest (엔진 단위 테스트)
 - **CI/CD:** GitHub Actions
   - 푸시와 PR마다 타입 검사와 테스트를 실행한다 (웹앱과 Worker 모두).
-  - main에 푸시되면 웹앱을 빌드해 GitHub Pages에 배포하고, Worker를 Cloudflare에 배포한다 (Cloudflare 공식 wrangler GitHub Action 사용).
+  - main에 푸시되면 서버를 Cloudflare에 배포하고(공식 wrangler CLI: R2 버킷·D1 데이터베이스가 없으면 만들고, D1 표 마이그레이션 적용, Worker 배포), 그 Worker 주소를 넣어 웹앱을 빌드해 GitHub Pages에 배포한다.
   - 테스트가 실패하면 배포를 중단한다.
-  - 예약 작업: Supabase 깨우기 (11장 참고)
 - **환경 변수와 비밀값 (모두 GitHub 웹에서 등록):**
-  - Actions 변수: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_FILES_API_URL`(Worker 주소)
-  - Actions 비밀: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, (예전 대칭 키 프로젝트만) `SUPABASE_JWT_SECRET`
-  - Worker 설정값 `SUPABASE_URL`, `ALLOWED_ORIGIN`(GitHub Pages 출처 `https://{주인}.github.io`)은 `wrangler.toml`에 적지 않고 배포 때 Actions 변수에서 넣는다 (사용자가 파일을 고칠 필요가 없게, M6).
-  - 서버 변수·비밀값이 아직 없으면 앱은 폰에만 저장하고(첫 실행의 계정 만들기도 건너뜀), Worker 배포와 깨우기 작업은 건너뛴다.
+  - Actions 비밀: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (이 둘만 등록하면 된다)
+  - 웹앱의 서버 주소 `VITE_API_URL`은 배포 때 Worker 주소를 받아 자동으로 넣는다. 필요하면 Actions 변수 `VITE_API_URL`로 덮어쓸 수 있다.
+  - Worker 설정값 `ALLOWED_ORIGIN`(GitHub Pages 출처 `https://{주인}.github.io`)과 D1 데이터베이스 ID는 `wrangler.toml`에 적지 않고 배포 때 넣는다 (사용자가 파일을 고칠 필요가 없게).
+  - 비밀값이 아직 없으면 서버 배포를 건너뛰고, 웹앱은 폰에만 저장한다(첫 실행의 계정 만들기도 건너뜀).
 
 ---
 
@@ -120,15 +119,15 @@
 | 1 | 센서 수집 (`sensors/`) | 위치 수신(`watchPosition`, `enableHighAccuracy: true`, `maximumAge: 0`), 모션 수신(`devicemotion`), 권한 요청, 화면 꺼짐 방지(Wake Lock) | 브라우저 API |
 | 2 | 공통 기준 변환 (`normalize/`) | 단위 통일, 50Hz 재샘플링, 거치 보정(기기 축 → 차 기준 축) | 순수 TS |
 | 3 | 폰 저장소 (`storage/`) | 5초 단위 덩어리 저장, 세션·코스·비교 랩 캐시, 업로드 대기열 | IndexedDB |
-| 4 | 동기화 (`sync/`) | 업로드, 재시도, 중복 방지, 코스와 비교 랩 내려받기 | supabase-js, 파일 게이트웨이 |
+| 4 | 동기화 (`sync/`) | 업로드, 재시도, 중복 방지, 코스와 비교 랩 내려받기 | 같이타요 API (Worker) |
 | 5 | 센서 융합 (`engine/fusion/`) | 주행 중 필터와 주행 후 스무더로 위치·속도·방향 추정 | 순수 TS |
 | 6 | 코스 엔진 (`engine/course/`) | 코스 생성, 게이트 통과 감지, 랩·구간 분할, 위치 → 코스 거리 변환 | 순수 TS |
 | 7 | 델타 엔진 (`engine/delta/`) | 비교 랩 대비 델타, 이론상 베스트 | 순수 TS |
 | 8 | GPX 변환 (`gpx/`) | GPX 불러오기와 내보내기 | 순수 TS (XML 파서는 주입받음) |
 | 9 | 화면 (`ui/`) | 모든 화면 | React |
-| 10 | 파일 게이트웨이 (`worker/`) | Supabase 로그인 토큰을 확인하고, 본인 폴더의 R2 파일만 올리고 받게 함 | Cloudflare Worker, R2 |
+| 10 | 서버 (`worker/`) | 익명 계정(폰 열쇠) 발급·확인, 표 API(본인 행만), 파일 게이트웨이(본인 폴더의 R2 파일만) | Cloudflare Worker, D1, R2 |
 
-**규칙:** `engine/*`, `normalize/`, `gpx/`는 DOM, 브라우저 API, Supabase를 직접 쓰지 않는다.
+**규칙:** `engine/*`, `normalize/`, `gpx/`는 DOM, 브라우저 API, 서버를 직접 쓰지 않는다.
 - 입력도 데이터, 출력도 데이터다. 같은 입력이면 항상 같은 출력이 나온다.
 - 그래서 Node 환경의 Vitest에서 테스트할 수 있고, Expo로 옮길 때 그대로 재사용한다.
 
@@ -140,7 +139,7 @@ src/
   engine/
     config.ts     fusion/         course/       delta/
   gpx/
-  supabase/       types/
+  server/         types/
   ui/
     screens/      components/
 test/
@@ -148,7 +147,7 @@ test/
   generators/     (가상 주행 생성기)
 worker/           (Cloudflare Worker: 파일 게이트웨이, wrangler.toml, 자체 테스트)
 docs/specs/
-.github/workflows/  (테스트·배포, Supabase 깨우기 예약 작업)
+.github/workflows/  (테스트·배포)
 ```
 
 ### 5.3 주행 중 흐름
@@ -166,7 +165,7 @@ docs/specs/
 3. 결과를 폰 저장소에 저장한다.
 4. 동기화로 업로드한다.
    - 원본과 처리된 궤적 파일을 먼저 파일 게이트웨이를 거쳐 R2에 올린다.
-   - 파일 업로드가 성공하면 세션과 랩 요약을 Supabase 표에 넣는다.
+   - 파일 업로드가 성공하면 세션과 랩 요약을 서버 표(D1)에 넣는다.
    - 이 순서 덕분에 표가 존재하지 않는 파일을 가리키는 일이 생기지 않는다.
 
 ---
@@ -256,17 +255,22 @@ docs/specs/
 - 업로드가 끝난 세션의 원본(`chunks`)은 7일 뒤 폰에서 정리한다. 서버 사본은 계속 유지한다.
 - 업로드하지 않은 원본은 절대 자동으로 지우지 않는다.
 
-### 6.5 서버 표 (Supabase Postgres)
+### 6.5 서버 표 (Cloudflare D1)
 
-모든 표에 `owner_id uuid default auth.uid()`를 두고 RLS를 켠다. 1단계 정책은 **본인 행만 읽기·쓰기**(`owner_id = auth.uid()`)다. 2단계에서 친구·크루 읽기 정책을 추가한다.
+모든 표에 `owner_id`를 두고, Worker가 요청마다 **본인 행만 읽기·쓰기**를 확인한다(D1에는 RLS가 없다). 2단계에서 친구·크루 읽기를 추가한다.
+- D1은 SQLite라서 아래 표의 uuid·timestamptz는 TEXT(ISO 8601), jsonb는 JSON 문자열(TEXT), bool은 0/1로 저장한다.
+- 표는 `worker/migrations/`에 두고 배포 때 자동으로 적용한다 (사용자가 SQL을 실행하지 않는다).
 
-**profiles**
+**users** (익명 계정, 원래 Supabase의 profiles)
 
 | 열 | 형 | 비고 |
 |---|---|---|
-| `id` | uuid PK | = `auth.uid()` |
-| `nickname` | text | |
-| `created_at` | timestamptz | |
+| `id` | uuid PK | Worker가 만든다 |
+| `nickname` | text | 1~20자 |
+| `token_hash` | text unique | 폰 열쇠의 SHA-256. 원래 값은 저장하지 않는다 |
+| `created_at`, `updated_at` | timestamptz | |
+
+**signup_log**: 계정 만들기 남용 방지 (같은 IP에서 1시간에 10개까지, 하루 지난 기록은 지움)
 
 **courses**
 
@@ -317,12 +321,13 @@ docs/specs/
 | `trace` | jsonb | 6.8 비교용 축약 데이터 |
 | `created_at` | timestamptz | |
 
-- 업로드는 id 기준 upsert로 한다. 같은 세션을 다시 올려도 중복이 생기지 않는다. 랩은 `(session_id, lap_no)` 기준이고, 다시 처리해서 랩이 줄었으면 남는 랩 행을 지운다.
+- 업로드는 id 기준 upsert로 한다. 같은 세션을 다시 올려도 중복이 생기지 않는다. 다른 사람의 id면 403이다. 랩은 `(session_id, lap_no)`가 기본 키이고, 세션의 랩을 한 번에(트랜잭션) 통째로 바꿔서 다시 처리해 랩이 줄어도 옛 랩이 남지 않는다.
+- 세션의 `course_id`는 본인 코스만, `raw_key`·`processed_key`는 본인 폴더의 그 세션 파일만 가리킬 수 있다.
+- **API** (`Authorization: Bearer <폰 열쇠>`): `POST /auth/signup {nickname}` → `{userId, token}`, `GET·PUT /api/me`, `GET /api/courses`, `PUT /api/courses/{id}`, `PUT /api/sessions/{id}`, `PUT /api/sessions/{id}/laps`. 응답 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것, 404, 413, 429 가입 제한.
 - 순서: 코스 → 원본·처리된 궤적 파일(PUT 뒤 HEAD로 크기 확인) → 세션 → 랩. 첫 주행에서 코스를 저장하지 않은 세션은 `course_id` 없이 올리고, 나중에 저장하면 다시 올려 연결한다.
 - 업로드 대기열의 재시도 간격은 10초부터 두 배씩, 최대 30분이다. 앱 시작·통신 복구·화면 복귀·주행 처리 직후·1분마다 시도한다.
 
-- 파일은 Supabase Storage를 쓰지 않고 R2에 둔다 (6.6).
-- `ping()` 함수: 현재 시각만 돌려주는 함수다. anon 역할에 실행 권한만 주고 표 데이터에는 접근하지 않는다. 깨우기 예약 작업(11장)이 호출한다.
+- 파일은 R2에 둔다 (6.6).
 
 ### 6.6 파일 저장소 (Cloudflare R2 + 파일 게이트웨이)
 
@@ -332,11 +337,8 @@ docs/specs/
 
 **파일 게이트웨이 (Cloudflare Worker)**
 - 웹앱은 R2에 직접 접근하지 않는다. R2 접근 키는 어디에도 두지 않고, Worker의 R2 바인딩(`SESSION_FILES`)으로만 접근한다.
-- 모든 요청에 `Authorization: Bearer <Supabase access token>`이 있어야 한다.
-- **토큰 검증:**
-  - Supabase 프로젝트의 JWKS(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`)로 서명(ES256, RS256)을 검증하고, 만료 시각과 발급자를 확인한다. JWKS는 Worker에서 10분 캐시하고, 모르는 키 ID가 오면(키 교체) 1분에 한 번까지 다시 받는다.
-  - 프로젝트가 예전 방식(대칭 키 JWT secret, HS256)을 쓰면 그 값을 비밀값 `SUPABASE_JWT_SECRET`으로 등록해서 검증한다. 두 방식을 모두 구현해 두고, 사용자는 어느 방식인지에 따라 비밀값 등록 여부만 정한다 (M6).
-  - 검증된 토큰의 `sub`가 사용자 ID다.
+- 모든 요청에 `Authorization: Bearer <폰 열쇠>`가 있어야 한다.
+- **열쇠 확인:** 열쇠의 SHA-256 값으로 `users`에서 사용자를 찾는다. 그 사용자 ID가 `sub`다. (원래 Supabase 토큰을 JWKS로 검증하던 것을 M6에서 바꿈)
 
 | 요청 | 동작 | 권한 |
 |---|---|---|
@@ -347,7 +349,7 @@ docs/specs/
 - **경로 검사:** `userId`와 `sessionId`는 UUID 형식만, `kind`는 `raw` 또는 `processed`만 허용한다. 그 외는 400을 돌려준다.
 - **크기 제한:** 파일 하나당 20MB
 - **CORS:** `ALLOWED_ORIGIN`(GitHub Pages 주소)만 허용하고 사전 요청(OPTIONS)을 처리한다.
-- **응답 코드:** 401(토큰 없음·무효), 403(다른 사람 폴더), 404(없음), 413(너무 큼)
+- **응답 코드:** 401(열쇠 없음·무효), 403(다른 사람 폴더·허용하지 않은 출처), 404(없음), 413(너무 큼)
 
 ### 6.7 파일 형식
 
@@ -643,7 +645,7 @@ docs/specs/
 | 통신 없음 | 기록·델타는 폰에서 동작. 업로드는 대기열에 넣고 지수 백오프로 재시도 |
 | 업로드 중복 | 폰에서 만든 id로 upsert해서 중복 방지 |
 | 파일 게이트웨이·R2 오류 | 업로드 대기열에 남기고 재시도. 파일이 올라가기 전에는 표에 세션을 넣지 않음 |
-| Supabase 일시정지 | 기록과 델타는 폰에서 계속 동작하고 동기화만 대기. 첫 실행(계정 생성)은 불가하므로 "서버 점검 중" 안내 |
+| 서버 장애·통신 없음 | 기록과 델타는 폰에서 계속 동작하고 동기화만 대기. 첫 실행(계정 만들기)은 통신이 필요하므로 "서버에 연결할 수 없어요" 안내 후 다시 시도 |
 | 거치 보정 실패 | "G 보정 안 됨" 표시. 직선 가속 때 자동으로 다시 시도 |
 | 주행 중 거치 각도 변화 | 재보정 (7.2) |
 | 랩/편도 판단이 애매함 | 주행 종료 때 사용자에게 물음 |
@@ -692,7 +694,7 @@ docs/specs/
 3. 비행기 모드로 주행한 뒤 통신을 켜서 자동 업로드 확인
 4. 서킷: 공식 계측(트랜스폰더) 기록과 앱 랩타임 비교. 1차 목표 오차는 ±0.3초 이내
 5. 아이폰 기록과 안드로이드 기록을 서로 고스트로 비교했을 때 G값 부호와 크기가 맞는지 확인
-6. 깨우기 예약 작업이 실행되고, 1주일 넘게 앱을 안 써도 Supabase가 멈추지 않는지 확인
+6. 1주일 넘게 앱을 안 쓴 뒤에도 업로드가 되는지 확인
 
 ### 10.4 인수 기준
 - 1장의 성공 기준 6가지를 모두 만족하면 1단계 완료로 본다.
@@ -702,30 +704,19 @@ docs/specs/
 ## 11. 설정·배포 절차 (사용자는 브라우저로만)
 
 1. **GitHub:** 저장소를 만들고, Settings → Pages에서 소스를 "GitHub Actions"로 지정한다.
-2. **Supabase:**
-   - 프로젝트를 만들거나 기존 프로젝트를 쓴다.
-   - Authentication에서 Anonymous sign-ins를 켠다.
-   - 표, RLS 정책, `ping()` 함수는 SQL 편집기에서 실행한다. SQL은 Claude Code가 채팅으로 제공한다.
-   - JWT 서명 방식(비대칭 키인지, 예전 대칭 키인지)을 확인해서 Claude Code에 알려준다 (6.6 토큰 검증).
-3. **Cloudflare:**
+2. **Cloudflare:**
    - 계정을 만들고 R2를 켠다. 무료 한도 안에서는 과금이 없지만, 켤 때 결제 수단 등록을 요구할 수 있다.
-   - R2 버킷 `gachitayo-sessions`를 만든다.
-   - API 토큰을 만든다 (Workers 배포 권한 + R2 권한). 계정 ID를 확인한다.
-4. **GitHub Actions 변수와 비밀 등록:** 4장 목록대로 등록한다.
-5. **첫 배포:**
-   - main에 푸시하거나 Actions 탭에서 다시 실행하면 자동 테스트 → 웹앱과 Worker 배포가 진행된다. Worker 배포 전에 R2 버킷이 있어야 한다.
-   - Worker 주소(`https://gachitayo-files.{계정 서브도메인}.workers.dev`)를 `VITE_FILES_API_URL`에 넣고 한 번 더 배포한다.
-6. 폰에서 링크를 열고 홈 화면에 추가한다.
-
-**Supabase 깨우기 예약 작업**
-- `.github/workflows/supabase-keepalive.yml`, 3일마다 실행한다. 수동 실행 버튼(`workflow_dispatch`)도 둔다.
-- anon 키로 `ping()` 함수를 호출한다.
-- 저장소가 공개 저장소면, GitHub는 60일 동안 저장소 활동이 없을 때 예약 작업을 자동으로 끈다. 꺼지면 Actions 탭에서 다시 켠다.
-- 그래도 멈췄다면 Supabase 대시보드에서 복구(restore)한다.
+   - Workers & Pages에서 workers.dev 하위 주소를 정한다.
+   - API 토큰을 만든다 (Workers 스크립트·D1·R2 편집 권한). 계정 ID를 확인한다.
+   - R2 버킷과 D1 데이터베이스, 표는 배포 때 자동으로 만든다.
+3. **GitHub Actions 비밀 등록:** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+4. **첫 배포:** main에 푸시하거나 Actions 탭에서 "테스트·배포"를 실행하면 자동 테스트 → 서버 배포 → 웹앱 배포(서버 주소 자동 반영)가 진행된다.
+5. 폰에서 링크를 열고 홈 화면에 추가한다.
 
 **참고**
-- 익명 로그인 남용 방지: Supabase 기본 생성 제한을 유지한다. 필요하면 2단계 이후 캡차를 추가한다.
-- 2단계 대비: 익명 계정을 정식 로그인에 연결하려면 Supabase에서 manual linking을 켜야 한다. 이 설정은 2단계에서 한다.
+- 익명 계정 만들기 남용 방지: 같은 IP에서 1시간에 10개까지. 필요하면 2단계 이후 캡차를 추가한다.
+- 2단계 대비: 정식 로그인(구글·카카오)은 Worker에 붙이고, 익명 계정의 user id를 그대로 이어 간다.
+- 서버 데이터는 Cloudflare 대시보드의 D1 → gachitayo → Console에서 볼 수 있다.
 
 ---
 
@@ -739,8 +730,7 @@ docs/specs/
 - 아이폰 사파리 탭으로 쓰면 오랫동안 안 쓴 사이트의 저장 데이터가 지워질 수 있다. 홈 화면 설치를 권장한다.
 - OSM 타일은 소규모 데모용이다. 사용자가 늘면 타일 제공자를 바꿔야 한다.
 - 공도 주행: 앱은 안전 안내만 한다. 실시간 동시 주행(3단계)은 서킷 전용으로 설계한다.
-- Supabase 무료 프로젝트는 1주일 동안 활동이 없으면 일시정지된다. 깨우기 예약 작업으로 막고, 멈춰도 기록과 델타는 폰에서 동작한다.
-- 무료 한도: Supabase 표 500MB, R2 저장 10GB, Worker 하루 10만 요청. 20분 주행 한 번의 파일은 약 1~2MB로 추정한다 (실측 후 갱신).
+- 무료 한도: D1 저장 5GB·하루 쓰기 10만 행·읽기 500만 행, R2 저장 10GB, Worker 하루 10만 요청. 20분 주행 한 번의 파일은 약 1~2MB로 추정한다 (실측 후 갱신).
 
 ---
 
@@ -754,4 +744,5 @@ docs/specs/
 | 2026-11-12 | 7.5 랩 코스 판정(이전 경로 어디든 다시 지나면, 8m 겹침), 편도 게이트 20m 안쪽·U턴 시작점·여러 번 달리기, 종류를 바꾸면 다시 만들기, 끊긴 랩 제외, GPX 평활 생략(이 앱이 내보낸 것)·짧은 GPX·UTC, 선 옮기기. 7.6 s 넘어감 보정, 7.8 랩 번호는 완주 순서, 7.12 빈 칸 제외 평균, 10.1 랩타임은 RMS 기준·델타 RMS 0.15초 (M4·M4 검토) |
 | 2026-11-12 | 6.3 GPS 방향 값이 없으면 위치 이동 방향으로 대신 (M5) |
 | 2026-11-12 | 4장 Worker 설정값은 배포 때 Actions 변수에서, 서버 설정 전에는 폰에만 저장. 6.5 업로드 순서·랩 정리·재시도 간격, 6.6 두 토큰 방식 모두 지원·JWKS 캐시, 10.1 Worker 테스트 도구, 11장 첫 배포 (M6) |
+| 2026-11-12 | 서버를 Cloudflare 하나로 바꿈 (사용자 Supabase 무료 프로젝트 한도): 3·4·5장, 6.5 D1 표·API·폰 열쇠 계정, 6.6 열쇠 확인, 9장, 11장 설정 절차(비밀값 2개만), 12장 무료 한도. 깨우기 예약 작업 없앰 (M6) |
 | 2026-11-12 | 8장 디자인 시안 반영: 공통 디자인·랩타임 표기·델타 색 설정, 8.2 아래 탭 홈, 8.3 준비 화면에서 기록 시작·상단 표시 값, 8.4 지도 모드 추가(기본)·대시보드 구간 델타, 8.5 종료 요약 구성, 8.8 설정 항목. 친구 관련 표시는 1단계에서 뺌. 7.2 직선 등속 재보정 (M5) |
