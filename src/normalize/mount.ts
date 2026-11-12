@@ -57,6 +57,15 @@ export interface MountCalibration {
 
 export type CalState = 'need_stationary' | 'need_forward' | 'calibrated';
 
+/** G 보정 진행 (stage: 정차 3초 / 직진 가감속 / 가감속·코너로 방향 확인 / 끝) */
+export interface CalProgress {
+  stage: 'stationary' | 'forward' | 'signs' | 'done';
+  fwd: number;
+  fwdNeed: number;
+  turns: number;
+  turnsNeed: number;
+}
+
 export interface CalEvent {
   t: number;
   type: 'calibration' | 'recalibration';
@@ -335,6 +344,11 @@ class SignStats {
   private turns = 0;
   private gyroTurns = 0;
 
+  /** 확인에 쓴 가감속 구간 수, 코너 수 (화면에 진행 상황을 보여주려고) */
+  counts(): { fwdN: number; turns: number } {
+    return { fwdN: this.fwdN, turns: this.turns };
+  }
+
   /** 앞 방향 확인: 보정한 앞 방향 성분과 GPS 속도 변화율 */
   addFwd(fwd: number, A: number): void {
     this.fa += fwd * A;
@@ -474,6 +488,15 @@ export class MountCalibrator {
       else if (this.state === 'calibrated' && !this.current!.signsConfirmed) this.onSignCandidate(k);
     }
     if (this.state === 'calibrated' && i % cfg.recalCheckEvery === 0) this.checkMount(t);
+  }
+
+  /** G 보정이 어디까지 왔는지 (주행 화면 상태 줄): 정차 → 직진 가감속 → 가감속·코너 확인 → 끝 */
+  progress(): CalProgress {
+    if (this.state === 'need_stationary') return { stage: 'stationary', fwd: 0, fwdNeed: cfg.forwardMinIntervals, turns: 0, turnsNeed: cfg.axisSignMinTurns };
+    if (this.state === 'need_forward') return { stage: 'forward', fwd: this.fwdCount, fwdNeed: cfg.forwardMinIntervals, turns: 0, turnsNeed: cfg.axisSignMinTurns };
+    if (this.current?.signsConfirmed) return { stage: 'done', fwd: 0, fwdNeed: 0, turns: 0, turnsNeed: 0 };
+    const c = this.signStats.counts();
+    return { stage: 'signs', fwd: c.fwdN, fwdNeed: cfg.fwdCheckMinSamples, turns: c.turns, turnsNeed: cfg.axisSignMinTurns };
   }
 
   private onStationary(st: StationaryStats): void {

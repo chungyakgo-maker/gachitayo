@@ -181,3 +181,15 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByText('멂')).toBeInTheDocument();
   });
 });
+
+describe('G 보정 진행 (사용자 문의: G가 안 나옴)', () => {
+  it('어느 단계에서 몇 번 남았는지 상태 줄에', async () => {
+    const { gCalText } = await import('../../src/ui/screens/DriveScreen');
+    const base = { state: 'need_forward' as const, stillProgress: 1, signsConfirmed: false, motionActive: true };
+    const mk = (progress: Record<string, unknown>, still = 1) => ({ calibration: { ...base, stillProgress: still, progress } }) as unknown as Parameters<typeof gCalText>[0];
+    expect(gCalText(mk({ stage: 'stationary', fwd: 0, fwdNeed: 3, turns: 0, turnsNeed: 5 }, 0.5))).toBe('G 보정: 정차 1/3초');
+    expect(gCalText(mk({ stage: 'forward', fwd: 1, fwdNeed: 3, turns: 0, turnsNeed: 5 }))).toBe('G 보정: 직진 가감속 1/3');
+    expect(gCalText(mk({ stage: 'signs', fwd: 7, fwdNeed: 5, turns: 2, turnsNeed: 5 }))).toBe('G 보정: 가감속 5/5 · 코너 2/5');
+    expect(gCalText(null)).toBe('G 보정 안 됨');
+  });
+});

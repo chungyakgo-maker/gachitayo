@@ -52,6 +52,16 @@ function sectorTime(ms: number | null): string {
   return ms < 60_000 ? (Math.floor(ms) / 1000).toFixed(3) : formatLapTime(ms, 3);
 }
 
+/** G 보정이 어디서 멈췄는지 (정차 3초 → 직진 가감속 → 가감속·코너 확인) */
+export function gCalText(snap: LiveSnapshot | null): string {
+  const p = snap?.calibration.progress;
+  if (!p) return 'G 보정 안 됨';
+  if (p.stage === 'stationary') return `G 보정: 정차 ${Math.floor((snap?.calibration.stillProgress ?? 0) * 3)}/3초`;
+  if (p.stage === 'forward') return `G 보정: 직진 가감속 ${p.fwd}/${p.fwdNeed}`;
+  if (p.stage === 'signs') return `G 보정: 가감속 ${Math.min(p.fwd, p.fwdNeed)}/${p.fwdNeed} · 코너 ${Math.min(p.turns, p.turnsNeed)}/${p.turnsNeed}`;
+  return 'G 보정 안 됨';
+}
+
 function StatusBar({ snap, mode, course, replay, gap }: { snap: LiveSnapshot | null; mode: DriveMode; course: Course | null; replay: DriveState['replay']; gap?: GapInfo | null }) {
   const st = snap?.state;
   const hAcc = snap?.gps.hAcc;
@@ -62,7 +72,7 @@ function StatusBar({ snap, mode, course, replay, gap }: { snap: LiveSnapshot | n
   if (!course) flags.push({ text: '코스 기록 중', cls: '' });
   if (st?.status.offCourse && course) flags.push({ text: '코스 이탈', cls: 'bad' });
   if (snap && !snap.calibration.motionActive) flags.push({ text: 'G 없음', cls: '' });
-  else if (st?.status.gNotCalibrated) flags.push({ text: 'G 보정 안 됨', cls: '' });
+  else if (st?.status.gNotCalibrated) flags.push({ text: gCalText(snap), cls: '' });
   return (
     <div className="drive-status">
       <span className="flags">

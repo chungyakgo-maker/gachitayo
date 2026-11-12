@@ -9,7 +9,7 @@ import { FusionRunner, type FusedPoint } from '../fusion/forward';
 import { LiveGpsObs, type GpsObs } from '../fusion/gpsObs';
 import { GpsReadiness } from '../fusion/gpsReady';
 import { LiveMotion50 } from '../../normalize/liveMotion';
-import { MountCalibrator, toCar, type CalState } from '../../normalize/mount';
+import { MountCalibrator, toCar, type CalProgress, type CalState } from '../../normalize/mount';
 import type { AxisSigns } from '../../normalize/resample';
 import type { Course } from '../../types/course';
 import type { GpsSample, RawMotionSample } from '../../types/samples';
@@ -43,6 +43,8 @@ export interface LiveSnapshot {
     signsConfirmed: boolean;
     /** 모션 값이 들어오고 있는지 */
     motionActive: boolean;
+    /** G 보정이 어디까지 왔는지 (상태 줄) */
+    progress?: CalProgress;
   };
   /** 베스트 고스트: 비교 랩이 지금과 같은 랩 경과 시간에 있던 곳 */
   ghost: { x: number; y: number; s: number } | null;
@@ -175,7 +177,7 @@ export class LivePipeline {
         hAcc: this.lastGps?.hAcc ?? null,
         ageMs: this.lastGps ? Math.max(0, tNow - this.lastGps.tRecv) : null,
       },
-      calibration: { state: this.cal.state, stillProgress, signsConfirmed: cal?.signsConfirmed ?? false, motionActive },
+      calibration: { state: this.cal.state, stillProgress, signsConfirmed: cal?.signsConfirmed ?? false, motionActive, progress: this.cal.progress() },
       ghost: this.ghost(),
       path: this.path,
     };
