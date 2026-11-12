@@ -70,7 +70,7 @@ else
     fi
   else
     token_ok() { printf '%s' "$user_verify" | success || { [ -n "$account" ] && api "/accounts/$account/tokens/verify" | success; }; }
-    if ! token_ok; then
+    if [ -z "$account" ] || ! token_ok; then
       # 계정 ID 칸이 비었거나 토큰의 계정과 다르면, 토큰으로 접근할 수 있는 계정을 Cloudflare에 물어본다 (하나뿐이면 그것을 쓴다)
       mapfile -t ids < <(api "/accounts?per_page=50" | jq -r '.result[]?.id // empty' 2>/dev/null | grep -xE '[0-9a-f]{32}' | sort -u)
       for v in "${ids[@]}"; do echo "::add-mask::$v"; done
