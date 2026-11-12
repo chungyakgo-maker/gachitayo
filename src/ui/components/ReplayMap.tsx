@@ -1,4 +1,4 @@
-// 재생 모드의 지도 모드 지도 (사용자 요청): OpenStreetMap 지도 위에 코스·고스트·내 위치를 그린다.
+// 지도 모드 지도 (사용자 요청): OpenStreetMap 지도 위에 코스·고스트·내 위치를 그린다. 재생과 주행(설정에서 켰을 때) 모두 쓴다.
 // 보기 세 가지: 전체 코스(화면을 꽉 채우게) / 나를 가운데(북쪽 위, 가깝게) / 진행 방향 위(지도판을 돌려 내비처럼).
 // 지도를 불러오지 못하면 타일 없는 미니맵으로 그린다.
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -25,11 +25,13 @@ export interface ReplayMapProps {
   initialView?: MapViewMode;
   /** 부드럽게 한 진행 방향 (진행 방향 위 보기) */
   heading?: number | null;
+  /** 보기 고르는 버튼 (재생만. 주행 중에는 화면 조작을 받지 않는다, 사양서 8.4) */
+  viewToggle?: boolean;
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
 
-export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, initialView = 'fit', heading = null }: ReplayMapProps) {
+export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, initialView = 'fit', heading = null, viewToggle = true }: ReplayMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<ReplayMapController | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -127,8 +129,8 @@ export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend
         label={label}
         draw={(ctx, w, h) => drawMiniMap(ctx, w, h, model, frame, th, { insetBottom, margin: 28, view: mapView, friend })}
       />
-      {state === 'ready' && (
-        <div className="segmented small map-view-toggle" role="group" aria-label="재생 지도 보기">
+      {state === 'ready' && viewToggle && (
+        <div className="segmented small map-view-toggle" role="group" aria-label="지도 보기">
           {(['fit', 'follow', 'heading'] as const).map((k) => (
             <button key={k} type="button" aria-pressed={view === k} onClick={() => setView(k)}>
               {MAP_VIEW_LABEL[k]}

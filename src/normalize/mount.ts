@@ -226,22 +226,40 @@ interface StationaryStats {
   cruise?: boolean;
 }
 
-/** 시각 tEnd에서 끝나는 3초 창이 정차 조건을 만족하면 평균을 돌려준다 */
-function stationaryAt(w: MotionWindows, gps: GpsObs[], tEnd: number): StationaryStats | null {
+/** 3초 창의 정차 판정 재료 (진단에서도 쓴다) */
+interface StillInfo {
+  /** 가속도 흔들림(표준편차). 센서가 끊긴 칸이 있으면 null */
+  std: number | null;
+  /** 창 안의 GPS 점 수 */
+  fixes: number;
+  /** GPS로 보면 멈춰 있다 */
+  gpsStill: boolean;
+  /** 정차 조건을 모두 만족하면 평균, 아니면 null */
+  stats: StationaryStats | null;
+}
+
+/** 시각 tEnd에서 끝나는 3초 창. 데이터 범위 밖이면 null */
+function stillInfo(w: MotionWindows, gps: GpsObs[], tEnd: number): StillInfo | null {
   const ta = tEnd - cfg.stationaryWindowS * 1000;
   const r = w.range(ta, tEnd);
-  if (!r || !w.allValid(r)) return null;
-  if (w.vecStd(r) >= cfg.stationaryAccStdMax) return null;
+  if (!r) return null;
+  const std = w.allValid(r) ? w.vecStd(r) : null;
   const fixes = fixesIn(gps, ta, tEnd);
-  if (fixes.length < cfg.stationaryMinGpsFixes) return null;
+  let gpsStill: boolean;
   if (fixes.some((g) => g.speedDerived)) {
     // GPS 속도가 없는 기기: 속도 대신 위치가 한곳에 모여 있는지 본다
     const span = fixesIn(gps, tEnd - cfg.stationaryDerivedWindowS * 1000, tEnd);
-    if (span.length < 3 || fittedSpeed(span) >= cfg.stationaryDerivedMaxSpeedMps) return null;
-  } else if (fixes.some((g) => g.speed === null || g.speed >= cfg.stationarySpeedMps)) {
-    return null;
+    gpsStill = span.length >= 3 && fittedSpeed(span) < cfg.stationaryDerivedMaxSpeedMps;
+  } else {
+    gpsStill = fixes.length > 0 && fixes.every((g) => g.speed !== null && g.speed < cfg.stationarySpeedMps);
   }
-  return { meanF: w.meanF(r), meanW: w.gyroAllValid(r) ? w.meanW(r) : null };
+  const ok = std !== null && std < cfg.stationaryAccStdMax && fixes.length >= cfg.stationaryMinGpsFixes && gpsStill;
+  return { std, fixes: fixes.length, gpsStill, stats: ok ? { meanF: w.meanF(r), meanW: w.gyroAllValid(r) ? w.meanW(r) : null } : null };
+}
+
+/** 시각 tEnd에서 끝나는 3초 창이 정차 조건을 만족하면 평균을 돌려준다 */
+function stationaryAt(w: MotionWindows, gps: GpsObs[], tEnd: number): StationaryStats | null {
+  return stillInfo(w, gps, tEnd)?.stats ?? null;
 }
 
 /**
@@ -278,14 +296,20 @@ function speedSpan(gps: GpsObs[], k: number): number {
   return 1;
 }
 
-/** GPS 점 k를 가운데로 한 구간의 앞 방향 기여 (A, 수평 가속도). 조건을 만족하지 않으면 null */
-function forwardSample(
-  w: MotionWindows,
-  gps: GpsObs[],
-  k: number,
-  up: Vec3,
-  gyroBias: Vec3 | null,
-): { A: number; h: Vec3 } | null {
+/** GPS 점 k를 가운데로 한 구간의 앞 방향 판정 재료 (진단에서도 쓴다) */
+interface FwdInfo {
+  /** GPS 속도 변화율 m/s² */
+  A: number;
+  /** 구간 모션이 끊기지 않았다 */
+  motionOk: boolean;
+  /** 가장 큰 요레이트 rad/s (모션이 끊겼거나 구할 수 없으면 null) */
+  yaw: number | null;
+  /** 조건을 모두 만족하면 앞 방향 기여, 아니면 null */
+  sample: { A: number; h: Vec3 } | null;
+}
+
+/** GPS 점 k를 가운데로 한 구간. 이웃 점·속도가 없거나 간격이 길거나 느리면 null */
+function forwardInfo(w: MotionWindows, gps: GpsObs[], k: number, up: Vec3, gyroBias: Vec3 | null): FwdInfo | null {
   const hspan = speedSpan(gps, k);
   const a = gps[k - hspan];
   const c = gps[k];
@@ -294,9 +318,8 @@ function forwardSample(
   const span = b.t - a.t;
   if (span <= 0 || span > cfg.forwardMaxGpsSpanMs * hspan || c.speed < cfg.forwardMinSpeedMps) return null;
   const A = (b.speed - a.speed) / (span / 1000);
-  if (Math.abs(A) < cfg.forwardMinAccelMps2) return null;
   const r = w.range(a.t, b.t);
-  if (!r || !w.allValid(r)) return null;
+  if (!r || !w.allValid(r)) return { A, motionOk: false, yaw: null, sample: null };
   // 직진 판단: 자이로가 있으면 자이로(부호와 무관), 없으면 GPS 진행 방향 변화율.
   // 자이로는 0.5초 조각마다 본다: 창 평균만 보면 코너에 걸친 구간(코너 출구 가속, 진입 제동)이 섞여 앞 방향이 틀어진다
   let yaw: number | null;
@@ -308,9 +331,21 @@ function forwardSample(
       if (Math.abs(y) > Math.abs(yaw)) yaw = y;
     }
   } else yaw = gpsYawRateAt(gps, k, cfg.forwardMaxGpsSpanMs);
-  if (yaw === null || Math.abs(yaw) >= cfg.forwardMaxYawRate) return null;
+  const ok = Math.abs(A) >= cfg.forwardMinAccelMps2 && yaw !== null && Math.abs(yaw) < cfg.forwardMaxYawRate;
+  if (!ok) return { A, motionOk: true, yaw, sample: null };
   const f = w.meanF(r);
-  return { A, h: sub(f, scale(up, dot(f, up))) };
+  return { A, motionOk: true, yaw, sample: { A, h: sub(f, scale(up, dot(f, up))) } };
+}
+
+/** GPS 점 k를 가운데로 한 구간의 앞 방향 기여 (A, 수평 가속도). 조건을 만족하지 않으면 null */
+function forwardSample(
+  w: MotionWindows,
+  gps: GpsObs[],
+  k: number,
+  up: Vec3,
+  gyroBias: Vec3 | null,
+): { A: number; h: Vec3 } | null {
+  return forwardInfo(w, gps, k, up, gyroBias)?.sample ?? null;
 }
 
 function buildCalibration(
@@ -700,4 +735,94 @@ export function platformSigns(yawSign: 1 | -1, latSign: 1 | -1): { accel: 1 | -1
   if (yawSign === -1 && latSign === -1) return { accel: -1, gyro: 1 };
   if (yawSign === -1) return { accel: 1, gyro: -1 };
   return { accel: -1, gyro: -1 };
+}
+
+// ── 진단 (실차에서 보정이 안 될 때 어디서 막혔는지) ─────────
+
+export interface MountDiagnosis {
+  /** 각 단계에 처음 들어간 시각 (세션 시계 ms). 못 갔으면 null */
+  stages: { forward: number | null; signs: number | null; done: number | null };
+  /** 기록 끝에서의 진행 */
+  end: CalProgress;
+  /**
+   * 정차: GPS로 멈춘 시간(초)과, GPS로 보면 멈춘 3초 창(0.5초마다)이 왜 통과하지 못했는지.
+   * fewFixes: 창 안 GPS 점이 2개 미만 / motionGap: 동작 센서가 0.2초 넘게 끊김 / shaky: 흔들림 0.8 m/s² 이상
+   */
+  still: { gpsStillS: number; windows: number; fewFixes: number; motionGap: number; shaky: number; ok: number; minStd: number | null };
+  /**
+   * 직진 가감속: strong은 속도 변화율 1.5 m/s² 이상(기준), weak는 1.0~1.5. strong 중 막힌 이유
+   * (motionGap: 센서 끊김, turning: 회전 중이거나 진행 방향을 모름). maxA: 가장 센 가감속, maxAStraight: 그중 직진
+   */
+  fwd: { strong: number; weak: number; motionGap: number; turning: number; ok: number; maxA: number; maxAStraight: number };
+}
+
+/** 기록 전체를 실시간 보정기에 넣어 보고, 정차·직진 가감속 판정이 어디서 막혔는지 센다 */
+export function diagnoseMount(m: Motion50, gps: GpsObs[]): MountDiagnosis {
+  // 1. 실시간 보정기 그대로: 단계에 들어간 시각
+  const c = new MountCalibrator(m);
+  const stages: MountDiagnosis['stages'] = { forward: null, signs: null, done: null };
+  let j = 0;
+  for (let i = 0; i < m.n; i++) {
+    const t = m.t0 + i * m.dt;
+    while (j < gps.length && gps[j]!.t <= t) c.pushGps(gps[j++]!);
+    c.pushMotion(i);
+    const st = c.progress().stage;
+    if (st === 'forward' || st === 'signs' || st === 'done') stages.forward ??= t;
+    if (st === 'signs' || st === 'done') stages.signs ??= t;
+    if (st === 'done') stages.done ??= t;
+  }
+
+  const w = new MotionWindows(m);
+  w.extendTo(m.n - 1);
+  const tEnd = m.t0 + Math.max(0, m.n - 1) * m.dt;
+
+  // 2. 정차
+  let gpsStillS = 0;
+  for (let i = 1; i < gps.length; i++) {
+    const a = gps[i - 1]!;
+    const b = gps[i]!;
+    if (a.speed !== null && b.speed !== null && a.speed < cfg.stationarySpeedMps && b.speed < cfg.stationarySpeedMps) gpsStillS += (b.t - a.t) / 1000;
+  }
+  const still: MountDiagnosis['still'] = { gpsStillS, windows: 0, fewFixes: 0, motionGap: 0, shaky: 0, ok: 0, minStd: null };
+  let first: StationaryStats | null = null;
+  let g = 0;
+  for (let t = m.t0 + cfg.stationaryWindowS * 1000; t <= tEnd; t += cfg.offlineStationaryStep * m.dt) {
+    const info = stillInfo(w, gps, t);
+    if (!info) continue;
+    while (g + 1 < gps.length && gps[g + 1]!.t <= t) g++;
+    const last = gps[g] && gps[g]!.t <= t ? gps[g]! : null;
+    // GPS 점이 거의 안 오는 정차(창 안 점 부족)도 마지막 점이 멈춤이면 정차로 센다
+    const lastStill = last !== null && last.speed !== null && last.speed < cfg.stationarySpeedMps;
+    if (!info.gpsStill && !(info.fixes < cfg.stationaryMinGpsFixes && lastStill)) continue;
+    still.windows += 1;
+    if (info.std !== null) still.minStd = Math.min(still.minStd ?? Infinity, info.std);
+    if (info.fixes < cfg.stationaryMinGpsFixes) still.fewFixes += 1;
+    else if (info.std === null) still.motionGap += 1;
+    else if (info.std >= cfg.stationaryAccStdMax) still.shaky += 1;
+    else {
+      still.ok += 1;
+      first ??= info.stats;
+    }
+  }
+
+  // 3. 직진 가감속 (위 방향은 처음 통과한 정차 창. 없으면 GPS 진행 방향으로 직진을 본다)
+  const up = first ? normalize(first.meanF) : ([0, 0, 1] as Vec3);
+  const bias = first ? first.meanW : null;
+  const fwd: MountDiagnosis['fwd'] = { strong: 0, weak: 0, motionGap: 0, turning: 0, ok: 0, maxA: 0, maxAStraight: 0 };
+  for (let k = 1; k < gps.length - 1; k++) {
+    const info = forwardInfo(w, gps, k, up, bias);
+    if (!info) continue;
+    const a = Math.abs(info.A);
+    fwd.maxA = Math.max(fwd.maxA, a);
+    const straight = info.motionOk && info.yaw !== null && Math.abs(info.yaw) < cfg.forwardMaxYawRate;
+    if (straight) fwd.maxAStraight = Math.max(fwd.maxAStraight, a);
+    if (a >= cfg.forwardMinAccelMps2) {
+      fwd.strong += 1;
+      if (!info.motionOk) fwd.motionGap += 1;
+      else if (!straight) fwd.turning += 1;
+      else fwd.ok += 1;
+    } else if (a >= cfg.fwdCheckMinAccelMps2) fwd.weak += 1;
+  }
+
+  return { stages, end: c.progress(), still, fwd };
 }

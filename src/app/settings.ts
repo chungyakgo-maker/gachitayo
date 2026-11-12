@@ -19,6 +19,8 @@ export interface Settings {
   gateWidthM: number;
   /** 주행 지도 모드의 보기 */
   mapView: MapViewMode;
+  /** 주행 중 지도 모드에 바탕 지도(OSM)를 깐다 (사용자 요청). 끄면 코스 선과 점만 그린다 */
+  mapTiles: boolean;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -34,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gap: { friendId: null, nickname: null, targetS: 2 },
   gateWidthM: 30,
   mapView: 'fit',
+  mapTiles: true,
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -74,6 +77,7 @@ function load(): Settings {
           ? Math.min(GATE_WIDTH_MAX_M, Math.max(GATE_WIDTH_MIN_M, Math.round(raw.gateWidthM)))
           : DEFAULT_SETTINGS.gateWidthM,
       mapView: raw.mapView === 'follow' || raw.mapView === 'heading' ? raw.mapView : 'fit',
+      mapTiles: raw.mapTiles !== false,
     };
   } catch {
     return DEFAULT_SETTINGS;

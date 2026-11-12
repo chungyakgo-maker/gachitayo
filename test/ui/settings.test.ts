@@ -7,8 +7,15 @@ describe('설정 (폰 보관)', () => {
     updateSettings(DEFAULT_SETTINGS);
   });
 
-  it('기본값: 지도 모드, 상단 값 G미터·속도, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m', () => {
-    expect(getSettings()).toEqual({ defaultMode: 'map', widgets: ['g', 'speed'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit' });
+  it('기본값: 지도 모드, 상단 값 G미터·속도, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m, 주행 중 바탕 지도 보이기', () => {
+    expect(getSettings()).toEqual({ defaultMode: 'map', widgets: ['g', 'speed'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true });
+  });
+
+  it('바탕 지도는 저장된 값이 false일 때만 끈다', () => {
+    updateSettings({ mapTiles: false });
+    expect(getSettings().mapTiles).toBe(false);
+    updateSettings({ mapTiles: true });
+    expect(getSettings().mapTiles).toBe(true);
   });
 
   it('앞 친구 목표 간격은 1~10초, 0.5초 단위로 맞춘다 (폰에 저장된 값이 이상해도)', async () => {

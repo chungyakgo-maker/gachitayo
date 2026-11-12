@@ -30,6 +30,11 @@ vi.mock('../../../src/app/analysis', () => ({ loadAnalysis: async () => data, lo
 const share = vi.fn(async (_f: File) => 'downloaded' as const);
 vi.mock('../../../src/storage/exportFile', async (orig) => ({ ...(await orig<typeof import('../../../src/storage/exportFile')>()), shareOrDownload: (f: File) => share(f) }));
 
+vi.mock('../../../src/app/rawTransfer', async (orig) => {
+  const { diagnoseCalibration } = await import('../../../src/engine/diagnose/calibration');
+  return { ...(await orig<typeof import('../../../src/app/rawTransfer')>()), loadCalDiagnosis: async () => diagnoseCalibration(s.gps, s.motion) };
+});
+
 const { AnalysisScreen } = await import('../../../src/ui/screens/AnalysisScreen');
 
 describe('분석 화면 (사양서 8.6)', () => {
@@ -64,5 +69,14 @@ describe('분석 화면 (사양서 8.6)', () => {
     const f = share.mock.calls[0]![0];
     expect(f.name).toMatch(/^gachitayo_오벌_\d{8}-\d{4}\.csv$/);
     expect((await f.text()).split('\n')[0]).toMatch(/^utc_time,elapsed_s,lap,/);
+  });
+
+  it('G 보정 진단: 보기를 누르면 결과·센서·GPS·정차·직진 가감속 줄을 보여준다', async () => {
+    render(<AnalysisScreen sessionId="s1" />);
+    const box = await screen.findByRole('region', { name: 'G 보정 진단' });
+    fireEvent.click(screen.getByRole('button', { name: '보기' }));
+    await waitFor(() => expect(box).toHaveTextContent(/보정 끝 \(출발 \d+초 뒤\)/));
+    for (const label of ['동작 센서', 'GPS', '1 정차', '2 직진 가감속', '단계 시각']) expect(box).toHaveTextContent(label);
+    expect(screen.getByRole('button', { name: '다시 보기' })).toBeEnabled();
   });
 });

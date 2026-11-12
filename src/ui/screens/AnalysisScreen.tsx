@@ -3,7 +3,8 @@
 // 그래프는 trace, 지도·지점 정보·G 다이어그램은 처리된 궤적을 쓴다. 넓은 화면은 그래프와 지도를 나란히.
 import { useEffect, useMemo, useState } from 'react';
 import { loadAnalysis, loadProcessedOf, type AnalysisData } from '../../app/analysis';
-import { prepareRawExport } from '../../app/rawTransfer';
+import { loadCalDiagnosis, prepareRawExport } from '../../app/rawTransfer';
+import { calDiagnosisLines, type DiagLine } from '../../engine/diagnose/calibration';
 import { getRepo } from '../../app/recording';
 import { loadRaw } from '../../app/sessionProcessing';
 import type { GpsSample } from '../../types/samples';
@@ -302,10 +303,50 @@ export function AnalysisScreen({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
+      <CalDiagnosisSection sessionId={session.id} />
+
       {exportOpen && (
         <ExportSheet sessionId={session.id} hasLap={lapA !== null} compareLabel={labelB} onClose={() => setExportOpen(false)} onExport={(k, r) => exportFile(k, r)} />
       )}
     </main>
+  );
+}
+
+/** G 보정 진단 (실차 도구): G가 안 나왔을 때 어디서 막혔는지. 캡처해서 보내면 원인을 찾을 수 있다 */
+function CalDiagnosisSection({ sessionId }: { sessionId: string }) {
+  const [lines, setLines] = useState<DiagLine[] | 'loading' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = () => {
+    setLines('loading');
+    setError(null);
+    loadCalDiagnosis(sessionId)
+      .then((d) => setLines(calDiagnosisLines(d)))
+      .catch((e: Error) => {
+        setLines(null);
+        setError(e.message);
+      });
+  };
+  return (
+    <section className="card card-col cal-diag" style={{ gap: 10 }} aria-label="G 보정 진단">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, fontWeight: 600 }}>G 보정 진단</span>
+        <button type="button" className="btn small" disabled={lines === 'loading'} onClick={run}>
+          {lines === 'loading' ? '보는 중…' : Array.isArray(lines) ? '다시 보기' : '보기'}
+        </button>
+      </div>
+      {!Array.isArray(lines) && !error && <span className="sub">G가 안 나왔으면 눌러 보세요. 어느 단계에서 왜 막혔는지 보여줘요.</span>}
+      {error && <div className="notice">{error}</div>}
+      {Array.isArray(lines) && (
+        <dl className="diag-lines">
+          {lines.map((l) => (
+            <div key={l.label} className={l.bad ? 'bad' : undefined}>
+              <dt>{l.label}</dt>
+              <dd>{l.text}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
   );
 }
 

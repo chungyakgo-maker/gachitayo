@@ -85,6 +85,15 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByText('두 번 탭하면 미니멀')).toBeInTheDocument();
   });
 
+  it('지도 모드 바탕 지도: 설정에서 켜면 지도(OSM) 위에, 끄면 코스 선만 (사용자 요청)', () => {
+    const on = render(<DriveView {...props()} />);
+    expect(on.container.querySelector('.replay-map')).not.toBeNull();
+    on.unmount();
+    const off = render(<DriveView {...props({ settings: { ...DEFAULT_SETTINGS, mapTiles: false } })} />);
+    expect(off.container.querySelector('.replay-map')).toBeNull();
+    expect(screen.getByRole('img', { name: '코스 지도: 내 위치와 베스트 고스트' })).toBeInTheDocument();
+  });
+
   it('느리면 느림 색, 고른 값은 설정을 따른다', () => {
     render(<DriveView {...props({ snap: snap(state({ delta: 0.425 })), settings: { ...DEFAULT_SETTINGS, widgets: ['sector', 'vmax'] } })} />);
     expect(screen.getByRole('img', { name: /베스트 대비 · 느림 \+0.43/ }).closest('.delta-panel')).toHaveClass('slow');

@@ -301,9 +301,9 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
         </div>
       </div>
       <div className="drive-map">
-        {replay ? (
-          // 재생은 운전 중이 아니라서 지도 타일 위에 그린다 (전체 코스 / 따라가기)
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} initialView={mapView} heading={headSm} />
+        {replay || settings.mapTiles ? (
+          // 바탕 지도(OSM) 위에 그린다 (사용자 요청). 통신이 없거나 타일이 안 오면 타일 없이 그린다
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} initialView={mapView} heading={headSm} viewToggle={replay !== null} />
         ) : (
           <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, view: viewFor(w, hh) })} />
         )}
