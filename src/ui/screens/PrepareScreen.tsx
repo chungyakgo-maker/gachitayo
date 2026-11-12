@@ -1,6 +1,9 @@
 // 주행 준비 (사양서 8.3, 디자인 시안 Prepare)
 import { MountTips } from '../components/MountTips';
 import { GapSection } from '../components/GapSection';
+import { ShareToggle } from '../components/ShareToggle';
+import { useFriends } from '../../app/friends';
+import { useAccount } from '../../app/account';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
@@ -20,6 +23,9 @@ export function PrepareScreen() {
   const rec = useRecording();
   const snap = useLiveSnapshot();
   const settings = useSettings();
+  const acc = useAccount();
+  const fr = useFriends();
+  const shareOn = acc.status === 'ready' && fr.friends.length > 0;
   const [sheet, setSheet] = useState<'course' | 'ref' | null>(null);
   const [tips, setTips] = useState(false);
 
@@ -131,6 +137,9 @@ export function PrepareScreen() {
           {tips && <MountTips />}
         </div>
       </section>
+
+      {/* 주행 중 위치 공유 (사용자 요청): 기록 시작 전에 켜야 친구 지도와 친구의 앞 친구 간격에 내가 보인다 */}
+      {shareOn && <ShareToggle variant="card" />}
 
       <section aria-label="코스" className="card card-row">
         <div className="card-col">

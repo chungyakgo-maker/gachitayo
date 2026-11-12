@@ -1,7 +1,9 @@
 // 주행 화면 (사양서 8.4, 디자인 시안 DriveMap·DriveMinimal·DriveDashboard)
 // 두 번 탭하면 모드 전환(지도 → 미니멀 → 대시보드), 2초 길게 눌러 종료. 그 밖의 터치는 무시한다.
 // 지도 모드의 델타·고른 값·미니맵은 오버레이 그리기 함수(src/ui/overlay)로 캔버스에 그린다 (사양서 13.1 확장 지점).
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useAccount } from '../../app/account';
+import { useFriends, watchFriendPositions } from '../../app/friends';
 import { useFollow, type FollowState } from '../../app/liveLink';
 import { toLocal } from '../../engine/geo';
 import { GapTracker } from '../../engine/live/gap';
@@ -30,6 +32,8 @@ export interface DriveViewProps {
   gap?: GapInfo | null;
   /** 앞 친구 위치 (같은 평면 좌표) */
   front?: { x: number; y: number; label: string } | null;
+  /** 위치를 공유 중인 다른 친구들 (같은 평면 좌표, 사용자 요청 "주행 중에도 위치 공유") */
+  friends?: ReadonlyArray<{ x: number; y: number; label: string }>;
   course: Course | null;
   refLap: RefLapRecord | null;
   mode: DriveMode;
@@ -103,7 +107,7 @@ function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, gap = null, front = null, course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }) }: DriveViewProps) {
+export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }) }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   const st = snap?.state ?? null;
   // 최근 G 궤적 (사용자 요청: 부드럽게 그린다). 스냅숏 시각 순서로 모은다
@@ -308,9 +312,9 @@ export function DriveView({ snap, gap = null, front = null, course, refLap, mode
       <div className="drive-map">
         {replay || settings.mapTiles ? (
           // 바탕 지도(OSM) 위에 그린다 (사용자 요청). 통신이 없거나 타일이 안 오면 타일 없이 그린다
-          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} heading={headSm} view={mapView} />
+          <ReplayMap model={model} frame={frame} origin={snap?.origin ?? null} th={th} insetBottom={120} label={mapLabel} friend={front} friends={friends} heading={headSm} view={mapView} />
         ) : (
-          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, view: viewFor(w, hh), north: false })} />
+          <OverlayCanvas style={{ position: 'absolute', inset: 0 }} label={mapLabel} draw={(ctx, w, hh) => drawMiniMap(ctx, w, hh, model, frame, th, { insetBottom: 120, margin: 28, friend: front, friends, view: viewFor(w, hh), north: false })} />
         )}
         {/* 지도 보기 나침반 버튼 (사용자 요청): 누를 때마다 전체 코스 → 나를 가운데 → 진행 방향 위. 재생·주행 같음, 설정에 저장 */}
         <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} />
@@ -348,12 +352,24 @@ export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targ
   return { gap: { nickname, targetS, gapS: r.gapS, stale: r.stale }, front: last && !r.stale ? { x: last.x, y: last.y, label: nickname } : null };
 }
 
+/** 주행 중 위치를 공유 중인 친구들 (사용자 요청): 5초마다 받아 와 주행 지도 평면으로. 앞 친구(간격)는 따로 그리므로 뺀다 */
+export function useDriveFriends(snap: LiveSnapshot | null, frontId: string | null): Array<{ x: number; y: number; label: string }> {
+  const acc = useAccount();
+  const fr = useFriends();
+  const on = acc.status === 'ready' && snap !== null;
+  useEffect(() => (on ? watchFriendPositions() : undefined), [on]);
+  const origin = snap?.origin;
+  if (!on || !origin) return [];
+  return fr.positions.filter((p) => p.userId !== frontId).map((p) => ({ ...toLocal(origin, p.lat, p.lon), label: p.nickname }));
+}
+
 export function DriveScreen() {
   const d = useDrive();
   const snap = useLiveSnapshot();
   const settings = useSettings();
   const follow = useFollow();
   const { gap, front } = useFrontGap(d.replay ? null : snap, d.replay ? { ...follow, friendId: null } : follow, settings.gap.targetS);
+  const friends = useDriveFriends(d.replay ? null : snap, follow.friendId);
   if (d.phase === 'idle' && !d.replay) {
     return (
       <main className="page page-full">
@@ -369,6 +385,7 @@ export function DriveScreen() {
       snap={snap}
       gap={gap}
       front={front}
+      friends={friends}
       course={d.course}
       refLap={d.ref}
       mode={d.mode}

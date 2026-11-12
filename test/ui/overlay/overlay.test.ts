@@ -234,6 +234,13 @@ describe('앞 친구 간격 (M9): 델타 자리에 목표와의 차이', () => {
     expect(texts().map((x) => x.text)).toEqual(['지훈']);
   });
 
+  it('주행 지도에 위치를 공유 중인 친구들도 점과 닉네임 (사용자 요청)', () => {
+    const { ctx, texts, calls } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, mapModel(course), frame({ ghost: null }), th, { friend: { x: 30, y: 40, label: '지훈' }, friends: [{ x: 10, y: 0, label: '남' }, { x: -20, y: 5, label: '수아' }] });
+    expect(texts().map((x) => x.text).sort()).toEqual(['남', '수아', '지훈']);
+    expect(calls.filter((c) => c.op === 'fill' && c.fillStyle === th.friend).length).toBeGreaterThanOrEqual(3);
+  });
+
   it('나를 가운데 (사용자 요청): 내 위치는 아래 띠를 뺀 화면 가운데, 북쪽 위. 보이는 거리는 화면 너비', () => {
     const me = { x: 100, y: 50, psi: 0 };
     const v = followView(me, 390, 500, { spanM: 300, insetBottom: 120 });

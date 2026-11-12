@@ -26,6 +26,9 @@ vi.mock('../../src/ui/pwa/usePwaUpdate', () => ({ usePwaUpdate: () => ({ needRef
 
 const { FriendsSection } = await import('../../src/ui/components/FriendsSection');
 const { MainScreen } = await import('../../src/ui/screens/MainScreen');
+const { ShareToggle } = await import('../../src/ui/components/ShareToggle');
+const { useDriveFriends } = await import('../../src/ui/screens/DriveScreen');
+const { watchFriendPositions } = await import('../../src/app/friends');
 
 const ready: AccountState = { status: 'ready', userId: 'u1', nickname: '민수', onboarded: true, lost: false, busy: false, error: null };
 const base: FriendsState = {
@@ -111,5 +114,39 @@ describe('메인 지도 · 위치 공유 (사양서 8.2, M8)', () => {
     acc = { ...ready, status: 'disabled', userId: null };
     render(<MainScreen />);
     expect(screen.queryByRole('button', { name: /위치 공유/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('주행 중 위치 공유 (사용자 요청)', () => {
+  it('주행 준비의 위치 공유 칸: 켜기 → 주행 중에도 보낸다는 확인 → 공유 켜기', () => {
+    acc = ready;
+    fr = { ...base, sharing: false };
+    setSharing.mockClear();
+    render(<ShareToggle variant="card" />);
+    expect(screen.getByRole('region', { name: '위치 공유' })).toHaveTextContent('꺼짐');
+    fireEvent.click(screen.getByRole('button', { name: '켜기' }));
+    expect(screen.getByRole('dialog', { name: '위치 공유' })).toHaveTextContent('주행 중에도 계속 보내고');
+    fireEvent.click(screen.getByRole('button', { name: '공유 켜기' }));
+    expect(setSharing).toHaveBeenCalledWith(true);
+  });
+
+  it('주행 지도용 친구 위치: 주행 중에 받아 오고, 앞 친구(간격)는 빼고 지도 평면으로', async () => {
+    const { renderHook } = await import('@testing-library/react');
+    acc = ready;
+    fr = {
+      ...base,
+      positions: [
+        { userId: 'u2', nickname: '지훈', lat: 37.2001, lon: 127.1, hAcc: 5, heading: null, speed: 10, ageMs: 1000 },
+        { userId: 'u3', nickname: '남', lat: 37.2, lon: 127.1001, hAcc: 5, heading: null, speed: 10, ageMs: 1000 },
+      ],
+    };
+    vi.mocked(watchFriendPositions).mockClear();
+    const snap = { origin: { lat: 37.2, lon: 127.1 } } as Parameters<typeof useDriveFriends>[0];
+    const { result } = renderHook(() => useDriveFriends(snap, 'u2'));
+    expect(watchFriendPositions).toHaveBeenCalled();
+    expect(result.current.map((f) => f.label)).toEqual(['남']);
+    expect(result.current[0]!.x).toBeCloseTo(8.9, 0);
+    const none = renderHook(() => useDriveFriends(null, null));
+    expect(none.result.current).toEqual([]);
   });
 });

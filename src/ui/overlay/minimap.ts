@@ -84,6 +84,8 @@ export interface MiniMapOpts {
   view?: MapView;
   /** 함께 그릴 앞 친구 위치 (같은 평면 좌표) */
   friend?: { x: number; y: number; label: string } | null;
+  /** 위치를 공유 중인 다른 친구들 (주행 중, 사용자 요청) */
+  friends?: ReadonlyArray<{ x: number; y: number; label: string }>;
   /** 돌린 지도에서 왼쪽 위 작은 나침반 (주행 화면은 나침반 버튼이 대신하므로 끈다) */
   north?: boolean;
 }
@@ -210,8 +212,8 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     ctx.setLineDash([]);
   }
 
-  if (opts.friend) {
-    const [x, y] = v.P(opts.friend.x, opts.friend.y);
+  for (const fp of [...(opts.friends ?? []), ...(opts.friend ? [opts.friend] : [])]) {
+    const [x, y] = v.P(fp.x, fp.y);
     ctx.setLineDash([]);
     ctx.beginPath();
     ctx.arc(x, y, 7, 0, Math.PI * 2);
@@ -224,7 +226,7 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = th.friend;
-    ctx.fillText(opts.friend.label, x, y - 16);
+    ctx.fillText(fp.label, x, y - 16);
   }
 
   if (v.rot !== 0 && opts.north !== false) drawNorth(ctx, w, opts.top ?? 24, v, th);

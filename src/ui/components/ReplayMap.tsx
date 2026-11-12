@@ -22,6 +22,7 @@ export interface ReplayMapProps {
   insetBottom: number;
   label: string;
   friend?: MiniMapOpts['friend'];
+  friends?: MiniMapOpts['friends'];
   /** 부드럽게 한 진행 방향 (진행 방향 위 보기) */
   heading?: number | null;
   /** 보기 (주행 화면의 나침반 버튼이 정한다) */
@@ -30,7 +31,7 @@ export interface ReplayMapProps {
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
 
-export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, heading = null, view }: ReplayMapProps) {
+export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend, friends, heading = null, view }: ReplayMapProps) {
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<ReplayMapController | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -125,7 +126,7 @@ export function ReplayMap({ model, frame, origin, th, insetBottom, label, friend
         className="overlay-layer"
         style={{ position: 'absolute', inset: 0 }}
         label={label}
-        draw={(ctx, w, h) => drawMiniMap(ctx, w, h, model, frame, th, { insetBottom, margin: 28, view: mapView, friend, north: false })}
+        draw={(ctx, w, h) => drawMiniMap(ctx, w, h, model, frame, th, { insetBottom, margin: 28, view: mapView, friend, friends, north: false })}
       />
     </div>
   );
