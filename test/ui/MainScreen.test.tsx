@@ -14,7 +14,7 @@ vi.mock('../../src/app/recording', async (orig) => ({
 const { MainScreen } = await import('../../src/ui/screens/MainScreen');
 
 describe('메인 화면 (사양서 8.2, 시안 Main)', () => {
-  it('주행 시작 버튼, 아래 탭 4개, 설정 버튼', () => {
+  it('주행 시작 버튼, 아래 탭 4개 (위쪽 "같이타요" 머리글과 설정 버튼은 없앰: 사용자 요청, 설정은 아래 탭)', () => {
     phase = 'idle';
     render(<MainScreen />);
     expect(screen.getByRole('button', { name: /주행 시작/ })).toBeInTheDocument();
@@ -25,8 +25,10 @@ describe('메인 화면 (사양서 8.2, 시안 Main)', () => {
       ['기록', '#/history'],
       ['설정', '#/settings'],
     ]);
-    // 머리글의 설정 버튼과 아래 탭
-    expect(screen.getAllByRole('link', { name: '설정' }).map((a) => a.getAttribute('href'))).toEqual(['#/settings', '#/settings']);
+    expect(screen.getAllByRole('link', { name: '설정' }).map((a) => a.getAttribute('href'))).toEqual(['#/settings']);
+    expect(screen.queryByRole('heading', { name: '같이타요' })).toBeNull();
+    // 위치를 못 잡았을 때 안내 말풍선도 띄우지 않는다 (사용자 요청)
+    expect(screen.queryByText('위치를 받으면 지도에 표시돼요')).toBeNull();
   });
 
   it('친구·위치 공유 관련 표시는 없다 (1단계 범위 밖)', () => {

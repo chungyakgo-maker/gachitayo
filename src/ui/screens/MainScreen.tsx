@@ -13,7 +13,7 @@ import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { formatLapTime, formatLength } from '../format';
 import { useLocationPreview } from '../hooks/useLocationPreview';
-import { IconArrowRight, IconCloud, IconPin, IconSettings, IconWarn } from '../icons';
+import { IconArrowRight, IconCloud, IconPin, IconWarn } from '../icons';
 import type { GpsState } from '../components/GpsIcon';
 import { useOverlayInsets } from '../hooks/useOverlayInsets';
 import { usePwaUpdate } from '../pwa/usePwaUpdate';
@@ -57,12 +57,6 @@ export function MainScreen() {
       <UpdateBanner visible={needRefresh && !busy} onUpdate={update} />
       <div className="main-full" ref={baseRef}>
       <div className="main-top overlay" ref={topRef}>
-        <header className="page-head">
-          <h1 className="big">같이타요</h1>
-          <a className="icon-btn" href="#/settings" aria-label="설정">
-            <IconSettings />
-          </a>
-        </header>
         {busy && (
           <a
             className="notice warn"
@@ -137,7 +131,6 @@ export function MainScreen() {
       >
         <div className="map-controls">
           {friendsOn && <ShareToggle variant="map" />}
-          {!course && !fix && <div className="map-chip">위치를 받으면 지도에 표시돼요</div>}
           {friendsOn && fr.error && fr.sharing && <div className="map-chip">{fr.error}</div>}
         </div>
       </MainMap>

@@ -21,8 +21,9 @@ describe('App', () => {
     fireEvent.click(start);
     await waitFor(() => expect(screen.getByRole('navigation', { name: '주 메뉴' })).toBeInTheDocument());
     expect(localStorage.getItem('gachitayo.nickname')).toBe('민수');
-    // 메인: 앱 이름. 버전은 지도에 두지 않고 설정에만 (사용자 요청)
-    expect(screen.getByRole('heading', { name: '같이타요' })).toBeInTheDocument();
+    // 메인: 주행 시작 버튼 (위쪽 "같이타요" 머리글은 사용자 요청으로 없앰). 버전은 지도에 두지 않고 설정에만 (사용자 요청)
+    expect(screen.getByRole('button', { name: /주행 시작/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '같이타요' })).toBeNull();
     expect(screen.queryByText(new RegExp(`버전 ${buildInfo.version} `))).not.toBeInTheDocument();
   });
 
