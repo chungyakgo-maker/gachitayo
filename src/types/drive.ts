@@ -48,8 +48,8 @@ export interface SessionSummary {
 export interface UploadQueueItem {
   /** `${kind}:${targetId}` */
   id: string;
-  /** session: 올리기, session-delete: 서버에서 지우기 (기록 지우기, M10) */
-  kind: 'session' | 'session-delete';
+  /** session: 올리기, session-delete: 서버에서 지우기 (기록 지우기), course: 코스만 올리기 (이름·선 바꿈) (M10) */
+  kind: 'session' | 'session-delete' | 'course';
   targetId: string;
   attempts: number;
   lastError: string | null;

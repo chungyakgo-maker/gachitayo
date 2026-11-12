@@ -1,6 +1,10 @@
-// 코스 탭 (사양서 8.7 중 목록). 선 옮기기·이름 바꾸기·GPX는 코스 관리(다음 단계)에서.
-import { useEffect } from 'react';
+// 코스 탭 (사양서 8.7): 코스 목록 → 코스 상세. 지도에서 새 코스, GPX 불러오기(코스로 또는 주행 기록으로).
+import { useEffect, useRef, useState } from 'react';
+import { importGpx } from '../../app/courses';
 import { loadCourses, useDrive } from '../../app/drive';
+import { parseGpx } from '../../gpx/parse';
+import { Sheet } from '../components/Sheet';
+import { IconChevron } from '../icons';
 import { Tabbed } from '../components/TabBar';
 import { formatLapTime, formatLength } from '../format';
 import { useBestTimes } from './useBestTimes';
@@ -11,12 +15,49 @@ export function CoursesScreen() {
     void loadCourses();
   }, []);
   const best = useBestTimes(courses);
+  const file = useRef<HTMLInputElement>(null);
+  const [gpx, setGpx] = useState<{ text: string; name: string; hasTime: boolean } | null>(null);
+  const [gpxName, setGpxName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const onFile = async (f: File | undefined) => {
+    setError(null);
+    if (!f) return;
+    try {
+      const text = await f.text();
+      const g = parseGpx(text);
+      setGpx({ text, name: g.name ?? f.name.replace(/\.gpx$/i, ''), hasTime: g.hasTime });
+      setGpxName(g.name ?? f.name.replace(/\.gpx$/i, ''));
+    } catch (e) {
+      setError(`GPX를 읽지 못했어요: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  const doImport = async (mode: 'course' | 'session') => {
+    if (!gpx) return;
+    try {
+      const r = await importGpx(gpx.text, mode, gpxName);
+      setGpx(null);
+      window.location.hash = r.kind === 'course' ? `#/course/${r.course.id}` : `#/summary/${r.sessionId}`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setGpx(null);
+    }
+  };
   return (
     <Tabbed path="/courses">
       <main className="page">
         <header className="page-head">
           <h1 className="big">코스</h1>
         </header>
+        <div className="button-pair">
+          <a className="btn" href="#/course-new" style={{ textAlign: 'center', textDecoration: 'none' }}>
+            지도에서 새 코스
+          </a>
+          <button type="button" className="btn" onClick={() => file.current?.click()}>
+            GPX 불러오기
+          </button>
+        </div>
+        <input ref={file} type="file" accept=".gpx,application/gpx+xml" hidden onChange={(e) => void onFile(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
+        {error && <div className="notice warn">{error}</div>}
         {courses.length === 0 ? (
           <div className="empty">
             아직 코스가 없어요.
@@ -26,7 +67,8 @@ export function CoursesScreen() {
         ) : (
           <ul className="rows">
             {courses.map((c) => (
-              <li key={c.id} className="row-card">
+              <li key={c.id}>
+                <a className="row-card" href={`#/course/${c.id}`}>
                 <span className="card-col">
                   <strong style={{ fontSize: 16 }}>{c.name}</strong>
                   <span className="sub">
@@ -37,11 +79,31 @@ export function CoursesScreen() {
                   <span className="label">내 베스트</span>
                   <span className="mono">{best[c.id] != null ? formatLapTime(best[c.id]!, 3) : '—'}</span>
                 </span>
+                <IconChevron size={18} color="#9AA1A9" />
+                </a>
               </li>
             ))}
           </ul>
         )}
       </main>
+      {gpx && (
+        <Sheet title="GPX 불러오기" onClose={() => setGpx(null)}>
+          <label htmlFor="gpx-name" className="label">
+            이름
+          </label>
+          <input id="gpx-name" className="text-input" type="text" value={gpxName} maxLength={40} onChange={(e) => setGpxName(e.target.value)} />
+          <button type="button" className="primary-btn" onClick={() => void doImport('course')}>
+            코스로 등록
+          </button>
+          {gpx.hasTime ? (
+            <button type="button" className="btn" onClick={() => void doImport('session')}>
+              주행 기록으로 가져오기 (GPS만)
+            </button>
+          ) : (
+            <span className="sub">시간 정보가 없어 코스로만 등록할 수 있어요.</span>
+          )}
+        </Sheet>
+      )}
     </Tabbed>
   );
 }

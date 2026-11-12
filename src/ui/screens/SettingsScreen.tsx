@@ -1,8 +1,8 @@
-// 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 개발자 메뉴.
-// 게이트 폭은 코스 관리(M7)에서.
+// 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
-import { updateSettings, useSettings, WIDGET_LABEL, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, updateSettings, useSettings, WIDGET_LABEL, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
 import { FriendsSection } from '../components/FriendsSection';
@@ -138,6 +138,23 @@ export function SettingsScreen() {
             ))}
           </div>
         </section>
+        <section className="card-col" style={{ gap: 8 }} aria-label="게이트 폭">
+          <span className="label">게이트 폭 (지도·GPX로 만드는 새 코스)</span>
+          <div className="stepper" role="group" aria-label="게이트 폭">
+            <button type="button" aria-label="게이트 폭 줄이기" disabled={s.gateWidthM <= GATE_WIDTH_MIN_M} onClick={() => updateSettings({ gateWidthM: Math.max(GATE_WIDTH_MIN_M, s.gateWidthM - 5) })}>
+              −
+            </button>
+            <span className="mono">{s.gateWidthM} m</span>
+            <button type="button" aria-label="게이트 폭 늘리기" disabled={s.gateWidthM >= GATE_WIDTH_MAX_M} onClick={() => updateSettings({ gateWidthM: Math.min(GATE_WIDTH_MAX_M, s.gateWidthM + 5) })}>
+              +
+            </button>
+          </div>
+          <span className="sub">출발선·도착선을 통과했다고 보는 폭이에요. 길이 넓거나 GPS가 흔들리면 넓게.</span>
+        </section>
+        <details className="card tips-card">
+          <summary>거치 팁</summary>
+          <MountTips />
+        </details>
         <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
           <span className="label">개발자 메뉴</span>
           <a className="list-link" href="#/dev/replay">

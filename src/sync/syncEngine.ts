@@ -52,7 +52,10 @@ export async function syncOnce(deps: SyncDeps): Promise<{ done: number; failed: 
   for (const item of due) {
     try {
       if (item.kind === 'session-delete') await deps.remote.deleteSession(item.targetId);
-      else await uploadSession(deps, userId, item.targetId);
+      else if (item.kind === 'course') {
+        const c = await deps.drive.getCourse(item.targetId);
+        if (c) await deps.remote.upsertCourse(courseRow(c));
+      } else await uploadSession(deps, userId, item.targetId);
       await deps.queue.remove(item.id);
       done++;
     } catch (e) {

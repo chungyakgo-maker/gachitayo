@@ -1,4 +1,5 @@
 // 주행 준비 (사양서 8.3, 디자인 시안 Prepare)
+import { MountTips } from '../components/MountTips';
 import { GapSection } from '../components/GapSection';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
@@ -179,14 +180,7 @@ export function PrepareScreen() {
           <button type="button" className="link-btn" aria-expanded={tips} onClick={() => setTips(!tips)}>
             {tips ? '거치 팁 닫기' : '거치 팁 보기'}
           </button>
-          {tips && (
-            <ul className="tips">
-              <li>하늘이 잘 보이는 앞유리 쪽에 거치하세요.</li>
-              <li>금속 성분 썬팅은 GPS를 약하게 합니다.</li>
-              <li>L1+L5 이중 주파수 GPS를 지원하는 폰이 더 정확합니다.</li>
-              <li>주행 중에 거치대를 움직이면 다시 보정합니다.</li>
-            </ul>
-          )}
+          {tips && <MountTips />}
         </div>
       </section>
 

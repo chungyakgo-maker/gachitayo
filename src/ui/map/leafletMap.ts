@@ -344,3 +344,70 @@ export function createAnalysisMap(el: HTMLElement, onPick: (lat: number, lon: nu
     },
   };
 }
+
+// ── 코스 편집 지도 (사양서 8.7): 선·점·글자를 그리고, 누른 곳을 알려 준다 ──
+
+export type MapShape =
+  | { kind: 'line'; pts: Array<[number, number]>; color: string; weight: number; dash?: string; opacity?: number }
+  | { kind: 'dot'; at: [number, number]; color: string; r: number }
+  | { kind: 'label'; at: [number, number]; text: string };
+
+export interface PickMapController {
+  /** fit: 이 점들이 다 보이게 (없으면 그대로) */
+  setShapes(shapes: MapShape[], fit?: Array<[number, number]>): void;
+  center(at: [number, number], zoom: number): void;
+  setOnline(online: boolean): void;
+  destroy(): void;
+}
+
+export function createPickMap(el: HTMLElement, onPick: (lat: number, lon: number) => void): PickMapController {
+  const map = L.map(el, { zoomControl: false, attributionControl: true, zoomSnap: 0.25, fadeAnimation: false, doubleClickZoom: false });
+  map.attributionControl.setPrefix(false);
+  const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
+  const layer = L.layerGroup().addTo(map);
+  map.setView([36.5, 127.8], 7);
+  let shown = false;
+  let fails = 0;
+  tiles.on('tileload', () => {
+    fails = 0;
+  });
+  tiles.on('tileerror', () => {
+    if (++fails >= TILE_FAILS_OFFLINE) setTiles(false);
+  });
+  function setTiles(on: boolean) {
+    if (on === shown) return;
+    shown = on;
+    fails = 0;
+    if (on) tiles.addTo(map);
+    else tiles.remove();
+  }
+  map.on('click', (e: L.LeafletMouseEvent) => onPick(e.latlng.lat, e.latlng.lng));
+  return {
+    setShapes(shapes, fit) {
+      layer.clearLayers();
+      for (const s of shapes) {
+        if (s.kind === 'line') L.polyline(s.pts, { color: s.color, weight: s.weight, dashArray: s.dash, opacity: s.opacity ?? 1, lineCap: 'round', interactive: false }).addTo(layer);
+        else if (s.kind === 'dot') L.circleMarker(s.at, { radius: s.r, color: '#0d0e10', weight: 2, fillColor: s.color, fillOpacity: 1, interactive: false }).addTo(layer);
+        else {
+          const span = document.createElement('span');
+          span.textContent = s.text;
+          L.marker(s.at, { icon: L.divIcon({ className: 'map-label', html: span, iconSize: [60, 16], iconAnchor: [30, 22] }), interactive: false, keyboard: false }).addTo(layer);
+        }
+      }
+      if (fit && fit.length) {
+        map.invalidateSize({ pan: false });
+        if (fit.length === 1) map.setView(fit[0]!, 17, { animate: false });
+        else map.fitBounds(L.latLngBounds(fit), { padding: [32, 32], maxZoom: 18, animate: false });
+      }
+    },
+    center(at, zoom) {
+      map.setView(at, zoom, { animate: false });
+    },
+    setOnline(online) {
+      setTiles(online);
+    },
+    destroy() {
+      map.remove();
+    },
+  };
+}

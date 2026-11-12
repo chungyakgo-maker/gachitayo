@@ -1543,6 +1543,63 @@ html.app-h .modal-backdrop {
   gap: 10px;
 }
 
+/* 코스 관리 (사양서 8.7) */
+.button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.course-map {
+  position: relative;
+  height: 360px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--card-line);
+  isolation: isolate;
+  background-color: var(--bg-map);
+  background-image: linear-gradient(#14171a 1px, transparent 1px), linear-gradient(90deg, #14171a 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.course-map .leaflet-host {
+  position: absolute;
+  inset: 0;
+}
+
+.course-map .leaflet-container {
+  background: transparent;
+  font-family: var(--sans);
+}
+
+.course-map .leaflet-container .leaflet-control-attribution {
+  background: rgba(13, 14, 16, 0.75);
+  color: var(--fg-faint);
+  font-size: 10px;
+}
+
+.text-input {
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 15px;
+}
+
+.notice .btn.small {
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.tips-card summary {
+  min-height: 28px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* ── 기록 테스트 화면 등 (개발자 메뉴) ─────────── */
 .screen {
   max-width: 640px;

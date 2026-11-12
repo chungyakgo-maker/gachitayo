@@ -15,6 +15,8 @@ import { ReplayScreen } from './screens/ReplayScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
 import { AnalysisScreen } from './screens/AnalysisScreen';
+import { CourseDetailScreen } from './screens/CourseDetailScreen';
+import { NewCourseScreen } from './screens/NewCourseScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 
@@ -24,6 +26,9 @@ function route(path: string): ReactElement {
   if (summary) return <SummaryScreen sessionId={decodeURIComponent(summary[1]!)} />;
   const analysis = /^\/analysis\/([^/]+)$/.exec(path);
   if (analysis) return <AnalysisScreen sessionId={decodeURIComponent(analysis[1]!)} />;
+  const course = /^\/course\/([^/]+)$/.exec(path);
+  if (course) return <CourseDetailScreen courseId={decodeURIComponent(course[1]!)} />;
+  if (path === '/course-new') return <NewCourseScreen />;
   switch (path) {
     case '/courses':
       return <CoursesScreen />;

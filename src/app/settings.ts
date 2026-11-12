@@ -12,7 +12,12 @@ export interface Settings {
   deltaPalette: DeltaPalette;
   /** 앞 친구 간격 (M9): 고른 앞 친구와 목표 간격(초, 1초 이상). friendId가 없으면 끔 */
   gap: { friendId: string | null; nickname: string | null; targetS: number };
+  /** 새 코스(지도·GPX로 만들 때)의 게이트 폭 m (사양서 8.8). 자동 코스는 엔진 기본값 */
+  gateWidthM: number;
 }
+
+export const GATE_WIDTH_MIN_M = 10;
+export const GATE_WIDTH_MAX_M = 60;
 
 export const GAP_MIN_S = 1;
 export const GAP_MAX_S = 10;
@@ -22,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   widgets: ['g', 'speed'],
   deltaPalette: 'green-red',
   gap: { friendId: null, nickname: null, targetS: 2 },
+  gateWidthM: 30,
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -57,6 +63,10 @@ function load(): Settings {
           : DEFAULT_SETTINGS.widgets,
       deltaPalette: raw.deltaPalette === 'blue-orange' ? 'blue-orange' : 'green-red',
       gap: loadGap(raw.gap),
+      gateWidthM:
+        typeof raw.gateWidthM === 'number' && Number.isFinite(raw.gateWidthM)
+          ? Math.min(GATE_WIDTH_MAX_M, Math.max(GATE_WIDTH_MIN_M, Math.round(raw.gateWidthM)))
+          : DEFAULT_SETTINGS.gateWidthM,
     };
   } catch {
     return DEFAULT_SETTINGS;
