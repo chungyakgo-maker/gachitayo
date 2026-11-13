@@ -49,6 +49,21 @@ describe('기록 컨트롤러', () => {
     await c.stopRecording();
   });
 
+  it('주행 기록은 백그라운드 위치로 연다 (아이폰 앱에서는 화면이 꺼져도 이어진다, 사양서 13.3)', async () => {
+    const startGps = vi.fn((..._a: unknown[]) => () => {});
+    vi.doMock('../../src/sensors/gps', () => ({ startGps }));
+    try {
+      const c = await load();
+      c.startRecording();
+      await until(c, 'recording');
+      expect(startGps).toHaveBeenCalled();
+      expect(startGps.mock.calls[0]![3]).toEqual({ background: true });
+      await c.stopRecording();
+    } finally {
+      vi.doUnmock('../../src/sensors/gps');
+    }
+  });
+
   it('기록 시작을 두 번 눌러도 세션은 하나만 만든다', async () => {
     const c = await load();
     c.startRecording();

@@ -243,6 +243,8 @@ function begin(recorder: Recorder, motionPermission: MotionPermission): void {
         }
       },
       (e) => set({ gpsError: e, ...(e === 'denied' ? { locationPermission: 'denied' as const } : {}) }),
+      // 아이폰 앱에서는 화면이 꺼지거나 앱을 내려도 기록이 이어지는 백그라운드 위치 (사양서 13.3)
+      { background: true },
     );
   let stopGps = runGps();
 
