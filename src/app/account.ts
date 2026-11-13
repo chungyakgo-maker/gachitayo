@@ -97,6 +97,13 @@ export function adoptLogin(r: { userId: string; token: string; nickname: string;
   set({ status: 'ready', userId: r.userId, nickname: r.nickname, onboarded: true, lost: false, kakao: r.kakao, busy: false, error: null });
 }
 
+/** 이 폰에서 계정을 잊는다 (로그아웃). 설정은 남긴다 */
+export function forgetAccount(): void {
+  token = null;
+  for (const k of [TOKEN_KEY, USER_KEY, NICKNAME_KEY, ONBOARDED_KEY, KAKAO_KEY]) write(k, null);
+  set({ status: accountEnabled() ? 'none' : 'disabled', userId: null, nickname: null, onboarded: false, lost: false, kakao: false, busy: false, error: null });
+}
+
 /** 서버에 이 폰 열쇠를 못 쓰게 한다 (로그아웃). 통신 실패는 그대로 던진다 */
 export async function logoutRemote(): Promise<void> {
   if (state.status === 'ready' && token) await apiFetch('POST', '/auth/logout', { token });

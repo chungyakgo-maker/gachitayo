@@ -5,6 +5,7 @@ import { useRecording } from '../../app/recording';
 import { deleteSessionRecord } from '../../app/sync';
 import { importRawFile } from '../../app/rawTransfer';
 import { Overlay } from '../components/Overlay';
+import { RestoreBanner } from '../components/RestoreBanner';
 import type { SessionStatus } from '../../types/session';
 import { Tabbed } from '../components/TabBar';
 import { formatDuration, formatKst, formatLapTime } from '../format';
@@ -69,6 +70,7 @@ export function HistoryScreen() {
           aria-label="원본 파일 고르기"
           onChange={(e) => void onImport(e.target.files?.[0]).finally(() => (e.target.value = ''))}
         />
+        <RestoreBanner />
         {importMsg && <div className={`notice${importMsg.warn ? ' warn' : ''}`}>{importMsg.text}</div>}
         {list.length === 0 ? (
           <div className="empty">아직 주행 기록이 없어요.</div>

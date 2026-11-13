@@ -97,6 +97,12 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 let db: GachitayoDb | undefined;
 const getDb = () => (db ??= new GachitayoDb());
 let repo: SessionRepo | undefined;
+/** 폰 저장소를 모두 비운다 (로그아웃): 기록·원본·결과·코스·비교 랩·업로드 대기열 */
+export async function clearLocalData(): Promise<void> {
+  const d = getDb();
+  await Promise.all(d.tables.map((t) => t.clear()));
+}
+
 export function getRepo(): SessionRepo {
   repo ??= createSessionRepo(getDb());
   return repo;
