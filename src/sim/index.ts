@@ -4,3 +4,4 @@ export * from './track';
 export * from './drive';
 export * from './sensors';
 export * from './friendScenario';
+export * from './courseDrive';

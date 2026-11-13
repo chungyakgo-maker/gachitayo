@@ -259,3 +259,42 @@ export function uTurn(r = 6, a = 50): Track {
 export function upDownUp(w: Track): Track {
   return appendTrack(appendTrack(appendTrack(appendTrack(w, uTurn()), reversedTrack(w)), uTurn()), w);
 }
+
+/**
+ * 점들(평면 m, 순서대로)로 만든 열린 코스 (모의주행, 사양서 10.2: 코스 중심선 → 가상 코스).
+ * 방향은 구간 방향을 펼친 값. 곡률은 앞뒤 창(기본 20 m)의 방향 차이 ÷ 거리로 구해, 1 m 간격 점의 작은 떨림이 속도를 깎지 않게 한다.
+ */
+export function polylineTrack(points: ReadonlyArray<readonly [number, number]>, opts: { curvatureWindowM?: number } = {}): Track {
+  const h = (opts.curvatureWindowM ?? 20) / 2;
+  const P = points.filter((p, i) => i === 0 || Math.hypot(p[0] - points[i - 1]![0], p[1] - points[i - 1]![1]) > 1e-6);
+  if (P.length < 2) throw new Error('코스를 만들려면 점이 2개 이상 있어야 합니다');
+  const n = P.length;
+  const s: number[] = [0];
+  for (let i = 1; i < n; i++) s.push(s[i - 1]! + Math.hypot(P[i]![0] - P[i - 1]![0], P[i]![1] - P[i - 1]![1]));
+  const psi: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = P[Math.min(i, n - 2)]!;
+    const b = P[Math.min(i, n - 2) + 1]!;
+    let v = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    if (i > 0) {
+      const prev = psi[i - 1]!;
+      v += Math.round((prev - v) / (2 * Math.PI)) * 2 * Math.PI;
+    }
+    psi.push(v);
+  }
+  const L = s[n - 1]!;
+  let j = 0;
+  const psiAt = (q: number) => {
+    const t = Math.min(Math.max(q, 0), L);
+    while (j > 0 && s[j]! > t) j--;
+    while (j < n - 2 && s[j + 1]! < t) j++;
+    const f = (t - s[j]!) / (s[j + 1]! - s[j]! || 1);
+    return psi[j]! + (psi[j + 1]! - psi[j]!) * f;
+  };
+  const k = s.map((si) => {
+    const a = Math.max(si - h, 0);
+    const b = Math.min(si + h, L);
+    return b > a ? (psiAt(b) - psiAt(a)) / (b - a) : 0;
+  });
+  return resampleUniform(s, P.map((p) => p[0]), P.map((p) => p[1]), psi, k, false);
+}
