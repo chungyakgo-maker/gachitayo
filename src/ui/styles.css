@@ -77,6 +77,15 @@ input {
   font-family: inherit;
 }
 
+/* 아이폰은 글자가 16px보다 작은 입력칸을 누르면 화면을 확대하고, 홈 화면 앱에서는 확대가 그대로 남아
+   화면 오른쪽과 아래 탭이 잘린다 (사용자 신고 "사이즈 맞춤 오류, 메뉴바 잘림": 15px 칸에서 16/15배 확대).
+   그래서 글자를 쓰는 입력칸·고르기 칸은 모두 16px 이상 (test/ui/inputZoom.test.ts가 확인) */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
 button {
   cursor: pointer;
 }
@@ -1340,7 +1349,7 @@ html.app-h .modal-backdrop {
   border-radius: 12px;
   background: var(--bg);
   color: var(--fg);
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .name-row button {
@@ -1537,7 +1546,7 @@ html.app-h .modal-backdrop {
   border: 1px solid var(--line-strong);
   background: var(--bg);
   color: var(--fg);
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .compare-chart {
@@ -1671,7 +1680,7 @@ html.app-h .modal-backdrop {
   border-radius: 12px;
   background: var(--bg);
   color: var(--fg);
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .notice .btn.small {

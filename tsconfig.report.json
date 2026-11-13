@@ -5,5 +5,5 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node", "vite/client"]
   },
-  "include": ["test/report", "test/gpx", "src/vite-env.d.ts"]
+  "include": ["test/report", "test/gpx", "src/vite-env.d.ts", "test/style"]
 }
