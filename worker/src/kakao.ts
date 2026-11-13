@@ -154,9 +154,20 @@ const identityOf = (env: Cloudflare.Env, kakaoId: string) =>
 const hasKakao = async (env: Cloudflare.Env, userId: string) =>
   (await env.DB.prepare("SELECT 1 AS x FROM identities WHERE user_id = ? AND provider = 'kakao'").bind(userId).first()) !== null;
 
-/** 합치기 (5.4): B의 기록·코스·친구를 A로 옮기고 B를 지운다. Task 3에서 채운다 */
-export function mergeUsers(_env: Cloudflare.Env, _from: string, _into: string): D1PreparedStatement[] {
-  throw new HttpError(501, '계정 합치기 준비 중');
+/** 합치기 (5.4): 익명 B의 코스·기록·랩·친구를 A로 옮기고 B를 지운다 (batch 한 번 = 한 덩어리).
+ *  파일은 R2에서 옮기지 않는다: 기록 행에 저장된 키(B 폴더)로 파일 게이트웨이가 찾아 준다 */
+export function mergeUsers(env: Cloudflare.Env, from: string, into: string): D1PreparedStatement[] {
+  const db = env.DB;
+  return [
+    db.prepare('UPDATE courses SET owner_id = ? WHERE owner_id = ?').bind(into, from),
+    db.prepare('UPDATE sessions SET owner_id = ? WHERE owner_id = ?').bind(into, from),
+    db.prepare('UPDATE laps SET owner_id = ? WHERE owner_id = ?').bind(into, from),
+    db.prepare('INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) SELECT ?, friend_id, created_at FROM friends WHERE user_id = ? AND friend_id != ?').bind(into, from, into),
+    db.prepare('INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) SELECT user_id, ?, created_at FROM friends WHERE friend_id = ? AND user_id != ?').bind(into, from, into),
+    db.prepare('DELETE FROM friends WHERE user_id = ? OR friend_id = ?').bind(from, from),
+    db.prepare('DELETE FROM presence WHERE user_id = ?').bind(from),
+    db.prepare('DELETE FROM users WHERE id = ?').bind(from),
+  ];
 }
 
 export async function finishKakao(req: Request, env: Cloudflare.Env, body: unknown, ip: string, now = Date.now()): Promise<{ userId: string; token: string; nickname: string; kind: LoginKind }> {

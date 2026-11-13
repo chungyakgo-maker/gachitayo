@@ -7,6 +7,7 @@
 //   GET /api/courses                     내 코스 목록
 //   PUT /api/courses/{id}                코스 올리기 (같은 id면 덮어씀)
 //   DELETE /api/courses/{id}             코스 지우기 (이 코스의 기록이 남아 있으면 409)
+//   GET /api/sessions                    내 기록 목록 (새 폰에서 되살리기)
 //   PUT /api/sessions/{id}               세션 올리기
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
 //   DELETE /api/sessions/{id}            기록 지우기 (랩·세션 행, 원본·처리된 파일) (M10)
@@ -21,7 +22,7 @@
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
 import { authenticate, logout, signup, validNickname } from './auth';
-import { deleteCourse, deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
+import { deleteCourse, deleteSession, getMe, listCourses, listSessions, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
@@ -130,6 +131,11 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     const userId = await authenticate(req, env);
     if (method === 'DELETE') return json(200, headers, await deleteCourse(env, userId, id.toLowerCase()));
     return json(200, headers, await putCourse(env, userId, id.toLowerCase(), await readJson(req, MAX_JSON_BYTES)));
+  }
+
+  if (path === '/api/sessions') {
+    if (method !== 'GET') throw new HttpError(405);
+    return json(200, headers, await listSessions(env, await authenticate(req, env)));
   }
 
   const session = /^\/api\/sessions\/([^/]+)(\/laps)?$/.exec(path);

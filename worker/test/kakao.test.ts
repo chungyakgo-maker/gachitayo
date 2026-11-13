@@ -9,13 +9,14 @@ const ORIGIN = 'https://example.github.io';
 const BASE = 'https://api.example.workers.dev';
 let ipSeq = 0;
 
-function req(method: string, path: string, init: { token?: string; body?: object | string; origin?: string | null; ip?: string } = {}) {
+function req(method: string, path: string, init: { token?: string; body?: object | string | Uint8Array; origin?: string | null; ip?: string } = {}) {
   const headers: Record<string, string> = {};
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
   if (init.origin !== null) headers.Origin = init.origin ?? ORIGIN;
   headers['CF-Connecting-IP'] = init.ip ?? `10.1.${Math.floor(++ipSeq / 250)}.${ipSeq % 250}`;
-  let body: string | undefined;
-  if (init.body !== undefined) {
+  let body: BodyInit | undefined;
+  if (init.body instanceof Uint8Array) body = init.body;
+  else if (init.body !== undefined) {
     body = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
     headers['Content-Type'] = 'application/json';
   }
@@ -273,5 +274,117 @@ describe('카카오 시작·콜백·마치기', () => {
     expect(r1.nickname).toBe('🚗'.repeat(20));
     const r2 = await login({ kakaoId: nextKakaoId(), nickname: '   ' });
     expect(r2.nickname).toBe('드라이버');
+  });
+});
+
+// ── 합치기 (설계 5.4) ─────────────────────────────────────
+const courseBody = { name: '오벌', kind: 'loop', source: 'auto', origin: { lat: 37.2, lon: 127.1 }, start_gate: { lat: 37.2, lon: 127.1, bearingDeg: 90, widthM: 30 }, finish_gate: { lat: 37.2, lon: 127.1, bearingDeg: 90, widthM: 30 }, centerline: [[37.2, 127.1], [37.201, 127.1]], length_m: 111, sector_bounds_m: null, version: 1 };
+const sessionBody = (userId: string, sid: string, courseId: string | null) => ({
+  course_id: courseId,
+  course_version: courseId ? 1 : null,
+  started_at: '2026-11-12T03:00:00.000Z',
+  ended_at: '2026-11-12T03:20:00.000Z',
+  device: { os: 'iOS 18' },
+  calibration: null,
+  raw_key: `${userId}/${sid}.raw.json.gz`,
+  processed_key: `${userId}/${sid}.processed.json.gz`,
+  format_version: 1,
+});
+const lapBody = [{ lap_no: 1, lap_time_ms: 61000, sector_times_ms: null, valid: true, invalid_reason: null, max_speed: 30, trace: null }];
+const RAW = new Uint8Array([0x1f, 0x8b, 1, 2, 3, 4, 5]);
+
+/** 익명 B: 코스 1, 세션 1(파일 둘, 랩 1) */
+async function anonWithData() {
+  const b = await newUser('익명비');
+  const cid = crypto.randomUUID();
+  const sid = crypto.randomUUID();
+  expect((await call('PUT', `/api/courses/${cid}`, { token: b.token, body: courseBody })).status).toBe(200);
+  expect((await call('PUT', `/files/${b.userId}/${sid}.raw.json.gz`, { token: b.token, body: RAW })).status).toBe(201);
+  expect((await call('PUT', `/files/${b.userId}/${sid}.processed.json.gz`, { token: b.token, body: RAW })).status).toBe(201);
+  expect((await call('PUT', `/api/sessions/${sid}`, { token: b.token, body: sessionBody(b.userId, sid, cid) })).status).toBe(200);
+  expect((await call('PUT', `/api/sessions/${sid}/laps`, { token: b.token, body: lapBody })).status).toBe(200);
+  return { ...b, cid, sid };
+}
+async function friendsOf(token: string) {
+  return (await (await call('GET', '/api/friends', { token })).json()) as { code: string; friends: Array<{ userId: string }> };
+}
+
+describe('계정 합치기 (익명 B → 카카오 계정 A)', () => {
+  it('B의 코스·기록·랩·파일·친구가 A로 오고, B 열쇠는 더 못 쓴다', async () => {
+    const kid = nextKakaoId();
+    const a = await login({ kakaoId: kid });
+    const b = await anonWithData();
+    const c = await newUser('친구씨');
+    expect((await call('POST', '/api/friends', { token: b.token, body: { code: (await friendsOf(c.token)).code } })).status).toBe(200);
+
+    const r = await login({ token: b.token, kakaoId: kid });
+    expect(r.kind).toBe('merged');
+    expect(r.userId).toBe(a.userId);
+
+    const sessions = (await (await call('GET', '/api/sessions', { token: r.token })).json()) as Array<{ id: string; courseId: string; rawKey: string; startedAt: string }>;
+    expect(sessions.map((x) => x.id)).toEqual([b.sid]);
+    expect(sessions[0]).toMatchObject({ courseId: b.cid, rawKey: `${b.userId}/${b.sid}.raw.json.gz`, startedAt: '2026-11-12T03:00:00.000Z' });
+    const courses = (await (await call('GET', '/api/courses', { token: r.token })).json()) as Array<{ id: string }>;
+    expect(courses.map((x) => x.id)).toEqual([b.cid]);
+    const laps = await env.DB.prepare('SELECT owner_id FROM laps WHERE session_id = ?').bind(b.sid).first<{ owner_id: string }>();
+    expect(laps!.owner_id).toBe(a.userId);
+
+    const raw = await call('GET', `/files/${a.userId}/${b.sid}.raw.json.gz`, { token: r.token });
+    expect(raw.status).toBe(200);
+    expect(new Uint8Array(await raw.arrayBuffer())).toEqual(RAW);
+    expect((await call('HEAD', `/files/${a.userId}/${b.sid}.processed.json.gz`, { token: r.token })).status).toBe(200);
+
+    expect((await friendsOf(c.token)).friends.map((f) => f.userId)).toEqual([a.userId]);
+    expect((await friendsOf(r.token)).friends.map((f) => f.userId)).toEqual([c.userId]);
+    expect((await me(b.token)).status).toBe(401);
+    expect(await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(b.userId).first()).toBeNull();
+  });
+
+  it('합친 기록을 지우면 저장된 경로(B 폴더)의 파일도 지운다', async () => {
+    const kid = nextKakaoId();
+    await login({ kakaoId: kid });
+    const b = await anonWithData();
+    const r = await login({ token: b.token, kakaoId: kid });
+    expect((await call('DELETE', `/api/sessions/${b.sid}`, { token: r.token })).status).toBe(200);
+    expect(await env.SESSION_FILES.head(`${b.userId}/${b.sid}.raw.json.gz`)).toBeNull();
+    expect(await env.SESSION_FILES.head(`${b.userId}/${b.sid}.processed.json.gz`)).toBeNull();
+  });
+
+  it('합친 기록을 A 경로로 다시 올려도 저장된 파일 경로는 그대로라 받을 수 있다', async () => {
+    const kid = nextKakaoId();
+    const a = await login({ kakaoId: kid });
+    const b = await anonWithData();
+    const r = await login({ token: b.token, kakaoId: kid });
+    expect((await call('PUT', `/api/sessions/${b.sid}`, { token: r.token, body: sessionBody(a.userId, b.sid, b.cid) })).status).toBe(200);
+    expect((await call('GET', `/files/${a.userId}/${b.sid}.raw.json.gz`, { token: r.token })).status).toBe(200);
+  });
+
+  it('A와 B가 서로 친구였으면 자기 자신 친구는 생기지 않는다', async () => {
+    const kid = nextKakaoId();
+    const a = await login({ kakaoId: kid });
+    const b = await newUser();
+    expect((await call('POST', '/api/friends', { token: b.token, body: { code: (await friendsOf(a.token)).code } })).status).toBe(200);
+    const r = await login({ token: b.token, kakaoId: kid });
+    expect((await friendsOf(r.token)).friends).toEqual([]);
+  });
+
+  it('기록 목록은 내 것만', async () => {
+    const x = await anonWithData();
+    const y = await newUser();
+    expect(await (await call('GET', '/api/sessions', { token: y.token })).json()).toEqual([]);
+    expect(((await (await call('GET', '/api/sessions', { token: x.token })).json()) as unknown[]).length).toBe(1);
+  });
+
+  it('코스의 기본 코스 키를 저장하고 돌려준다 (40자 넘으면 400)', async () => {
+    const u = await newUser();
+    const cid = crypto.randomUUID();
+    expect((await call('PUT', `/api/courses/${cid}`, { token: u.token, body: { ...courseBody, builtin: 'baehu' } })).status).toBe(200);
+    const list = (await (await call('GET', '/api/courses', { token: u.token })).json()) as Array<{ builtin: string | null }>;
+    expect(list[0]!.builtin).toBe('baehu');
+    expect((await call('PUT', `/api/courses/${crypto.randomUUID()}`, { token: u.token, body: { ...courseBody, builtin: 'x'.repeat(41) } })).status).toBe(400);
+    const plain = crypto.randomUUID();
+    await call('PUT', `/api/courses/${plain}`, { token: u.token, body: courseBody });
+    const all = (await (await call('GET', '/api/courses', { token: u.token })).json()) as Array<{ id: string; builtin: string | null }>;
+    expect(all.find((c) => c.id === plain)!.builtin).toBeNull();
   });
 });
