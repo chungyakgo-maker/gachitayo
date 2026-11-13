@@ -23,18 +23,27 @@ export function validNickname(v: unknown): string {
   return n;
 }
 
-export async function signup(env: Cloudflare.Env, nickname: string, ip: string, now = Date.now()): Promise<{ userId: string; token: string }> {
-  const hourAgo = now - 3_600_000;
-  const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM signup_log WHERE ip = ? AND at > ?').bind(ip, hourAgo).first<{ n: number }>();
+/** 가입 제한 (같은 IP에서 1시간에 SIGNUP_LIMIT_PER_HOUR개). 넘으면 429 */
+export async function checkSignupLimit(env: Cloudflare.Env, ip: string, now: number): Promise<void> {
+  const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM signup_log WHERE ip = ? AND at > ?').bind(ip, now - 3_600_000).first<{ n: number }>();
   if ((recent?.n ?? 0) >= SIGNUP_LIMIT_PER_HOUR) throw new HttpError(429, '잠시 뒤 다시 시도해 주세요');
-  const userId = crypto.randomUUID();
-  const token = newToken();
+}
+
+/** 새 계정 행 + 가입 기록 (batch에 넣는다) */
+export function newUserStatements(env: Cloudflare.Env, userId: string, nickname: string, tokenHash: string, ip: string, now: number): D1PreparedStatement[] {
   const iso = new Date(now).toISOString();
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO users (id, nickname, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').bind(userId, nickname, await sha256Hex(token), iso, iso),
+  return [
+    env.DB.prepare('INSERT INTO users (id, nickname, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').bind(userId, nickname, tokenHash, iso, iso),
     env.DB.prepare('INSERT INTO signup_log (ip, at) VALUES (?, ?)').bind(ip, now),
     env.DB.prepare('DELETE FROM signup_log WHERE at < ?').bind(now - 86_400_000),
-  ]);
+  ];
+}
+
+export async function signup(env: Cloudflare.Env, nickname: string, ip: string, now = Date.now()): Promise<{ userId: string; token: string }> {
+  await checkSignupLimit(env, ip, now);
+  const userId = crypto.randomUUID();
+  const token = newToken();
+  await env.DB.batch(newUserStatements(env, userId, nickname, await sha256Hex(token), ip, now));
   return { userId, token };
 }
 
@@ -70,15 +79,20 @@ export async function issueToken(env: Cloudflare.Env, userId: string): Promise<s
   return token;
 }
 
-/** 로그아웃: 이 열쇠만 못 쓰게 한다. 첫 익명 열쇠면 아무도 모르는 값으로 바꾼다 */
+/** 이 열쇠를 못 쓰게 하는 문장 (batch에 넣는다). 첫 익명 열쇠면 아무도 모르는 값으로 바꾼다 */
+export async function revokeTokenStatements(env: Cloudflare.Env, token: string): Promise<D1PreparedStatement[]> {
+  const hash = await sha256Hex(token);
+  return [
+    env.DB.prepare('DELETE FROM user_tokens WHERE token_hash = ?').bind(hash),
+    env.DB.prepare('UPDATE users SET token_hash = ?, updated_at = ? WHERE token_hash = ?').bind(await sha256Hex(newToken()), new Date().toISOString(), hash),
+  ];
+}
+
+/** 로그아웃: 이 열쇠만 못 쓰게 한다 */
 export async function logout(env: Cloudflare.Env, req: Request): Promise<{ ok: true }> {
   const token = bearer(req);
   const userId = await userOfToken(env, token);
   if (!userId) throw new HttpError(401, '로그인 필요');
-  const hash = await sha256Hex(token);
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM user_tokens WHERE token_hash = ?').bind(hash),
-    env.DB.prepare('UPDATE users SET token_hash = ?, updated_at = ? WHERE token_hash = ?').bind(await sha256Hex(newToken()), new Date().toISOString(), hash),
-  ]);
+  await env.DB.batch(await revokeTokenStatements(env, token));
   return { ok: true };
 }

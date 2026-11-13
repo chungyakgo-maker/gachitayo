@@ -2,6 +2,7 @@
 //   POST /auth/signup {nickname}         익명 계정 만들기 → {userId, token} (폰 열쇠)
 //   POST /auth/logout                    이 폰 열쇠만 못 쓰게 (카카오 로그인)
 //   GET /auth/providers                  {kakao} 카카오 로그인을 쓸 수 있는지 (비밀값이 있는지)
+//   POST /auth/kakao/start · GET /auth/kakao/callback · POST /auth/kakao/finish   카카오 로그인 (kakao.ts)
 //   GET/PUT /api/me {nickname}           닉네임 (+ kakao: 카카오 연결 여부)
 //   GET /api/courses                     내 코스 목록
 //   PUT /api/courses/{id}                코스 올리기 (같은 id면 덮어씀)
@@ -25,6 +26,7 @@ import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
+import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 
 export { LiveRoom } from './live';
 import { corsHeaders, errorResponse, HttpError, json, readJson, UUID_RE } from './http';
@@ -89,7 +91,20 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
 
   if (path === '/auth/providers') {
     if (method !== 'GET') throw new HttpError(405);
-    return json(200, headers, { kakao: Boolean(env.KAKAO_REST_API_KEY && env.KAKAO_CLIENT_SECRET) });
+    return json(200, headers, { kakao: kakaoEnabled(env) });
+  }
+
+  if (path === '/auth/kakao/start') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await startKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+  if (path === '/auth/kakao/callback') {
+    if (method !== 'GET') throw new HttpError(405);
+    return kakaoCallback(req, env);
+  }
+  if (path === '/auth/kakao/finish') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await finishKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
   }
 
   if (path === '/api/me') {
