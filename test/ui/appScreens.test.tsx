@@ -6,6 +6,11 @@ let app = false;
 vi.mock('../../src/platform', () => ({ isApp: () => app }));
 const openUrl = vi.fn(async (_o: unknown) => ({ completed: true }));
 vi.mock('@capacitor/app-launcher', () => ({ AppLauncher: { openUrl: (o: unknown) => openUrl(o) } }));
+// 서버가 있는 계정 화면 (서버 연결 전이면 다른 안내가 나온다)
+vi.mock('../../src/app/account', async (orig) => {
+  const real = await orig<typeof import('../../src/app/account')>();
+  return { ...real, useAccount: () => ({ ...real.getAccountState(), status: 'none' as const }) };
+});
 
 const PRIVACY = 'https://chungyakgo-maker.github.io/gachitayo/privacy.html';
 const LOCATION = 'https://chungyakgo-maker.github.io/gachitayo/location-terms.html';
@@ -39,6 +44,9 @@ describe('앱 화면 정리 (사양서 13.3)', () => {
     await welcome();
     expect(screen.queryByText('홈 화면에 추가')).toBeNull();
     expect(screen.getByText(/항상 허용/)).toBeInTheDocument();
+    // 앱에는 브라우저가 없다
+    expect(screen.queryByText(/브라우저 데이터/)).toBeNull();
+    expect(screen.getByText(/앱을 지우거나 폰을 바꾸면/)).toBeInTheDocument();
     cleanup();
     await settings();
     expect(screen.queryByRole('region', { name: '개발자 메뉴' })).toBeNull();
