@@ -20,6 +20,7 @@ import { GDiagram } from '../analysis/GDiagram';
 import { Sheet } from '../components/Sheet';
 import { formatDayKst, formatDelta, formatKst, formatLapTime } from '../format';
 import { IconBack } from '../icons';
+import { appName } from '../brand';
 
 type Other = { kind: 'lap'; lapNo: number } | { kind: 'ref'; id: string } | null;
 
@@ -129,7 +130,7 @@ export function AnalysisScreen({ sessionId }: { sessionId: string }) {
         rawGps && rawGps.length > 0
           ? rawGps.map((g) => ({ tFix: g.tFix, lat: g.lat, lon: g.lon, alt: g.alt, speed: g.speed }))
           : p.t.map((t, k) => ({ tFix: p.utc?.[k] ?? session.startedAt + t, lat: p.lat[k]!, lon: p.lon[k]!, alt: p.alt[k] ?? null, speed: p.speed[k]! }));
-      const text = sessionToGpx({ name: course?.name ?? '같이타요 주행', gps });
+      const text = sessionToGpx({ name: course?.name ?? `${appName()} 주행`, gps });
       file = new File([text], csvFileName(course?.name ?? null, session.startedAt).replace(/\.csv$/, '.gpx'), { type: 'application/gpx+xml' });
     } else if (kind === 'laps') {
       file = new File([lapsCsv(result.laps)], csvFileName(course?.name ?? null, session.startedAt, 'laps'), { type: 'text/csv' });
@@ -410,7 +411,7 @@ function ExportSheet({
       )}
       {kind === 'raw' && (
         <span className="sub">
-          {raw.error ?? (raw.file ? 'PC의 같이타요 기록 탭에서 "원본 파일 가져오기"로 열면 같은 코스로 계산해서 보여줘요. 가져온 기록은 그 PC에만 저장돼요.' : '원본 파일을 만드는 중…')}
+          {raw.error ?? (raw.file ? 'PC의 같이타요(웹) 기록 탭에서 "원본 파일 가져오기"로 열면 같은 코스로 계산해서 보여줘요. 가져온 기록은 그 PC에만 저장돼요.' : '원본 파일을 만드는 중…')}
         </span>
       )}
       <button

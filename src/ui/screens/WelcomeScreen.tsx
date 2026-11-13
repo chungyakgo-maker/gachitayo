@@ -4,6 +4,7 @@ import { finishOnboarding, useAccount } from '../../app/account';
 import { IconPhone, IconPin, IconWarn } from '../icons';
 import { isApp } from '../../platform';
 import { LegalLink } from '../legal';
+import { appName } from '../brand';
 
 const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 const standalone = () =>
@@ -18,7 +19,7 @@ export function WelcomeScreen() {
   return (
     <main className="page page-full">
       <header className="card-col" style={{ gap: 6, paddingTop: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>같이타요</h1>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>{appName()}</h1>
         <span className="dim" style={{ fontSize: 14 }}>
           와인딩·서킷 랩타임과 베스트 대비 델타를 폰으로 재요
         </span>

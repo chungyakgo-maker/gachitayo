@@ -31,6 +31,18 @@ describe('앱 화면 정리 (사양서 13.3)', () => {
     openUrl.mockClear();
   });
 
+  it('앱 이름: 아이폰 앱은 디고, 웹은 같이타요 (사용자 결정)', async () => {
+    const { appName } = await import('../../src/ui/brand');
+    expect(appName()).toBe('같이타요');
+    await welcome();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('같이타요');
+    cleanup();
+    app = true;
+    expect(appName()).toBe('디고');
+    await welcome();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('디고');
+  });
+
   it('웹: 첫 화면에 "홈 화면에 추가" 안내, 설정에 개발자 메뉴 (지금 그대로)', async () => {
     await welcome();
     expect(screen.getByText('홈 화면에 추가')).toBeInTheDocument();
