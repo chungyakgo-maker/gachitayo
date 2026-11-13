@@ -2009,7 +2009,8 @@ html.app-h .modal-backdrop {
   z-index: 1000;
   left: calc(10px + var(--safe-l));
   top: 10px;
-  right: 64px;
+  /* 오른쪽 위 GPS 버튼(32 px) 자리 비우기 */
+  right: 50px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -2379,8 +2380,11 @@ html.app-h .modal-backdrop {
   position: absolute;
   z-index: 1000;
   right: calc(12px + var(--safe-r, 0px));
-  width: 46px;
-  height: 46px;
+  /* 나침반과 같은 32 px, 주행·재생·메인 지도 모두 같게 (사용자 요청 "다 똑같이") */
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
   background: rgba(16, 17, 20, 0.9);
   border: 1px solid #3a3f45;
@@ -2416,15 +2420,8 @@ html.app-h .modal-backdrop {
   text-decoration: underline;
 }
 
-/* 주행·재생 지도: GPS 아이콘은 나침반과 같은 32 px (사용자 요청). 메인 지도는 그대로 */
-.drive .map-gps {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-}
-
-.drive .map-gps svg {
+/* 지도 GPS 아이콘 그림 18 px (32 px 동그라미 안) */
+.map-gps svg {
   width: 18px;
   height: 18px;
 }
@@ -2528,7 +2525,8 @@ button.map-gps:active {
 }
 
 .main-map .map-gps.main {
-  top: calc(var(--inset-t, 0px) + 10px);
+  /* 왼쪽 칩(높이 44 px)과 가운데 줄 맞춤: 10 + (44 − 32) / 2 */
+  top: calc(var(--inset-t, 0px) + 16px);
 }
 
 .main-map .map-friends {
