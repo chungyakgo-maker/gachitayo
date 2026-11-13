@@ -1,0 +1,76 @@
+# 아이폰 앱 디고 (사양서 13.3): GitHub 맥 서버에서 시뮬레이터용으로 빌드하고 첫 화면을 찍어 남긴다.
+# 애플 계정 없이(서명 없음) 앱이 만들어지는지 확인하는 용도. TestFlight 올리기는 애플 개발자 계정이 생긴 뒤 다음 단계.
+# 평소 배포(ci.yml)와 따로, ios 갈래에 올리거나 손으로 실행할 때만 돈다(맥 서버 시간 아끼기).
+name: 아이폰 앱 빌드 (시뮬레이터)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    name: 시뮬레이터 빌드·첫 화면
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: 서버 주소 (Actions 변수, 없으면 Cloudflare에서 Worker 주소 읽기만)
+        id: api
+        env:
+          VAR_URL: ${{ vars.VITE_API_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          url="$VAR_URL"
+          if [ -z "$url" ] && [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            sub=$(curl -s --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
+              | python3 -c 'import sys,json; print(((json.load(sys.stdin) or {}).get("result") or {}).get("subdomain",""))' || true)
+            if [ -n "$sub" ]; then url="https://gachitayo-api.$sub.workers.dev"; fi
+          fi
+          echo "서버 주소: ${url:-(없음, 폰에만 저장)}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: 앱 빌드 (dist-app)
+        run: npm run build:app
+        env:
+          VITE_API_URL: ${{ steps.api.outputs.url }}
+      - name: iOS 프로젝트에 넣기
+        run: npx cap sync ios
+      - name: Xcode 빌드 (시뮬레이터, 서명 없음)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
+      - name: 시뮬레이터에서 실행하고 첫 화면 찍기
+        run: |
+          dev=$(xcrun simctl list devices available -j | python3 -c '
+          import sys, json
+          d = json.load(sys.stdin)["devices"]
+          phones = [x for rt, xs in d.items() if "iOS" in rt for x in xs if x["name"].startswith("iPhone")]
+          pro = [x for x in phones if x["name"] == "iPhone 16 Pro"]
+          print((pro or phones)[0]["udid"])')
+          echo "시뮬레이터: $dev"
+          xcrun simctl boot "$dev"
+          xcrun simctl bootstatus "$dev" -b
+          xcrun simctl install "$dev" build/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch "$dev" com.dgo.app
+          sleep 15
+          xcrun simctl io "$dev" screenshot ios-launch.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator
+          path: ios-launch.png
+          retention-days: 7
