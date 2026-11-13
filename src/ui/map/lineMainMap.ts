@@ -44,11 +44,11 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
 
   map.on('load', () => {
     loaded = true;
-    // 다른 코스 (사용자 요청: 메인 지도에 코스 다 보이게): 가는 하늘색 선 + 이름. 감지된 코스 아래에 깔리게 먼저
+    // 다른 코스 (사용자 요청: 메인 지도에 코스 다 보이게): 가는 빨간 선 + 이름. 감지된 코스 아래에 깔리게 먼저
     map.addSource('others', { type: 'geojson', data: emptyFC() });
     map.addSource('others-name', { type: 'geojson', data: emptyFC() });
     const round = { 'line-join': 'round', 'line-cap': 'round' } as const;
-    map.addLayer({ id: 'others-glow', type: 'line', source: 'others', layout: round, paint: { 'line-color': COURSE_STYLE.routeOutline, 'line-width': 4.4, 'line-opacity': 0.55 } });
+    map.addLayer({ id: 'others-glow', type: 'line', source: 'others', layout: round, paint: { 'line-color': COURSE_STYLE.glow, 'line-width': 8, 'line-opacity': 0.3, 'line-blur': 4 } });
     map.addLayer({ id: 'others-line', type: 'line', source: 'others', layout: round, paint: { 'line-color': COURSE_STYLE.route, 'line-width': 2.4, 'line-opacity': 0.9 } });
     map.addLayer({
       id: 'others-name',

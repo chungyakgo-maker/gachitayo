@@ -29,15 +29,14 @@ describe('코스 썸네일 (사용자 요청)', () => {
   });
 });
 
-// 사용자 요청 "1번": 모든 지도·썸네일의 코스 선을 주행 지도와 같은 하늘색 + 흰 테두리로 (빨간 번짐 없음)
-
-describe('코스 썸네일 색 (모든 지도 같은 하늘색)', () => {
+// 사용자 요청 "전체 지도·코스 리스트 경로는 이전 빨강으로 돌려라": 썸네일은 빨간 번짐 + 빨간 코스 선 (하늘색은 주행 지도만)
+describe('코스 썸네일 색 (이전 빨강)', () => {
   const b = BUILTIN_COURSES[0]!;
   const c = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'x', gateWidthM: 30 });
-  it('선은 흰 테두리 + 하늘색 두 줄뿐이고 빨강이 없다', () => {
+  it('빨간 번짐 + 빨간 코스 선 + 가운데 밝은 줄', () => {
     const html = renderToStaticMarkup(createElement(CourseThumb, { course: c }));
     const strokes = [...html.matchAll(/<path[^>]*stroke="([^"]+)"/g)].map((m) => m[1]);
-    expect(strokes).toEqual([COURSE_STYLE.routeOutline, COURSE_STYLE.route]);
-    expect(html.toLowerCase()).not.toContain('#ff3b30');
+    expect(strokes).toEqual([COURSE_STYLE.glow, COURSE_STYLE.route, COURSE_STYLE.highlight]);
+    expect(COURSE_STYLE.route).toBe('#ff453a');
   });
 });

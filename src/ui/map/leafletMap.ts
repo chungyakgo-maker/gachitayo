@@ -15,11 +15,13 @@ export const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/co
 export { COURSE_STYLE, PIN_TOP_PX, type GateWhich, type MapShape, type PickMapController } from './courseStyle';
 export { FOLLOW_ZOOM, type AnalysisLapLine, type AnalysisMapController, type FriendMarker, type MainMapApi, type MapFix, type ReplayMapController } from './mapTypes';
 
-/** 코스 선: 하얀 테두리 + 밝은 하늘색 (주행 지도와 같게, 사용자 요청) */
+/** 빨간 코스 선: 넓고 옅은 두 줄(빛 번짐) + 진한 선 + 가운데 밝은 줄 */
 export function addRoute(layer: L.LayerGroup, pts: L.LatLngExpression[]): void {
   const o = { lineJoin: 'round', lineCap: 'round', interactive: false } as const;
-  L.polyline(pts, { ...o, color: COURSE_STYLE.routeOutline, opacity: 1, weight: 9, className: 'course-outline' }).addTo(layer);
-  L.polyline(pts, { ...o, color: COURSE_STYLE.route, opacity: 1, weight: 5, className: 'course-line' }).addTo(layer);
+  L.polyline(pts, { ...o, color: COURSE_STYLE.glow, opacity: 0.16, weight: 18, className: 'course-glow' }).addTo(layer);
+  L.polyline(pts, { ...o, color: COURSE_STYLE.glow, opacity: 0.3, weight: 10, className: 'course-glow' }).addTo(layer);
+  L.polyline(pts, { ...o, color: COURSE_STYLE.route, opacity: 1, weight: 4, className: 'course-line' }).addTo(layer);
+  L.polyline(pts, { ...o, color: COURSE_STYLE.highlight, opacity: 0.9, weight: 1.2 }).addTo(layer);
 }
 
 /** 출발선(파랑)·도착선(흰 점선), 검은 테두리 */
@@ -131,7 +133,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     for (const c of others) {
       if (c.id === lastCourse?.id || !c.centerline || c.centerline.length < 2) continue;
       const pts = c.kind === 'loop' ? [...c.centerline, c.centerline[0]!] : c.centerline;
-      L.polyline(pts, { color: COURSE_STYLE.routeOutline, opacity: 0.55, weight: 4.4, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
+      L.polyline(pts, { color: COURSE_STYLE.glow, opacity: 0.2, weight: 7, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
       L.polyline(pts, { color: COURSE_STYLE.route, opacity: 0.9, weight: 2.4, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
       const name = document.createElement('span');
       name.textContent = c.name;

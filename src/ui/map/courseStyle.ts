@@ -1,11 +1,11 @@
 // 코스 그리기 공통 (사용자 요청 시안 2): 사진 지도(Leaflet)와 선 지도(MapLibre)가 같이 쓴다. Leaflet·MapLibre를 가져오지 않는다.
-// 코스 선은 밝은 하늘색 + 하얀 테두리(주행 지도와 같게), 출발·도착 핀은 하늘색으로 통일 + 영어 글자(START / FINISH, 사용자 요청), 출발선 하늘색 · 도착선 흰 점선,
+// 빨간 선 + 빛 번짐, 출발·도착 핀은 하늘색으로 통일 + 영어 글자(START / FINISH, 사용자 요청), 출발선 하늘색 · 도착선 흰 점선,
 // 구간 경계는 큰 노랑 점과 글자.
 
 export const COURSE_STYLE = {
-  /** 코스 선: 주행 지도와 같은 밝은 하늘색 + 하얀 테두리 (사용자 요청 "모든 지도에 적용". 빨강은 처음 기록할 때 지나온 길에만) */
-  route: '#9fd0ff',
-  routeOutline: '#ffffff',
+  glow: '#ff3b30',
+  route: '#ff453a',
+  highlight: '#ffd2ce',
   /** 출발·도착 핀과 출발선: 앱 포인트 하늘색으로 통일 (사용자 요청) */
   start: '#aacae6',
   finish: '#aacae6',
@@ -28,7 +28,7 @@ export type MapShape =
   | { kind: 'line'; pts: Array<[number, number]>; color: string; weight: number; dash?: string; opacity?: number }
   | { kind: 'dot'; at: [number, number]; color: string; r: number }
   | { kind: 'label'; at: [number, number]; text: string }
-  /** 코스 선 (밝은 하늘색 + 하얀 테두리) */
+  /** 코스 선 (빨간 선 + 빛 번짐) */
   | { kind: 'route'; pts: Array<[number, number]> }
   /** 출발선·도착선 */
   | { kind: 'gate'; a: [number, number]; b: [number, number]; which: GateWhich }
