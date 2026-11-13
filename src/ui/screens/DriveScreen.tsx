@@ -19,7 +19,7 @@ import { LongPressButton } from '../components/LongPressButton';
 import { ReplayBar } from '../components/ReplayBar';
 import { PACE_HUD_RESERVE_PX, PaceNoteHud } from '../components/PaceNoteHud';
 import { buildGeometry } from '../../engine/course/geometry';
-import { paceNotes, upcomingNote, type PaceNote } from '../../engine/course/paceNotes';
+import { paceNotes, upcomingNote } from '../../engine/course/paceNotes';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { LiveMap } from '../components/LiveMap';
 import { MapViewButton } from '../components/MapViewButton';
@@ -109,7 +109,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   // 커브 표지판 (사양서 8.4): 코스 선에서 한 번 계산해 두고, 지금 코스 위치로 다음 커브를 고른다
   const pace = useMemo(() => {
     const cl = course?.centerline ? buildGeometry(course).centerline : null;
-    return cl ? { notes: paceNotes(cl) as PaceNote[], lengthM: cl.length, loop: course!.kind === 'loop' } : null;
+    return cl ? { notes: paceNotes(cl), lengthM: cl.length, loop: course!.kind === 'loop' } : null;
   }, [course]);
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -324,7 +324,8 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         {pace && pace.notes.length > 0 && (
           <PaceNoteHud
             style={{ top: ins.top + 10 }}
-            up={typeof st?.s === 'number' ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null}
+            // 랩 안에서 코스 위에 있을 때만 (출발선 전·도착 뒤 돌아오는 길·코스 밖에서는 지나온 커브를 가리키게 되므로, 검토 지적)
+            up={st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null}
           />
         )}
         <div className="drive-bottom" ref={bottomRef}>

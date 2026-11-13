@@ -173,6 +173,14 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.queryByRole('img', { name: /^(왼쪽|오른쪽) / })).toBeNull();
   });
 
+  it('랩 밖(출발선 전·도착 뒤 돌아오는 길)이나 코스를 벗어나 있으면 표지판이 없다 (검토 지적: 지나온 커브를 가리켰다)', () => {
+    const a = render(<DriveView {...props({ snap: snap(state({ s: 40, lapElapsedMs: null })) })} />);
+    expect(screen.queryByRole('img', { name: /^(왼쪽|오른쪽) / })).toBeNull();
+    a.unmount();
+    render(<DriveView {...props({ snap: snap(state({ s: 40, onCourse: false })) })} />);
+    expect(screen.queryByRole('img', { name: /^(왼쪽|오른쪽) / })).toBeNull();
+  });
+
   it('재생 중에도 같은 나침반 버튼 (재생·주행 같은 지도)', () => {
     render(<DriveView {...props({ replay: { label: '가상', speed: 5, ended: false, playing: true, posMs: 0, endMs: 60_000, preparing: null, seekable: true, returnTo: '#/dev/replay' } })} />);
     expect(screen.getByRole('button', { name: /^지도 보기: 전체 코스/ })).toBeInTheDocument();
