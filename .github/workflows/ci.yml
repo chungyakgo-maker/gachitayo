@@ -163,8 +163,19 @@ jobs:
         working-directory: worker
         env:
           OWNER: ${{ github.repository_owner }}
+          # 카카오 로그인 (설계 5.5): 둘 다 있으면 Worker 비밀값으로 넣는다. 값은 출력하지 않는다
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
         run: |
-          npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" | tee deploy.log
+          secrets="$RUNNER_TEMP/kakao-secrets.json"
+          if [ -n "$KAKAO_REST_API_KEY" ] && [ -n "$KAKAO_CLIENT_SECRET" ]; then
+            (umask 077; node -e 'const e = process.env; require("fs").writeFileSync(process.argv[1], JSON.stringify({ KAKAO_REST_API_KEY: e.KAKAO_REST_API_KEY.trim(), KAKAO_CLIENT_SECRET: e.KAKAO_CLIENT_SECRET.trim() }))' "$secrets")
+            npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" --secrets-file "$secrets" | tee deploy.log
+            rm -f "$secrets"
+          else
+            echo "::notice::카카오 비밀값(KAKAO_REST_API_KEY, KAKAO_CLIENT_SECRET)이 없어 카카오 로그인은 꺼진 채로 배포합니다"
+            npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" | tee deploy.log
+          fi
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
           if [ -z "$url" ]; then echo "::error::Worker 주소(workers.dev)를 찾지 못했습니다. Cloudflare에서 workers.dev 하위 주소를 정했는지 확인해 주세요"; exit 1; fi
           echo "서버 주소: $url"
@@ -183,6 +194,7 @@ jobs:
           other=$(check -H 'Origin: https://example.com' "$API_URL/api/me")
           echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 다른 주소: $other (403)"
           [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
+          echo "카카오 로그인: $(curl -s --max-time 20 -H "Origin: $origin" "$API_URL/auth/providers")"
           # 선 지도 (사양서 8.9): 지도 데이터가 올라가 있으면 정보·서울 타일·글자 조각을 확인한다
           info=$(check -H "Origin: $origin" "$API_URL/map/info")
           if [ "$info" = 200 ]; then
