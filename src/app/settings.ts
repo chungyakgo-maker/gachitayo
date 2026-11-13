@@ -33,6 +33,8 @@ export interface Settings {
   driveFriends: boolean;
   /** 메인 지도에 저장된 코스들을 보인다 (사용자 요청: 지도 위 칩으로 켜고 끈다) */
   mainCourses: boolean;
+  /** 커브 방향 화면 색 (사용자 요청 시안 D+B): 다음 커브 쪽 화면 가장자리를 표지판 색으로, 가까울수록 진하게 */
+  curveTint: boolean;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gMaxG: G_MAX_DEFAULT,
   driveFriends: true,
   mainCourses: true,
+  curveTint: true,
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -105,6 +108,7 @@ function load(): Settings {
       gMaxG: (G_MAX_OPTIONS as readonly number[]).includes(raw.gMaxG as number) ? raw.gMaxG! : G_MAX_DEFAULT,
       driveFriends: raw.driveFriends !== false,
       mainCourses: raw.mainCourses !== false,
+      curveTint: raw.curveTint !== false,
     };
   } catch {
     return DEFAULT_SETTINGS;

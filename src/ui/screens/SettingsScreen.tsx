@@ -139,6 +139,20 @@ export function SettingsScreen() {
           <span className="sub">통신이 없으면 저절로 코스 선만 그려요. 끄면 데이터와 배터리를 덜 써요.</span>
         </section>
         <DriveFriendsToggle />
+        <section className="card-col" style={{ gap: 8 }} aria-label="커브 방향 화면 색">
+          <span className="label">커브 방향 화면 색 (지도 모드)</span>
+          <div className="segmented small" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+            {([
+              [true, '켜기'],
+              [false, '끄기'],
+            ] as const).map(([v, label]) => (
+              <button key={label} type="button" aria-pressed={s.curveTint === v} onClick={() => updateSettings({ curveTint: v })}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="sub">코스를 달릴 때 다음 커브 쪽 화면 가장자리가 표지판 색(왼쪽 파랑 · 오른쪽 빨강)으로 빛나요. 가까울수록 진해져요.</span>
+        </section>
         <section className="card-col" style={{ gap: 8 }} aria-label="G미터 최대값">
           <span className="label">G미터 최대값 (바깥 원)</span>
           <div className="segmented small" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>

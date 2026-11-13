@@ -27,6 +27,17 @@ describe('설정 탭', () => {
   });
 });
 
+describe('커브 방향 화면 색 켜기·끄기 (사용자 요청)', () => {
+  it('설정에서 켜기/끄기', () => {
+    updateSettings(DEFAULT_SETTINGS);
+    render(<SettingsScreen />);
+    const sec = screen.getByRole('region', { name: '커브 방향 화면 색' });
+    expect(within(sec).getByRole('button', { name: '켜기' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(sec).getByRole('button', { name: '끄기' }));
+    expect(getSettings().curveTint).toBe(false);
+  });
+});
+
 describe('상단 표시 값 (시안 Widgets): 칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽 (사용자 요청)', () => {
   it('칸 3에서 칸 2와 같은 값을 고르면 두 칸이 바뀐다. 앞 친구 간격·표지판도 고를 수 있다', () => {
     updateSettings(DEFAULT_SETTINGS);

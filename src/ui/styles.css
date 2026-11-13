@@ -1152,6 +1152,28 @@ html.app-h .modal-backdrop {
   letter-spacing: 0;
 }
 
+/* 커브 방향 화면 색 (사양서 8.4, 사용자 요청 시안 D+B): 다음 커브 쪽 가장자리만 빛난다. 진하기는 opacity (가까울수록 진하게) */
+.curve-tint {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.curve-tint > div {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.35s linear;
+}
+
+.curve-tint .left {
+  background: linear-gradient(to right, rgba(70, 110, 255, 1) 0%, rgba(70, 110, 255, 0.36) 22%, rgba(70, 110, 255, 0) 48%);
+}
+
+.curve-tint .right {
+  background: linear-gradient(to left, rgba(255, 60, 50, 1) 0%, rgba(255, 60, 50, 0.36) 22%, rgba(255, 60, 50, 0) 48%);
+}
+
 /* 속도 (사양서 8.4, 시안): 일반 내비처럼 지도 오른쪽 아래에 칸 없이 숫자만 */
 .map-speed {
   position: absolute;
