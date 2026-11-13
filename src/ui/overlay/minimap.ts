@@ -126,7 +126,13 @@ export function fitView(model: MapModel, f: Pick<OverlayFrame, 'me' | 'path'>, w
   return { rot: 0, P: (x, y) => [ox + (x - minX) * sc, oy + (maxY - y) * sc] };
 }
 
-const STYLE = { wide: '#1F2327', wideW: 14, thin: '#3A3F45', gate: '#C9CDD2' };
+const STYLE = { gate: '#C9CDD2' };
+
+/**
+ * 등록된 코스 선 (사용자 요청 "코스로 지날 때 경로가 너무 옅어서 안 보인다"): 지도 도로(하늘색 #aacae6)보다 밝고 두껍게,
+ * 테두리는 하얀색(사용자 요청 "검정색 말고 하얀색"). 지나온 길(빨강)은 이 위에 그린다.
+ */
+export const COURSE_LINE = { outline: '#ffffff', outlineW: 10, line: '#9fd0ff', lineW: 6 } as const;
 
 function polyline(ctx: Ctx, pts: ReadonlyArray<XY>, v: MapView, close: boolean): void {
   ctx.beginPath();
@@ -167,11 +173,11 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
   ctx.setLineDash([]);
   if (model.line.length >= 2) {
     polyline(ctx, model.line, v, model.loop);
-    ctx.strokeStyle = STYLE.wide;
-    ctx.lineWidth = STYLE.wideW;
+    ctx.strokeStyle = COURSE_LINE.outline;
+    ctx.lineWidth = COURSE_LINE.outlineW;
     ctx.stroke();
-    ctx.strokeStyle = STYLE.thin;
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = COURSE_LINE.line;
+    ctx.lineWidth = COURSE_LINE.lineW;
     ctx.stroke();
   }
   if (f.path && f.path.length >= 2) {
