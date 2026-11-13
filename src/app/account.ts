@@ -15,6 +15,8 @@ export interface AccountState {
   onboarded: boolean;
   /** 있던 계정의 열쇠를 서버가 모른다고 함 (자동으로 새로 만들지 않고 사용자가 설정에서 고른다) */
   lost: boolean;
+  /** 카카오에 연결된 계정 (설계 docs/superpowers/specs/2026-11-13-kakao-login-design.md) */
+  kakao: boolean;
   busy: boolean;
   error: string | null;
 }
@@ -23,6 +25,7 @@ const ONBOARDED_KEY = 'gachitayo.onboarded';
 const NICKNAME_KEY = 'gachitayo.nickname';
 const TOKEN_KEY = 'gachitayo.token';
 const USER_KEY = 'gachitayo.userId';
+const KAKAO_KEY = 'gachitayo.kakao';
 
 function read(key: string): string | null {
   try {
@@ -49,6 +52,7 @@ let state: AccountState = {
   onboarded: read(ONBOARDED_KEY) === '1',
   // 열쇠는 지우고 사용자 ID만 남아 있으면 끊긴 계정
   lost: accountEnabled() && !token && read(USER_KEY) !== null,
+  kakao: read(KAKAO_KEY) === '1',
   busy: false,
   error: null,
 };
@@ -71,9 +75,36 @@ export function getAuth(): { userId: string; token: string } | null {
   return state.status === 'ready' && state.userId && token ? { userId: state.userId, token } : null;
 }
 
+/** 카카오 로그인을 마치는 중 (그 사이 받은 401은 예전 열쇠라서 계정 끊김으로 보지 않는다) */
+let finishingLogin = 0;
+export async function whileFinishingLogin<T>(fn: () => Promise<T>): Promise<T> {
+  finishingLogin++;
+  try {
+    return await fn();
+  } finally {
+    finishingLogin--;
+  }
+}
+
+/** 로그인으로 받은 계정을 이 폰의 계정으로 쓴다 (카카오 로그인 마치기) */
+export function adoptLogin(r: { userId: string; token: string; nickname: string; kakao: boolean }): void {
+  token = r.token;
+  write(TOKEN_KEY, r.token);
+  write(USER_KEY, r.userId);
+  write(NICKNAME_KEY, r.nickname);
+  write(ONBOARDED_KEY, '1');
+  write(KAKAO_KEY, r.kakao ? '1' : null);
+  set({ status: 'ready', userId: r.userId, nickname: r.nickname, onboarded: true, lost: false, kakao: r.kakao, busy: false, error: null });
+}
+
+/** 서버에 이 폰 열쇠를 못 쓰게 한다 (로그아웃). 통신 실패는 그대로 던진다 */
+export async function logoutRemote(): Promise<void> {
+  if (state.status === 'ready' && token) await apiFetch('POST', '/auth/logout', { token });
+}
+
 /** 서버가 열쇠를 모른다고 하면(401) 계정이 끊긴 것으로 본다 (사양서 9장: 첫 화면에 경고) */
 export function markAccountLost(): void {
-  if (state.status !== 'ready') return;
+  if (state.status !== 'ready' || finishingLogin > 0) return;
   token = null;
   write(TOKEN_KEY, null);
   set({ status: 'none', lost: true });
@@ -99,10 +130,15 @@ export function initAccount(): Promise<void> {
     if (state.status === 'none') return ensureAccount();
     if (state.status !== 'ready' || !token) return;
     try {
-      const me = await apiFetch<{ userId: string; nickname: string }>('GET', '/api/me', { token });
+      const me = await apiFetch<{ userId: string; nickname: string; kakao?: boolean }>('GET', '/api/me', { token });
       if (me.nickname && me.nickname !== state.nickname) {
         write(NICKNAME_KEY, me.nickname);
         set({ nickname: me.nickname });
+      }
+      const kakao = me.kakao === true;
+      if (kakao !== state.kakao) {
+        write(KAKAO_KEY, kakao ? '1' : null);
+        set({ kakao });
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) markAccountLost();

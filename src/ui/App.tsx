@@ -19,6 +19,7 @@ import { CourseDetailScreen } from './screens/CourseDetailScreen';
 import { NewCourseScreen } from './screens/NewCourseScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
+import { KakaoAuthScreen } from './screens/KakaoAuthScreen';
 
 /** 경로 → 화면 */
 function route(path: string): ReactElement {
@@ -44,6 +45,8 @@ function route(path: string): ReactElement {
       return <WidgetsScreen back="#/prepare" />;
     case '/drive':
       return <DriveScreen />;
+    case '/auth/kakao':
+      return <KakaoAuthScreen />;
     case '/dev/recorder':
       return <RecorderTestScreen />;
     case '/dev/replay':
@@ -67,8 +70,8 @@ export function App() {
   const pending = phase === 'idle' ? interrupted[0] : undefined;
   return (
     <>
-      {/* 첫 실행 안내 (사양서 8.1). 개발자 메뉴는 그대로 연다 */}
-      {!onboarded && !path.startsWith('/dev/') ? <WelcomeScreen /> : route(path)}
+      {/* 첫 실행 안내 (사양서 8.1). 개발자 메뉴와 카카오 로그인에서 돌아온 화면은 그대로 연다 */}
+      {!onboarded && !path.startsWith('/dev/') && !path.startsWith('/auth/') ? <WelcomeScreen /> : route(path)}
       {pending && (
         <InterruptedPrompt
           startedAt={pending.startedAt}

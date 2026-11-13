@@ -30,7 +30,7 @@ const { ShareToggle } = await import('../../src/ui/components/ShareToggle');
 const { useDriveFriends } = await import('../../src/ui/screens/DriveScreen');
 const { watchFriendPositions } = await import('../../src/app/friends');
 
-const ready: AccountState = { status: 'ready', userId: 'u1', nickname: '민수', onboarded: true, lost: false, busy: false, error: null };
+const ready: AccountState = { status: 'ready', userId: 'u1', nickname: '민수', onboarded: true, lost: false, kakao: false, busy: false, error: null };
 const base: FriendsState = {
   available: true,
   code: 'K7P2Q9XM',
