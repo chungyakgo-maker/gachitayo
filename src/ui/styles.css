@@ -1097,77 +1097,72 @@ html.app-h .modal-backdrop {
   color: var(--warn);
 }
 
-/* 커브 표지판 (사양서 8.4, 시안): 지도 모드 위쪽 칸 아래 정가운데. 큰 표지판 기준으로 가운데 */
-.pace-hud {
-  position: absolute;
-  z-index: 1000;
-  left: 50%;
-  width: 96px;
-  transform: translateX(-50%);
-  pointer-events: none;
+/* 커브 표지판 칸 (사양서 8.4, 시안): 지도 모드 위쪽 오른쪽 칸 자리. 테두리·바탕 없는 가상 칸에
+   표지판을 칸 높이만큼 꽉 차게, 옆에 남은 거리 + 이어지는 커브 작은 표지판 (사용자 요청) */
+.tile.pace-tile,
+.drive.mode-map .tile.pace-tile {
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
-.pace-main {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+.pace-tile > .pace-sign {
+  height: 100%;
+  width: auto;
+  aspect-ratio: 1;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
 }
 
 .pace-sign {
   display: block;
+  flex-shrink: 0;
   font-family: var(--sans);
 }
 
-.pace-row {
+.pace-side {
   display: flex;
-  gap: 4px;
-  align-items: center;
-  white-space: nowrap;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.pace-side .pace-sign {
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.55));
 }
 
 .pace-dist {
-  min-width: 44px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: #fff;
-  color: #0b0c0e;
-  font: 700 18px/22px var(--mono);
-  text-align: center;
+  color: #fff;
+  font: 700 30px/1 var(--mono);
+  letter-spacing: -0.05em;
+  white-space: nowrap;
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 2px 8px rgba(0, 0, 0, 0.8);
 }
 
 .pace-dist small {
   margin-left: 1px;
-  font-size: 12px;
+  font-size: 15px;
+  letter-spacing: 0;
 }
 
-.pace-mod {
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: var(--card);
-  border: 1px solid var(--line-strong);
-  color: var(--fg);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 20px;
-}
-
-.pace-next {
+/* 속도 (사양서 8.4, 시안): 일반 내비처럼 지도 오른쪽 아래에 칸 없이 숫자만 */
+.map-speed {
   position: absolute;
-  top: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.pace-next > span {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--fg-2);
-  text-shadow: 0 1px 3px #000;
+  z-index: 1000;
+  right: calc(16px + var(--safe-r, 0px));
+  color: #fff;
+  font: 700 52px/1 var(--mono);
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 2px 10px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
 }
 
 /* 재생 막대 (사양서 10.2, 시안): 길게 눌러 끝내기 바로 위 */

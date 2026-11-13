@@ -1,11 +1,12 @@
-// 설정 (사양서 8.8 일부): 기본 화면 모드, 상단 표시 값 두 칸, 델타 색. 폰(localStorage)에 보관한다.
+// 설정 (사양서 8.8 일부): 기본 화면 모드, 상단 표시 값 세 칸(칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽), 델타 색. 폰(localStorage)에 보관한다.
 import { useSyncExternalStore } from 'react';
 import { G_MAX_DEFAULT, G_MAX_OPTIONS } from '../ui/overlay/gmeter';
 
 export { G_MAX_DEFAULT, G_MAX_OPTIONS };
 
 export type DriveMode = 'map' | 'minimal' | 'dashboard';
-export type WidgetId = 'g' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap';
+/** 상단 칸 2·3에 고를 값. pace 커브 표지판, none 표시 안 함 (사용자 요청) */
+export type WidgetId = 'g' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'none';
 export type DeltaPalette = 'green-red' | 'blue-orange';
 /** 주행 지도 모드의 보기 (사용자 요청): 전체 코스 / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼) */
 export type MapViewMode = 'fit' | 'follow' | 'heading';
@@ -13,7 +14,9 @@ export const MAP_VIEW_LABEL: Record<MapViewMode, string> = { fit: '전체 코스
 
 export interface Settings {
   defaultMode: DriveMode;
-  /** 지도 모드 위쪽에 델타와 함께 보여줄 두 칸 */
+  /** 지도 모드 위쪽 칸 1(넓은 칸): 델타를 보인다. 끄면 표시 안 함 (사용자 요청) */
+  topDelta: boolean;
+  /** 지도 모드 위쪽 칸 2(왼쪽)·칸 3(오른쪽) */
   widgets: [WidgetId, WidgetId];
   deltaPalette: DeltaPalette;
   /** 앞 친구 간격 (M9): 고른 앞 친구와 목표 간격(초, 1초 이상). friendId가 없으면 끔 */
@@ -40,7 +43,8 @@ export const GAP_MAX_S = 10;
 
 export const DEFAULT_SETTINGS: Settings = {
   defaultMode: 'map',
-  widgets: ['g', 'speed'],
+  topDelta: true,
+  widgets: ['g', 'pace'],
   deltaPalette: 'green-red',
   gap: { friendId: null, nickname: null, targetS: 2 },
   gateWidthM: 30,
@@ -53,13 +57,19 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   g: 'G미터',
+  pace: '표지판',
   speed: '속도',
   lap: '현재 랩타임',
   sector: '구간 기록',
   vmax: '최고 속도',
   lapno: '랩 번호',
   gap: '앞 친구 간격',
+  none: '표시 안 함',
 };
+
+/** 설정 목록에 보이는 상단 칸 요약: "델타 · G미터 · 표지판" */
+export const topSummary = (s: Pick<Settings, 'topDelta' | 'widgets'>): string =>
+  [s.topDelta ? '델타' : WIDGET_LABEL.none, WIDGET_LABEL[s.widgets[0]], WIDGET_LABEL[s.widgets[1]]].join(' · ');
 
 const KEY = 'gachitayo.settings';
 const MODES: DriveMode[] = ['map', 'minimal', 'dashboard'];
@@ -76,12 +86,14 @@ function load(): Settings {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Settings> | null;
     if (!raw) return DEFAULT_SETTINGS;
     const w = raw.widgets;
+    let widgets: [WidgetId, WidgetId] =
+      Array.isArray(w) && w.length === 2 && w.every((x) => WIDGETS.includes(x)) && (w[0] !== w[1] || w[0] === 'none') ? [w[0]!, w[1]!] : DEFAULT_SETTINGS.widgets;
+    // 칸 1 설정이 생기기 전에 저장한 값: 속도는 지도 오른쪽 아래로 옮겼으니 속도 칸을 표지판으로 (사용자 요청)
+    if (typeof raw.topDelta !== 'boolean' && !widgets.includes('pace')) widgets = widgets.map((x) => (x === 'speed' ? 'pace' : x)) as [WidgetId, WidgetId];
     return {
       defaultMode: MODES.includes(raw.defaultMode as DriveMode) ? raw.defaultMode! : DEFAULT_SETTINGS.defaultMode,
-      widgets:
-        Array.isArray(w) && w.length === 2 && w.every((x) => WIDGETS.includes(x)) && w[0] !== w[1]
-          ? [w[0]!, w[1]!]
-          : DEFAULT_SETTINGS.widgets,
+      topDelta: raw.topDelta !== false,
+      widgets,
       deltaPalette: raw.deltaPalette === 'blue-orange' ? 'blue-orange' : 'green-red',
       gap: loadGap(raw.gap),
       gateWidthM:
@@ -114,11 +126,11 @@ export function updateSettings(patch: Partial<Settings>): void {
   listeners.forEach((l) => l());
 }
 
-/** 칸 slot에 값 id. 다른 칸과 같으면 두 칸이 서로 바뀐다 */
+/** 칸 slot(0 = 칸 2 왼쪽, 1 = 칸 3 오른쪽)에 값 id. 다른 칸과 같으면 두 칸이 서로 바뀐다 (표시 안 함은 두 칸 다 가능) */
 export function setWidget(slot: 0 | 1, id: WidgetId): void {
   const w: [WidgetId, WidgetId] = [...current.widgets];
   const other = slot === 0 ? 1 : 0;
-  if (w[other] === id) w[other] = w[slot];
+  if (id !== 'none' && w[other] === id) w[other] = w[slot];
   w[slot] = id;
   updateSettings({ widgets: w });
 }

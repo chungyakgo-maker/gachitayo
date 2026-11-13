@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { SettingsScreen } from '../../src/ui/screens/SettingsScreen';
 import { WidgetsScreen } from '../../src/ui/screens/WidgetsScreen';
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from '../../src/app/settings';
@@ -27,15 +27,27 @@ describe('설정 탭', () => {
   });
 });
 
-describe('상단 표시 값 (시안 Widgets)', () => {
-  it('칸 2에서 칸 1과 같은 값을 고르면 두 칸이 바뀐다. 앞 친구 간격도 고를 수 있다 (M9)', () => {
+describe('상단 표시 값 (시안 Widgets): 칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽 (사용자 요청)', () => {
+  it('칸 3에서 칸 2와 같은 값을 고르면 두 칸이 바뀐다. 앞 친구 간격·표지판도 고를 수 있다', () => {
     updateSettings(DEFAULT_SETTINGS);
     render(<WidgetsScreen back="#/prepare" />);
-    const slot2 = screen.getByRole('region', { name: '칸 2' });
-    fireEvent.click(slot2.querySelector('button[aria-pressed="false"]')!); // 첫 번째: G미터 (칸 1과 같음)
-    expect(getSettings().widgets).toEqual(['speed', 'g']);
-    expect(screen.getAllByText('앞 친구 간격').length).toBe(2);
+    const slot3 = screen.getByRole('region', { name: '칸 3 (오른쪽)' });
+    fireEvent.click(within(slot3).getByRole('button', { name: 'G미터' }));
+    expect(getSettings().widgets).toEqual(['pace', 'g']);
+    expect(screen.getAllByRole('button', { name: '앞 친구 간격' }).length).toBe(2);
+    expect(screen.getAllByRole('button', { name: '표지판' }).length).toBe(2);
     expect(screen.getByRole('link', { name: '완료' })).toHaveAttribute('href', '#/prepare');
+  });
+
+  it('세 칸 모두 표시 안 함을 고를 수 있다 (칸 1은 델타 또는 표시 안 함)', () => {
+    updateSettings(DEFAULT_SETTINGS);
+    render(<WidgetsScreen back="#/settings" />);
+    const slot1 = screen.getByRole('region', { name: '칸 1 (위)' });
+    expect(within(slot1).getAllByRole('button').map((b) => b.textContent)).toEqual(['델타', '표시 안 함']);
+    fireEvent.click(within(slot1).getByRole('button', { name: '표시 안 함' }));
+    fireEvent.click(within(screen.getByRole('region', { name: '칸 2 (왼쪽)' })).getByRole('button', { name: '표시 안 함' }));
+    fireEvent.click(within(screen.getByRole('region', { name: '칸 3 (오른쪽)' })).getByRole('button', { name: '표시 안 함' }));
+    expect(getSettings()).toMatchObject({ topDelta: false, widgets: ['none', 'none'] });
   });
 });
 

@@ -165,7 +165,7 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     const { container } = render(<DriveView {...props({ snap: snap(state({ s: 40 })) })} />);
     // 테스트 코스: 북쪽 111 m 뒤 동쪽으로 직각 (오른쪽)
     expect(screen.getByRole('img', { name: /^오른쪽 / })).toBeInTheDocument();
-    expect(container.querySelector('.pace-hud .pace-dist')!.textContent).toMatch(/^\d+m$/);
+    expect(container.querySelector('.widget-row .pace-tile .pace-dist')!.textContent).toMatch(/^\d+m$/);
   });
 
   it('코스 위치를 모르면(출발선 전·코스 밖) 표지판이 없다', () => {
@@ -179,6 +179,32 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     a.unmount();
     render(<DriveView {...props({ snap: snap(state({ s: 40, onCourse: false })) })} />);
     expect(screen.queryByRole('img', { name: /^(왼쪽|오른쪽) / })).toBeNull();
+  });
+
+  it('속도는 일반 내비처럼 지도 오른쪽 아래에 칸 없이 숫자만 (사용자 요청)', () => {
+    const { container } = render(<DriveView {...props()} />);
+    const sp = container.querySelector('.drive-map .map-speed')!;
+    expect(sp.textContent).toBe('142');
+    expect(sp).toHaveAttribute('aria-label', '속도 142 km/h');
+  });
+
+  it('상단 칸: 칸 1 델타·칸 2·칸 3 모두 표시 안 함을 고를 수 있고, 고른 자리는 그대로 (사용자 요청)', () => {
+    const a = render(<DriveView {...props({ settings: { ...DEFAULT_SETTINGS, topDelta: false, widgets: ['none', 'pace'] } })} />);
+    expect(a.container.querySelector('.delta-panel')).toBeNull();
+    const cells = a.container.querySelectorAll('.widget-row > *');
+    expect(cells.length).toBe(2);
+    expect(cells[0]).toHaveClass('tile-empty');
+    expect(cells[1]).toHaveClass('pace-tile');
+    a.unmount();
+    const b = render(<DriveView {...props({ settings: { ...DEFAULT_SETTINGS, widgets: ['none', 'none'] } })} />);
+    expect(b.container.querySelector('.widget-row')).toBeNull();
+    expect(b.container.querySelector('.delta-panel')).not.toBeNull();
+  });
+
+  it('표지판 칸은 코스 없이 달리면 비운다 (커브를 알 수 없으므로)', () => {
+    const { container } = render(<DriveView {...props({ course: null, refLap: null })} />);
+    expect(container.querySelector('.pace-tile')).toBeNull();
+    expect(container.querySelectorAll('.widget-row > *')[1]).toHaveClass('tile-empty');
   });
 
   it('재생 중에도 같은 나침반 버튼 (재생·주행 같은 지도)', () => {

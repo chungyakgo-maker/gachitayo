@@ -2,7 +2,7 @@
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
-import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, MAP_VIEW_LABEL, updateSettings, useSettings, WIDGET_LABEL, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
@@ -153,7 +153,7 @@ export function SettingsScreen() {
           <span className="card-col" style={{ gap: 3 }}>
             <span className="label">상단 표시 값 (지도 모드)</span>
             <span style={{ fontSize: 15, fontWeight: 600 }}>
-              델타 + {WIDGET_LABEL[s.widgets[0]]} · {WIDGET_LABEL[s.widgets[1]]}
+              {topSummary(s)}
             </span>
           </span>
           <IconChevron size={20} color="#9AA1A9" />
