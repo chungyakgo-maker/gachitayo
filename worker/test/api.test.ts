@@ -268,3 +268,24 @@ describe('파일 게이트웨이 (사양서 6.6, 10.1)', () => {
     expect((await call('GET', '/nothing')).status).toBe(404);
   });
 });
+
+describe('아이폰 앱 출처 (사양서 13.3): capacitor://localhost도 받는다', () => {
+  const APP = 'capacitor://localhost';
+
+  it('사전 요청 204와 CORS 헤더, 열쇠 없으면 401(출처로 막지 않음), 지도 정보도 출처로 막지 않음', async () => {
+    const pre = await handle(new Request(`${BASE}/api/me`, { method: 'OPTIONS', headers: { Origin: APP, 'Access-Control-Request-Method': 'PUT' } }), env);
+    expect(pre.status).toBe(204);
+    expect(pre.headers.get('Access-Control-Allow-Origin')).toBe(APP);
+    expect((await call('GET', '/api/me', { origin: APP })).status).toBe(401);
+    expect((await call('GET', '/map/info', { origin: APP })).status).not.toBe(403);
+  });
+
+  it('앱 출처로 가입·내 정보까지 된다, 다른 출처는 지금처럼 403', async () => {
+    const r = await call('POST', '/auth/signup', { origin: APP, body: { nickname: '앱' } });
+    expect(r.status).toBe(201);
+    expect(r.headers.get('Access-Control-Allow-Origin')).toBe(APP);
+    const { token } = (await r.json()) as { token: string };
+    expect((await call('GET', '/api/me', { origin: APP, token })).status).toBe(200);
+    expect((await call('GET', '/api/me', { origin: 'https://example.com', token })).status).toBe(403);
+  });
+});

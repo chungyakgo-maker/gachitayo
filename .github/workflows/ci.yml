@@ -181,8 +181,10 @@ jobs:
           for i in $(seq 1 12); do code=$(check -H "Origin: $origin" "$API_URL/api/me"); [ "$code" = 401 ] && break; sleep 5; done
           pre=$(check -X OPTIONS -H "Origin: $origin" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
           other=$(check -H 'Origin: https://example.com' "$API_URL/api/me")
-          echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 다른 주소: $other (403)"
-          [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
+          # 아이폰 앱 디고 (사양서 13.3)
+          app=$(check -X OPTIONS -H "Origin: capacitor://localhost" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
+          echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 아이폰 앱 사전 요청: $app (204) · 다른 주소: $other (403)"
+          [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$app" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
           # 선 지도 (사양서 8.9): 지도 데이터가 올라가 있으면 정보·서울 타일·글자 조각을 확인한다
           info=$(check -H "Origin: $origin" "$API_URL/map/info")
           if [ "$info" = 200 ]; then

@@ -10,9 +10,17 @@ export class HttpError extends Error {
   }
 }
 
+/** 아이폰 앱(디고, Capacitor)의 출처 (사양서 13.3) */
+export const APP_ORIGINS = ['capacitor://localhost'] as const;
+
+/** 받는 출처: 웹앱 주소(ALLOWED_ORIGIN)와 아이폰 앱 */
+export function isAllowedOrigin(origin: string | null, env: Cloudflare.Env): boolean {
+  return origin !== null && (origin === env.ALLOWED_ORIGIN || (APP_ORIGINS as readonly string[]).includes(origin));
+}
+
 export function corsHeaders(origin: string | null, env: Cloudflare.Env): Headers {
   const h = new Headers();
-  if (origin && origin === env.ALLOWED_ORIGIN) {
+  if (origin && isAllowedOrigin(origin, env)) {
     h.set('Access-Control-Allow-Origin', origin);
     h.set('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, HEAD, OPTIONS');
     h.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');

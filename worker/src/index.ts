@@ -25,7 +25,7 @@ import { addFriend, deletePresence, friendPresence, listFriends, putPresence, re
 import { tokenFromProtocol } from './live';
 
 export { LiveRoom } from './live';
-import { corsHeaders, errorResponse, HttpError, json, readJson, UUID_RE } from './http';
+import { corsHeaders, errorResponse, HttpError, isAllowedOrigin, json, readJson, UUID_RE } from './http';
 
 /** 표 API 본문 최대 크기 (긴 코스 중심선, 랩 trace 묶음) */
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
@@ -33,7 +33,7 @@ const MAX_JSON_BYTES = 4 * 1024 * 1024;
 export async function handle(req: Request, env: Cloudflare.Env, ctx?: ExecutionContext): Promise<Response> {
   const origin = req.headers.get('Origin');
   // 브라우저 요청인데 출처가 다르면 막는다 (Origin이 없는 요청은 브라우저 밖이라 CORS와 무관)
-  if (origin !== null && origin !== env.ALLOWED_ORIGIN) return errorResponse(403, new Headers(), '허용하지 않은 출처');
+  if (origin !== null && !isAllowedOrigin(origin, env)) return errorResponse(403, new Headers(), '허용하지 않은 출처');
   const headers = corsHeaders(origin, env);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
   try {
