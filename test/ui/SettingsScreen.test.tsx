@@ -27,14 +27,17 @@ describe('설정 탭', () => {
   });
 });
 
-describe('커브 방향 화면 색 켜기·끄기 (사용자 요청)', () => {
-  it('설정에서 켜기/끄기', () => {
+describe('커브 방향 화면 색 고르기 (사용자 요청 "abcd 다 넣어 선택할 수 있게")', () => {
+  it('설정에서 끄기·A·B·C·D 중 하나', () => {
     updateSettings(DEFAULT_SETTINGS);
     render(<SettingsScreen />);
     const sec = screen.getByRole('region', { name: '커브 방향 화면 색' });
-    expect(within(sec).getByRole('button', { name: '켜기' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(sec).getAllByRole('button').map((b) => b.textContent)).toEqual(['끄기', 'A 화면 전체', 'B 전체 · 가까울수록 진하게', 'C 네 가장자리', 'D 커브 쪽 가장자리']);
+    expect(within(sec).getByRole('button', { name: 'D 커브 쪽 가장자리' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(sec).getByRole('button', { name: 'A 화면 전체' }));
+    expect(getSettings().curveTint).toBe('A');
     fireEvent.click(within(sec).getByRole('button', { name: '끄기' }));
-    expect(getSettings().curveTint).toBe(false);
+    expect(getSettings().curveTint).toBe('off');
   });
 });
 

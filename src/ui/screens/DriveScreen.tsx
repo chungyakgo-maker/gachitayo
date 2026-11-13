@@ -10,7 +10,7 @@ import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
 import { makePolyline } from '../../engine/course/polyline';
 import { cycleDriveMode, cycleReplaySpeed, endDrive, getDriveState, seekReplay, setReplayPlaying, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId } from '../../app/settings';
+import { updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
@@ -64,8 +64,12 @@ const REPLAY_CONTROLS = {
 };
 const LAP_FLASH_MS = 3000;
 
-/** 커브 방향 화면 색의 진하기: 보이기 시작하는 250 m에서 0.15, 커브 바로 앞에서 0.55 */
-const tintAlpha = (distM: number) => Math.round((0.15 + 0.4 * Math.min(1, Math.max(0, 1 - distM / 250))) * 100) / 100;
+/** 커브 방향 화면 색의 진하기 (사용자 요청 시안): A 0.18 고정, B 250 m 0.06 → 커브 앞 0.32, C 0.55 고정, D 250 m 0.15 → 커브 앞 0.55 */
+function tintAlpha(mode: Exclude<CurveTint, 'off'>, distM: number): number {
+  const near = Math.min(1, Math.max(0, 1 - distM / 250));
+  const a = mode === 'A' ? 0.18 : mode === 'B' ? 0.06 + 0.26 * near : mode === 'C' ? 0.55 : 0.15 + 0.4 * near;
+  return Math.round(a * 100) / 100;
+}
 
 const deltaClass = (d: number | null) => (d === null ? '' : d < 0 ? 'fast' : d > 0 ? 'slow' : '');
 const kmh = (v: number | null | undefined) => (v === null || v === undefined ? '—' : String(Math.round(v)));
@@ -302,6 +306,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   // 커브 표지판 (사용자 요청 시안): 랩 안에서 코스 위에 있을 때만 다음 커브 (출발선 전·돌아오는 길·코스 밖에서는 지나온 커브를 가리키게 되므로).
   // 코스가 없으면(코스 선 없음) 칸을 비운다
   const up = pace && st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null;
+  const tintMode = settings.curveTint;
   const slotOf = (id: WidgetId, key: number) => {
     if (id === 'none') return null;
     if (id === 'pace') return pace ? <PaceNoteTile key={key} up={up} /> : null;
@@ -350,11 +355,11 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         )}
         {slots.some((c) => c !== null) && <div className="widget-row">{slots.map((c, i) => c ?? <div key={i} className="tile-empty" aria-hidden="true" />)}</div>}
       </div>
-      {/* 커브 방향 화면 색 (사용자 요청 시안 D+B): 다음 커브 쪽 가장자리만 표지판 색으로, 가까울수록 진하게. 설정으로 끈다 */}
-      {settings.curveTint && pace && (
-        <div className="curve-tint" aria-hidden="true">
-          <div className="left" style={{ opacity: up?.note.dir === 'left' ? tintAlpha(up.distM) : 0 }} />
-          <div className="right" style={{ opacity: up?.note.dir === 'right' ? tintAlpha(up.distM) : 0 }} />
+      {/* 커브 방향 화면 색 (사용자 요청 시안 A·B·C·D 중 설정에서 고름, 기본 D): 다음 커브 방향을 표지판 색으로 */}
+      {tintMode !== 'off' && pace && (
+        <div className={`curve-tint mode-${tintMode}`} aria-hidden="true">
+          <div className="left" style={{ opacity: up?.note.dir === 'left' ? tintAlpha(tintMode, up.distM) : 0 }} />
+          <div className="right" style={{ opacity: up?.note.dir === 'right' ? tintAlpha(tintMode, up.distM) : 0 }} />
         </div>
       )}
     </div>

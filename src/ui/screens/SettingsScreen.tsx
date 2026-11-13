@@ -2,7 +2,7 @@
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
-import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
@@ -141,17 +141,14 @@ export function SettingsScreen() {
         <DriveFriendsToggle />
         <section className="card-col" style={{ gap: 8 }} aria-label="커브 방향 화면 색">
           <span className="label">커브 방향 화면 색 (지도 모드)</span>
-          <div className="segmented small" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-            {([
-              [true, '켜기'],
-              [false, '끄기'],
-            ] as const).map(([v, label]) => (
-              <button key={label} type="button" aria-pressed={s.curveTint === v} onClick={() => updateSettings({ curveTint: v })}>
-                {label}
+          <div className="chips">
+            {(Object.keys(CURVE_TINT_LABEL) as CurveTint[]).map((k) => (
+              <button key={k} type="button" aria-pressed={s.curveTint === k} onClick={() => updateSettings({ curveTint: k })}>
+                {CURVE_TINT_LABEL[k]}
               </button>
             ))}
           </div>
-          <span className="sub">코스를 달릴 때 다음 커브 쪽 화면 가장자리가 표지판 색(왼쪽 파랑 · 오른쪽 빨강)으로 빛나요. 가까울수록 진해져요.</span>
+          <span className="sub">코스를 달릴 때 다음 커브 방향을 표지판 색(왼쪽 파랑 · 오른쪽 빨강)으로 화면에 덮어요. A 화면 전체 고르게, B 화면 전체를 가까울수록 진하게, C 네 가장자리, D 커브 쪽 가장자리만 가까울수록 진하게.</span>
         </section>
         <section className="card-col" style={{ gap: 8 }} aria-label="G미터 최대값">
           <span className="label">G미터 최대값 (바깥 원)</span>

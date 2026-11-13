@@ -207,23 +207,35 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(container.querySelectorAll('.widget-row > *')[1]).toHaveClass('tile-empty');
   });
 
-  it('커브 방향 화면 색 (사용자 요청 시안 D+B): 다음 커브 쪽 가장자리만, 가까울수록 진하게, 끄면 없다', () => {
+  it('커브 방향 화면 색 D (기본): 다음 커브 쪽 가장자리만, 가까울수록 진하게, 랩 밖이면 없다', () => {
     // 테스트 코스: 북쪽 111 m 뒤 동쪽으로 직각 (오른쪽)
     const far = render(<DriveView {...props({ snap: snap(state({ s: 0 })) })} />);
     const tint = () => far.container.querySelector('.curve-tint')!;
     const op = (side: string) => Number((tint().querySelector(`.${side}`) as HTMLElement).style.opacity);
     expect(tint()).toHaveAttribute('aria-hidden', 'true');
+    expect(tint()).toHaveClass('mode-D');
     expect(op('left')).toBe(0);
     const a = op('right');
     expect(a).toBeGreaterThan(0);
     far.rerender(<DriveView {...props({ snap: snap(state({ s: 80 })) })} />);
     expect(op('right')).toBeGreaterThan(a);
-    // 랩 밖이면 없음
     far.rerender(<DriveView {...props({ snap: snap(state({ s: 80, lapElapsedMs: null })) })} />);
     expect(op('right')).toBe(0);
-    far.unmount();
-    const off = render(<DriveView {...props({ snap: snap(state({ s: 80 })), settings: { ...DEFAULT_SETTINGS, curveTint: false } })} />);
-    expect(off.container.querySelector('.curve-tint')).toBeNull();
+  });
+
+  it('커브 방향 화면 색 A·C는 거리와 상관없이 같은 진하기, B는 가까울수록 진하게, 끄기면 없다 (사용자 요청 "abcd 다 넣어")', () => {
+    const at = (mode: 'A' | 'B' | 'C' | 'off', sv: number) => {
+      const r = render(<DriveView {...props({ snap: snap(state({ s: sv })), settings: { ...DEFAULT_SETTINGS, curveTint: mode } })} />);
+      const el = r.container.querySelector('.curve-tint');
+      const v = el ? { cls: el.className, op: Number((el.querySelector('.right') as HTMLElement).style.opacity) } : null;
+      r.unmount();
+      return v;
+    };
+    expect(at('A', 0)!.cls).toContain('mode-A');
+    expect(at('A', 0)!.op).toBe(at('A', 80)!.op);
+    expect(at('C', 0)!.op).toBe(at('C', 80)!.op);
+    expect(at('B', 80)!.op).toBeGreaterThan(at('B', 0)!.op);
+    expect(at('off', 80)).toBeNull();
   });
 
   it('재생 중에도 같은 나침반 버튼 (재생·주행 같은 지도)', () => {

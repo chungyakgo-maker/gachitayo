@@ -8,6 +8,10 @@ export type DriveMode = 'map' | 'minimal' | 'dashboard';
 /** 상단 칸 2·3에 고를 값. pace 커브 표지판, none 표시 안 함 (사용자 요청) */
 export type WidgetId = 'g' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'none';
 export type DeltaPalette = 'green-red' | 'blue-orange';
+/** 커브 방향 화면 색 (사용자 요청 "abcd 다 넣어 선택할 수 있게"): 끄기, A 화면 전체, B 전체·가까울수록 진하게, C 네 가장자리, D 커브 쪽 가장자리(가까울수록 진하게) */
+export type CurveTint = 'off' | 'A' | 'B' | 'C' | 'D';
+export const CURVE_TINT_LABEL: Record<CurveTint, string> = { off: '끄기', A: 'A 화면 전체', B: 'B 전체 · 가까울수록 진하게', C: 'C 네 가장자리', D: 'D 커브 쪽 가장자리' };
+const CURVE_TINTS = Object.keys(CURVE_TINT_LABEL) as CurveTint[];
 /** 주행 지도 모드의 보기 (사용자 요청): 전체 코스 / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼) */
 export type MapViewMode = 'fit' | 'follow' | 'heading';
 export const MAP_VIEW_LABEL: Record<MapViewMode, string> = { fit: '전체 코스', follow: '나를 가운데', heading: '진행 방향 위' };
@@ -33,8 +37,8 @@ export interface Settings {
   driveFriends: boolean;
   /** 메인 지도에 저장된 코스들을 보인다 (사용자 요청: 지도 위 칩으로 켜고 끈다) */
   mainCourses: boolean;
-  /** 커브 방향 화면 색 (사용자 요청 시안 D+B): 다음 커브 쪽 화면 가장자리를 표지판 색으로, 가까울수록 진하게 */
-  curveTint: boolean;
+  /** 커브 방향 화면 색 (사용자 요청 시안 A·B·C·D 중 고름, 기본 D) */
+  curveTint: CurveTint;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -55,7 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gMaxG: G_MAX_DEFAULT,
   driveFriends: true,
   mainCourses: true,
-  curveTint: true,
+  curveTint: 'D',
 };
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
@@ -108,7 +112,8 @@ function load(): Settings {
       gMaxG: (G_MAX_OPTIONS as readonly number[]).includes(raw.gMaxG as number) ? raw.gMaxG! : G_MAX_DEFAULT,
       driveFriends: raw.driveFriends !== false,
       mainCourses: raw.mainCourses !== false,
-      curveTint: raw.curveTint !== false,
+      // 예전 켜기/끄기(true/false)는 D/끄기로
+      curveTint: (raw.curveTint as unknown) === false ? 'off' : CURVE_TINTS.includes(raw.curveTint as CurveTint) ? raw.curveTint! : 'D',
     };
   } catch {
     return DEFAULT_SETTINGS;

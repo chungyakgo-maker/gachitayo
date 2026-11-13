@@ -1152,7 +1152,7 @@ html.app-h .modal-backdrop {
   letter-spacing: 0;
 }
 
-/* 커브 방향 화면 색 (사양서 8.4, 사용자 요청 시안 D+B): 다음 커브 쪽 가장자리만 빛난다. 진하기는 opacity (가까울수록 진하게) */
+/* 커브 방향 화면 색 (사양서 8.4, 사용자 요청 시안 A·B·C·D): 진하기는 opacity (B·D는 가까울수록 진하게) */
 .curve-tint {
   position: absolute;
   inset: 0;
@@ -1166,11 +1166,32 @@ html.app-h .modal-backdrop {
   transition: opacity 0.35s linear;
 }
 
-.curve-tint .left {
+/* A·B 화면 전체 */
+.curve-tint.mode-A .left,
+.curve-tint.mode-B .left {
+  background: rgb(70, 110, 255);
+}
+
+.curve-tint.mode-A .right,
+.curve-tint.mode-B .right {
+  background: rgb(255, 60, 50);
+}
+
+/* C 네 가장자리 */
+.curve-tint.mode-C .left {
+  box-shadow: inset 0 0 90px 30px rgb(70, 110, 255);
+}
+
+.curve-tint.mode-C .right {
+  box-shadow: inset 0 0 90px 30px rgb(255, 60, 50);
+}
+
+/* D 커브 쪽 가장자리 */
+.curve-tint.mode-D .left {
   background: linear-gradient(to right, rgba(70, 110, 255, 1) 0%, rgba(70, 110, 255, 0.36) 22%, rgba(70, 110, 255, 0) 48%);
 }
 
-.curve-tint .right {
+.curve-tint.mode-D .right {
   background: linear-gradient(to left, rgba(255, 60, 50, 1) 0%, rgba(255, 60, 50, 0.36) 22%, rgba(255, 60, 50, 0) 48%);
 }
 
