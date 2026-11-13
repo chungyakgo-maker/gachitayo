@@ -362,7 +362,20 @@ let activeReplay: { aborted: boolean } | null = null;
 
 /** 코스 모의주행 (사용자 요청 "코스를 미리 보고 싶을 때"): 가상 차가 코스를 한 번 달린다. 비교 랩 없음, 5×로 시작 */
 export function startCoursePreview(course: Course): Promise<void> {
+  // 실제로 주행·기록 중이면 끊지 않고 준비 화면으로만 간다 (사양서 8.7, 검토 지적: 주행이 끊겨 끝낼 수 없었다)
+  if ((state.phase !== 'idle' && !state.replay) || getRecordingState().phase !== 'idle') {
+    go('#/prepare');
+    return Promise.resolve();
+  }
   return startReplay({ kind: 'course', course }, 5);
+}
+
+/** 재생 이름표 (준비 중에도 보이게 먼저 정한다) */
+function replayLabel(src: ReplaySource): string {
+  if (src.kind === 'course') return `모의주행 · ${src.course.name}`;
+  if (src.kind === 'session') return '저장된 기록';
+  if (src.kind === 'friendSim') return '가상 친구 따라가기';
+  return src.withRef ? '가상 주행 (비교 랩 있음)' : '가상 주행 (첫 주행)';
 }
 
 function patchReplay(p: Partial<ReplayInfo>): void {
@@ -415,7 +428,24 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
   // 이 재생의 취소 표시: 준비 중에 끝내거나 다른 재생을 시작하면(버튼 두 번 누름 등) true. 기다린 뒤마다 확인한다
   const signal = { aborted: false };
   activeReplay = signal;
+  const returnTo = src.kind === 'course' ? `#/course/${src.course.id}` : '#/dev/replay';
   try {
+    if (src.kind !== 'friendSim') {
+      // 누르자마자 "준비 중"으로 주행 화면에 간다. 가상 주행 데이터 만들기·기록 읽기·계산은 그다음 (화면이 멈춰 보이지 않게)
+      set({
+        phase: 'driving',
+        replay: { label: replayLabel(src), speed, ended: false, playing: false, posMs: 0, endMs: 0, preparing: 0, seekable: true, returnTo },
+        course: src.kind === 'course' ? src.course : null,
+        courseChosen: true,
+        refs: [],
+        ref: null,
+        mode: getSettings().defaultMode,
+      });
+      publish(null);
+      go('#/drive');
+      await new Promise((r) => setTimeout(r, 0));
+      if (signal.aborted) return;
+    }
     let gps: GpsSample[];
     let motion: RawMotionSample[];
     let course: Course | null = null;
@@ -479,13 +509,10 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
     gps = [...gps].sort((a, b) => a.tRecv - b.tRecv);
     motion = [...motion].sort((a, b) => a.t - b.t);
     const end = Math.max(gps.at(-1)!.tRecv, motion.at(-1)?.t ?? 0);
-    const returnTo = src.kind === 'course' ? `#/course/${src.course.id}` : '#/dev/replay';
     const info: ReplayInfo = { label, speed, ended: false, playing: true, posMs: 0, endMs: end, preparing: null, seekable: friendFeed === null, returnTo };
     if (friendFeed === null) {
       // 시작할 때 전부 계산해 두고(준비 중), 막대·배속으로 꺼내 보여 준다 (사양서 10.2)
-      set({ phase: 'driving', replay: { ...info, playing: false, preparing: 0 }, course, courseChosen: true, refs: ref ? [ref] : [], ref, mode: getSettings().defaultMode });
-      publish(null);
-      go('#/drive');
+      set({ replay: { ...info, playing: false, preparing: 0 }, course, refs: ref ? [ref] : [], ref });
       const tl = await buildReplayTimeline({ gps, motion, course, ref: toLiveRef(ref) }, { signal, onProgress: (f) => !signal.aborted && patchReplay({ preparing: f }) });
       if (signal.aborted) return;
       timeline = tl;
@@ -523,6 +550,8 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
   } catch (e) {
     // 준비 중에 끝냈으면(취소) 알릴 것이 없다
     if (signal.aborted) return;
+    // 준비 중이었으면 "준비 중"을 지우고 오류만 보인다 (길게 눌러 끝내면 돌아간다)
+    patchReplay({ preparing: null, playing: false });
     set({ error: `재생할 수 없습니다: ${message(e)}` });
   }
 }

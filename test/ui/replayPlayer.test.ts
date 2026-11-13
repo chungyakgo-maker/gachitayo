@@ -4,6 +4,13 @@ import { cycleReplaySpeed, getDriveState, getLiveSnapshot, seekReplay, setReplay
 import { BUILTIN_COURSES, builtinCourse } from '../../src/courses/builtin';
 import { BUILTIN_POINTS } from '../../src/courses/builtinData';
 
+// 기록 중인지 바꿔 볼 수 있게 (검토 지적: 실제 주행 중에 모의주행을 누르면 주행이 끊겼다)
+let recordingPhase: 'idle' | 'recording' = 'idle';
+vi.mock('../../src/app/recording', async (orig) => {
+  const real = await orig<typeof import('../../src/app/recording')>();
+  return { ...real, getRecordingState: () => ({ ...real.getRecordingState(), phase: recordingPhase }) };
+});
+
 const replay = () => getDriveState().replay!;
 /** 실제 이벤트 한 번 흘리기 (가짜 시계와 따로. 브라우저 형식에는 setImmediate가 없어 globalThis에서) */
 const realTick = () => new Promise<void>((res) => (globalThis as unknown as { setImmediate(f: () => void): void }).setImmediate(res));
@@ -109,6 +116,40 @@ describe('재생 플레이어 (사양서 10.2: 재생 막대·배속·모의주�
     // 재생 시계가 하나뿐이면 5×로 1초에 5초
     expect(Math.abs(replay().posMs - 5000)).toBeLessThanOrEqual(100);
     expect(replay().label).toBe('모의주행 · 하오고개');
+  });
+
+  it('실제로 기록 중이면 모의주행을 시작하지 않고 준비 화면으로만 간다 (사양서 8.7)', async () => {
+    const b = BUILTIN_COURSES.find((x) => x.key === 'haogogae')!;
+    const course = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'hao-rec', gateWidthM: 30 });
+    recordingPhase = 'recording';
+    try {
+      await startCoursePreview(course);
+      expect(getDriveState().replay).toBeNull();
+      expect(window.location.hash).toBe('#/prepare');
+    } finally {
+      recordingPhase = 'idle';
+    }
+  });
+
+  it('누르자마자 "준비 중"으로 주행 화면에 간다 (가상 주행 데이터를 만들기 전에, 화면이 멈춰 보이지 않게)', () => {
+    const b = BUILTIN_COURSES.find((x) => x.key === 'haogogae')!;
+    const course = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'hao-fast', gateWidthM: 30 });
+    void startCoursePreview(course);
+    expect(replay()).toMatchObject({ preparing: 0, label: '모의주행 · 하오고개' });
+    expect(window.location.hash).toBe('#/drive');
+  });
+
+  it('준비하다 실패하면 "준비 중"을 지우고 오류를 보인다', async () => {
+    const b = BUILTIN_COURSES.find((x) => x.key === 'haogogae')!;
+    const course = { ...builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'hao-bad', gateWidthM: 30 }), centerline: [[37.4, 127.0]] as Array<[number, number]> };
+    const p = startCoursePreview(course);
+    for (let k = 0; k < 20; k++) {
+      await vi.advanceTimersByTimeAsync(5);
+      await realTick();
+    }
+    await p;
+    expect(getDriveState().error).toBe('재생할 수 없습니다: 코스 선이 없어 모의주행을 할 수 없어요');
+    expect(replay().preparing).toBeNull();
   });
 
   it('코스 모의주행: 이름표·5×·코스 상세로 돌아가기, 비교 랩 없음', async () => {

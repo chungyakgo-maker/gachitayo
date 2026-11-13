@@ -50,10 +50,23 @@ describe('모의주행 가상 코스 (사양서 10.2)', () => {
     const states = run(course, sim.gps, sim.motion);
     const laps = new Set(states.map((s) => s.lastLap?.lapNo).filter((n) => n !== undefined));
     expect([...laps]).toEqual([1]);
-    expect(Math.max(...states.map((s) => s.speedKmh))).toBeLessThanOrEqual(81);
+    // 가상 차는 80 km/h까지 (화면 속도는 GPS 속도 잡음으로 1~2 km/h 더 나올 수 있다)
+    expect(Math.max(...states.map((s) => s.speedKmh))).toBeLessThanOrEqual(82);
     const lap = states.find((s) => s.lastLap)!.lastLap!;
     expect(lap.timeMs).toBeGreaterThan((course.lengthM! / (80 / 3.6)) * 1000);
   });
+
+  it('모든 기본 코스: 출발선을 지나 랩이 시작되고 도착선에서 랩 1이 끝난다 (검토 지적: 끝이 휘어진 코스에서 랩이 안 잡혔다)', () => {
+    const failed: string[] = [];
+    for (const b of BUILTIN_COURSES) {
+      const course = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: b.key, gateWidthM: 30 });
+      const sim = simulateCourseDrive(course);
+      const states = run(course, sim.gps, sim.motion);
+      const laps = new Set(states.map((s) => s.lastLap?.lapNo).filter((n) => n !== undefined));
+      if (laps.size !== 1 || !laps.has(1)) failed.push(`${b.name}: ${[...laps].join(',') || '랩 없음'}`);
+    }
+    expect(failed).toEqual([]);
+  }, 60_000);
 
   it('랩 코스: 출발선을 지나 한 바퀴 돌고 다시 지나 랩 1만 끝난다', () => {
     const base = { laps: 3, startStopS: 5, endStopS: 3, vMax: 40, aLatMax: 8, aAccel: 3, aBrake: 6 };

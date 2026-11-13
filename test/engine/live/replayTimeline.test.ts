@@ -83,6 +83,16 @@ describe('재생 타임라인 (사양서 10.2: 시작할 때 전부 계산해 �
     expect(seen.at(-1)).toBe(1);
   });
 
+  it('시간으로 양보한다: 계산이 느린 구간(코스 밖)에서도 한 번에 30 ms 넘게 붙잡지 않고, 시작 전에도 한 번 양보한다 (검토 지적)', async () => {
+    // 가짜 시계: 부를 때마다 20 ms 지난 것처럼
+    let clock = 0;
+    const now = () => (clock += 20);
+    const seen: number[] = [];
+    const tl = await buildReplayTimeline({ gps: first.gps, motion: first.motion, course: null, ref: null }, { onProgress: (f) => seen.push(f), yieldEvery: 1e9, budgetMs: 30, now });
+    expect(seen[0]).toBe(0);
+    expect(seen.length).toBeGreaterThan(tl.length / 3);
+  });
+
   it('취소하면 멈추고 거절된다 (준비 중에 재생을 끝냈을 때)', async () => {
     const signal = { aborted: false };
     const p = buildReplayTimeline({ gps: first.gps, motion: first.motion, course: null, ref: null }, { yieldEvery: 100, signal, onProgress: () => (signal.aborted = true) });
