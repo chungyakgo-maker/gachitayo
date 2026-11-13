@@ -38,6 +38,32 @@ export async function putMe(env: Cloudflare.Env, userId: string, nickname: strin
   return { userId, nickname };
 }
 
+/**
+ * 계정 삭제 (사양서 13.3, 애플 심사 필수): 이 사람의 행(랩·세션·코스·친구 양쪽·위치 공유·친구 코드 오답 기록·사용자)과
+ * R2의 이 사람 폴더 파일을 모두 지운다. 외래키 연쇄 삭제에 기대지 않고 직접 지운다. signup_log는 사람과 묶이지 않아 그대로
+ */
+export async function deleteAccount(env: Cloudflare.Env, userId: string): Promise<{ ok: true; files: number }> {
+  let files = 0;
+  let cursor: string | undefined;
+  do {
+    const page = await env.SESSION_FILES.list({ prefix: `${userId}/`, cursor, limit: 1000 });
+    if (page.objects.length) await env.SESSION_FILES.delete(page.objects.map((o) => o.key));
+    files += page.objects.length;
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  const del = (sql: string, ...args: string[]) => env.DB.prepare(sql).bind(...args);
+  await env.DB.batch([
+    del('DELETE FROM laps WHERE owner_id = ?', userId),
+    del('DELETE FROM sessions WHERE owner_id = ?', userId),
+    del('DELETE FROM courses WHERE owner_id = ?', userId),
+    del('DELETE FROM friends WHERE user_id = ? OR friend_id = ?', userId, userId),
+    del('DELETE FROM presence WHERE user_id = ?', userId),
+    del('DELETE FROM friend_code_misses WHERE user_id = ?', userId),
+    del('DELETE FROM users WHERE id = ?', userId),
+  ]);
+  return { ok: true, files };
+}
+
 // ── 코스 ──────────────────────────────────────────────
 
 export async function putCourse(env: Cloudflare.Env, userId: string, id: string, body: unknown) {

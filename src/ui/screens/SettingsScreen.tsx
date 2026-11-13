@@ -2,6 +2,8 @@
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
+import { deleteAccount } from '../../app/deleteAccount';
+import { Overlay } from '../components/Overlay';
 import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
@@ -88,6 +90,58 @@ function SyncSection() {
         <button type="button" className="btn" disabled={sync.running || acc.status !== 'ready'} onClick={() => void retryNow()}>
           지금 다시 시도
         </button>
+      )}
+    </section>
+  );
+}
+
+/** 계정 삭제 (사양서 13.3, 애플 심사 필수): 확인 창에서 "지우기"를 눌러야 지운다 */
+export function DeleteAccountSection() {
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <section className="card-col" style={{ gap: 8 }} aria-label="계정 삭제">
+      <span className="label">계정 삭제</span>
+      <button
+        type="button"
+        className="btn danger"
+        onClick={() => {
+          setError(null);
+          setAsk(true);
+        }}
+      >
+        계정과 모든 기록 지우기
+      </button>
+      {ask && (
+        <Overlay>
+          <div className="modal-backdrop">
+            <div className="modal" role="dialog" aria-modal="true" aria-labelledby="account-delete-title">
+              <h2 id="account-delete-title">계정을 지울까요?</h2>
+              <p>닉네임·친구·코스·주행 기록이 폰과 서버에서 모두 지워지고 되돌릴 수 없어요.</p>
+              {error && <div className="notice warn">{error}</div>}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn danger"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    setError(null);
+                    void deleteAccount()
+                      .catch((e: Error) => setError(e.message))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  지우기
+                </button>
+                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(false)}>
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </Overlay>
       )}
     </section>
   );
@@ -202,6 +256,7 @@ export function SettingsScreen() {
           <summary>거치 팁</summary>
           <MountTips />
         </details>
+        <DeleteAccountSection />
         <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
           <span className="label">개발자 메뉴</span>
           <a className="list-link" href="#/dev/replay">

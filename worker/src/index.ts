@@ -18,7 +18,7 @@
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
 import { authenticate, signup, validNickname } from './auth';
-import { deleteCourse, deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
+import { deleteCourse, deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession, deleteAccount } from './data';
 import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
@@ -87,6 +87,8 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
       const body = await readJson(req, 4096);
       return json(200, headers, await putMe(env, userId, validNickname((body as { nickname?: unknown } | null)?.nickname)));
     }
+    // 계정 삭제 (사양서 13.3)
+    if (method === 'DELETE') return json(200, headers, await deleteAccount(env, userId));
     throw new HttpError(405);
   }
 

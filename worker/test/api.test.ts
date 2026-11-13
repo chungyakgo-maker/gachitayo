@@ -289,3 +289,38 @@ describe('아이폰 앱 출처 (사양서 13.3): capacitor://localhost도 받는
     expect((await call('GET', '/api/me', { origin: 'https://example.com', token })).status).toBe(403);
   });
 });
+
+describe('계정 삭제 (사양서 13.3, 애플 심사 필수): DELETE /api/me', () => {
+  it('내 코스·세션·랩·파일·친구(양쪽)·위치 공유를 모두 지우고, 열쇠는 더 못 쓴다. 친구의 다른 데이터는 그대로', async () => {
+    const a = await newUser('지울사람');
+    const b = await newUser('친구');
+    const ok = async (r: Promise<Response>) => expect((await r).ok).toBe(true);
+    await ok(call('PUT', `/api/courses/${COURSE}`, { token: a.token, body: course() }));
+    await ok(call('PUT', `/api/sessions/${SESSION}`, { token: a.token, body: session(a.userId, { course_id: COURSE, course_version: 1 }) }));
+    await ok(call('PUT', `/api/sessions/${SESSION}/laps`, { token: a.token, body: [lap(1, 70000)] }));
+    for (const kind of ['raw', 'processed']) await ok(call('PUT', `/files/${a.userId}/${SESSION}.${kind}.json.gz`, { token: a.token, body: new Uint8Array([1, 2, 3]) }));
+    const codeB = ((await (await call('GET', '/api/friends', { token: b.token })).json()) as { code: string }).code;
+    await ok(call('POST', '/api/friends', { token: a.token, body: { code: codeB } }));
+    await ok(call('PUT', '/api/presence', { token: a.token, body: { lat: 37.5, lon: 127 } }));
+    const bCourse = crypto.randomUUID();
+    await ok(call('PUT', `/api/courses/${bCourse}`, { token: b.token, body: course({ name: '친구 코스' }) }));
+
+    const r = await call('DELETE', '/api/me', { token: a.token });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ ok: true, files: 2 });
+
+    const count = async (sql: string, ...args: string[]) => (await env.DB.prepare(sql).bind(...args).first<number>('n')) ?? 0;
+    expect(await count('SELECT COUNT(*) AS n FROM users WHERE id = ?', a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM courses WHERE owner_id = ?', a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM sessions WHERE owner_id = ?', a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM laps WHERE owner_id = ?', a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM friends WHERE user_id = ? OR friend_id = ?', a.userId, a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM presence WHERE user_id = ?', a.userId)).toBe(0);
+    expect((await env.SESSION_FILES.list({ prefix: `${a.userId}/` })).objects).toEqual([]);
+    expect((await call('GET', '/api/me', { token: a.token })).status).toBe(401);
+    // 친구 쪽: 친구 목록에서 빠지고, 친구 코스는 그대로
+    const fb = (await (await call('GET', '/api/friends', { token: b.token })).json()) as { friends: Array<{ userId: string }> };
+    expect(fb.friends.map((f) => f.userId)).not.toContain(a.userId);
+    expect(await count('SELECT COUNT(*) AS n FROM courses WHERE id = ?', bCourse)).toBe(1);
+  });
+});
