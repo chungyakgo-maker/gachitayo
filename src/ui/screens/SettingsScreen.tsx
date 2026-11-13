@@ -140,7 +140,7 @@ export function SettingsScreen() {
         </section>
         <DriveFriendsToggle />
         <section className="card-col" style={{ gap: 8 }} aria-label="커브 방향 화면 색">
-          <span className="label">커브 방향 화면 색 (지도 모드)</span>
+          <span className="label">커브 방향 화면 색</span>
           <div className="chips">
             {(Object.keys(CURVE_TINT_LABEL) as CurveTint[]).map((k) => (
               <button key={k} type="button" aria-pressed={s.curveTint === k} onClick={() => updateSettings({ curveTint: k })}>

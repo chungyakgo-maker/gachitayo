@@ -223,6 +223,17 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(op('right')).toBe(0);
   });
 
+  it('커브 방향 화면 색은 미니멀·대시보드 모드에도 (사용자 요청 "미니멀 대시보드 다 넣어라")', () => {
+    for (const mode of ['minimal', 'dashboard'] as const) {
+      const r = render(<DriveView {...props({ mode, snap: snap(state({ s: 80 })) })} />);
+      const el = r.container.querySelector('.curve-tint.mode-D')!;
+      expect(el.parentElement).toBe(screen.getByTestId('drive'));
+      expect(Number((el.querySelector('.right') as HTMLElement).style.opacity)).toBeGreaterThan(0);
+      expect(Number((el.querySelector('.left') as HTMLElement).style.opacity)).toBe(0);
+      r.unmount();
+    }
+  });
+
   it('커브 방향 화면 색 A·C는 거리와 상관없이 같은 진하기, B는 가까울수록 진하게, 끄기면 없다 (사용자 요청 "abcd 다 넣어")', () => {
     const at = (mode: 'A' | 'B' | 'C' | 'off', sv: number) => {
       const r = render(<DriveView {...props({ snap: snap(state({ s: sv })), settings: { ...DEFAULT_SETTINGS, curveTint: mode } })} />);
