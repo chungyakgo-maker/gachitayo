@@ -24,6 +24,8 @@ export const BUILTIN_COURSES: readonly BuiltinCourse[] = [
   { key: 'haogogae', name: '하오고개', route: '의왕 청계 → 분당 운중' },
   { key: 'bukak-skyway', name: '북악스카이웨이', route: '부암동 → 정릉' },
   { key: 'namhansanseong', name: '남한산성', route: '성남 산성동 → 남한산성' },
+  { key: 'jinbu-myeon', name: '진부면', route: '진부 → 숙암' },
+  { key: 'pyeonghwa-dam', name: '평화의댐', route: '화천 → 양구' },
 ];
 
 const byKey = new Map(BUILTIN_COURSES.map((b, i) => [b.key, { ...b, rank: i }]));

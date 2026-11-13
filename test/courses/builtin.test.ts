@@ -6,8 +6,8 @@ import type { Course } from '../../src/types/course';
 const built = BUILTIN_COURSES.map((b) => builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: crypto.randomUUID(), gateWidthM: 30 }));
 
 describe('기본 코스 (사양서 7.5)', () => {
-  it('사용자가 준 카카오맵 GPX 아홉 개, 모두 편도', () => {
-    expect(BUILTIN_COURSES.map((b) => b.name)).toEqual(['배후령', '미시령 옛길', '만항재', '말티재', '구룡령', '로코갤러리', '하오고개', '북악스카이웨이', '남한산성']);
+  it('사용자가 준 카카오맵 GPX 열한 개, 모두 편도', () => {
+    expect(BUILTIN_COURSES.map((b) => b.name)).toEqual(['배후령', '미시령 옛길', '만항재', '말티재', '구룡령', '로코갤러리', '하오고개', '북악스카이웨이', '남한산성', '진부면', '평화의댐']);
     for (const b of BUILTIN_COURSES) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(200);
     expect(new Set(BUILTIN_COURSES.map((b) => b.key)).size).toBe(BUILTIN_COURSES.length);
     expect(new Set(built.map((c) => c.kind))).toEqual(new Set(['point_to_point']));
@@ -17,7 +17,7 @@ describe('기본 코스 (사양서 7.5)', () => {
 
   it('길이는 카카오맵 경로 길이와 같다 (±3%)', () => {
     const km = built.map((c) => c.lengthM! / 1000);
-    [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
+    [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86, 25.06, 49.86].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
   });
 
   it('기본 이름이 바뀌면(가평 복장리–상천리 → 로코갤러리) 폰에 예전 이름으로 있는 것만 바꾼다. 직접 바꾼 이름은 그대로', () => {
@@ -38,6 +38,14 @@ describe('기본 코스 (사양서 7.5)', () => {
     expect(near(mt!.finishGate, 36.49907, 127.789325)).toBeLessThan(30);
     // 16.4 km가 넘는 편도: 도착선이 출발점으로 끌려가지 않는다 (평활 버그 수정)
     expect(near(gr!.finishGate, 37.906731, 128.506899)).toBeLessThan(30);
+    // 사용자가 준 카카오맵 GPX (2026-11-13): 진부면 = 평창 진부 → 정선 숙암, 평화의댐 = 화천 → 양구
+    const jb = built.find((c) => c.builtin === 'jinbu-myeon');
+    const pd = built.find((c) => c.builtin === 'pyeonghwa-dam');
+    expect(near(jb!.startGate, 37.632411, 128.55414)).toBeLessThan(40);
+    expect(near(jb!.finishGate, 37.476211, 128.613823)).toBeLessThan(40);
+    expect(near(pd!.startGate, 38.127392, 127.748373)).toBeLessThan(40);
+    expect(near(pd!.finishGate, 38.159154, 127.964281)).toBeLessThan(40);
+    expect(BUILTIN_COURSES.filter((b) => b.key === 'jinbu-myeon' || b.key === 'pyeonghwa-dam').map((b) => b.route)).toEqual(['진부 → 숙암', '화천 → 양구']);
     for (const c of built) expect([c.startGate.widthM, c.finishGate.widthM]).toEqual([30, 30]);
   });
 
@@ -45,7 +53,7 @@ describe('기본 코스 (사양서 7.5)', () => {
     const mine = { ...built[0]!, id: 'mine', builtin: undefined, name: '내 코스' } as Course;
     expect(missingBuiltins([mine]).map((b) => b.key)).toEqual(BUILTIN_COURSES.map((b) => b.key));
     // 나중에 추가된 기본 코스만 더 넣는다
-    expect(missingBuiltins([mine, ...built.slice(0, 5)]).map((b) => b.key)).toEqual(['gapyeong-bokjang-sangcheon', 'haogogae', 'bukak-skyway', 'namhansanseong']);
+    expect(missingBuiltins([mine, ...built.slice(0, 5)]).map((b) => b.key)).toEqual(['gapyeong-bokjang-sangcheon', 'haogogae', 'bukak-skyway', 'namhansanseong', 'jinbu-myeon', 'pyeonghwa-dam']);
     const sorted = sortCourses([built[2]!, built[4]!, built[0]!, mine, built[1]!, built[3]!]);
     expect(sorted.map((c) => c.name)).toEqual(['내 코스', '배후령', '미시령 옛길', '만항재', '말티재', '구룡령']);
     expect(builtinInfo(built[1]!)?.route).toBe('인제 → 고성');
