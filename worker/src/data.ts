@@ -29,8 +29,10 @@ function pair(v: unknown, what: string): [number, number] {
 // ── 닉네임 ────────────────────────────────────────────
 
 export async function getMe(env: Cloudflare.Env, userId: string) {
-  const row = await env.DB.prepare('SELECT id, nickname FROM users WHERE id = ?').bind(userId).first<{ id: string; nickname: string }>();
-  return { userId: row!.id, nickname: row!.nickname };
+  const row = await env.DB.prepare("SELECT id, nickname, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'kakao') AS kakao FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ id: string; nickname: string; kakao: number }>();
+  return { userId: row!.id, nickname: row!.nickname, kakao: row!.kakao === 1 };
 }
 
 export async function putMe(env: Cloudflare.Env, userId: string, nickname: string) {
@@ -46,12 +48,14 @@ export async function putCourse(env: Cloudflare.Env, userId: string, id: string,
   const origin = isObj(b.origin) ? { lat: num(b.origin.lat, 'origin'), lon: num(b.origin.lon, 'origin') } : bad('origin');
   const centerline = b.centerline === null || b.centerline === undefined ? null : Array.isArray(b.centerline) ? b.centerline.map((p) => pair(p, 'centerline')) : bad('centerline');
   const now = new Date().toISOString();
+  // 기본 코스 키 (폰을 바꿔도 같은 기본 코스로 이어 붙이려고, 카카오 로그인 5.7-1)
+  const builtin = b.builtin === null || b.builtin === undefined ? null : str(b.builtin, 'builtin', 40);
   const r = await env.DB.prepare(
-    `INSERT INTO courses (id, owner_id, name, kind, source, origin, start_gate, finish_gate, centerline, length_m, sector_bounds_m, version, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO courses (id, owner_id, name, kind, source, origin, start_gate, finish_gate, centerline, length_m, sector_bounds_m, version, created_at, updated_at, builtin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET name = excluded.name, kind = excluded.kind, source = excluded.source, origin = excluded.origin,
        start_gate = excluded.start_gate, finish_gate = excluded.finish_gate, centerline = excluded.centerline, length_m = excluded.length_m,
-       sector_bounds_m = excluded.sector_bounds_m, version = excluded.version, updated_at = excluded.updated_at
+       sector_bounds_m = excluded.sector_bounds_m, version = excluded.version, updated_at = excluded.updated_at, builtin = excluded.builtin
      WHERE courses.owner_id = excluded.owner_id`,
   )
     .bind(
@@ -69,6 +73,7 @@ export async function putCourse(env: Cloudflare.Env, userId: string, id: string,
       int(b.version, 'version', 1),
       now,
       now,
+      builtin,
     )
     .run();
   if (r.meta.changes === 0) throw new HttpError(403, '다른 사람의 코스');
@@ -89,6 +94,7 @@ interface CourseRowDb {
   version: number;
   created_at: string;
   updated_at: string;
+  builtin: string | null;
 }
 
 export async function listCourses(env: Cloudflare.Env, userId: string) {
@@ -108,6 +114,7 @@ export async function listCourses(env: Cloudflare.Env, userId: string) {
     version: c.version,
     created_at: c.created_at,
     updated_at: c.updated_at,
+    builtin: c.builtin,
   }));
 }
 
@@ -137,8 +144,10 @@ export async function putSession(env: Cloudflare.Env, userId: string, id: string
     `INSERT INTO sessions (id, owner_id, course_id, course_version, started_at, ended_at, device, calibration, raw_key, processed_key, format_version, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET course_id = excluded.course_id, course_version = excluded.course_version, started_at = excluded.started_at,
-       ended_at = excluded.ended_at, device = excluded.device, calibration = excluded.calibration, raw_key = excluded.raw_key,
-       processed_key = excluded.processed_key, format_version = excluded.format_version
+       ended_at = excluded.ended_at, device = excluded.device, calibration = excluded.calibration,
+       raw_key = CASE WHEN sessions.raw_key IS NOT NULL AND sessions.raw_key NOT LIKE sessions.owner_id || '/%' THEN sessions.raw_key ELSE excluded.raw_key END,
+       processed_key = CASE WHEN sessions.processed_key IS NOT NULL AND sessions.processed_key NOT LIKE sessions.owner_id || '/%' THEN sessions.processed_key ELSE excluded.processed_key END,
+       format_version = excluded.format_version
      WHERE sessions.owner_id = excluded.owner_id`,
   )
     .bind(
@@ -160,15 +169,40 @@ export async function putSession(env: Cloudflare.Env, userId: string, id: string
   return { id };
 }
 
+/** 내 기록 목록 (카카오 로그인 5.5: 새 폰에서 되살리기). 시작 시각 새것부터. 합친 계정의 기록은 키가 예전 폴더일 수 있다 */
+export async function listSessions(env: Cloudflare.Env, userId: string) {
+  const { results } = await env.DB.prepare(
+    'SELECT id, course_id, course_version, started_at, ended_at, device, raw_key, processed_key, format_version FROM sessions WHERE owner_id = ? ORDER BY started_at DESC',
+  )
+    .bind(userId)
+    .all<{ id: string; course_id: string | null; course_version: number | null; started_at: string; ended_at: string | null; device: string | null; raw_key: string | null; processed_key: string | null; format_version: number }>();
+  return results.map((r) => ({
+    id: r.id,
+    courseId: r.course_id,
+    courseVersion: r.course_version,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+    device: r.device === null ? null : (JSON.parse(r.device) as unknown),
+    rawKey: r.raw_key,
+    processedKey: r.processed_key,
+    formatVersion: r.format_version,
+  }));
+}
+
 /** 기록 지우기 (M10, 사용자 요청): 랩·세션 행과 R2의 원본·처리된 파일. 서버에 없는 세션이어도 성공(같은 요청을 다시 보내도 됨) */
 export async function deleteSession(env: Cloudflare.Env, userId: string, id: string) {
   const owner = await ownerOf(env, 'sessions', id);
   if (owner !== null && owner !== userId) throw new HttpError(403, '다른 사람의 세션');
+  const keys = new Set([`${userId}/${id}.raw.json.gz`, `${userId}/${id}.processed.json.gz`]);
   if (owner !== null) {
+    // 합친 계정의 기록은 파일이 예전 폴더에 있다 (저장된 키)
+    const row = await env.DB.prepare('SELECT raw_key, processed_key FROM sessions WHERE id = ?').bind(id).first<{ raw_key: string | null; processed_key: string | null }>();
+    if (row?.raw_key) keys.add(row.raw_key);
+    if (row?.processed_key) keys.add(row.processed_key);
     await env.DB.batch([env.DB.prepare('DELETE FROM laps WHERE session_id = ?').bind(id), env.DB.prepare('DELETE FROM sessions WHERE id = ? AND owner_id = ?').bind(id, userId)]);
   }
-  // 파일은 본인 폴더의 이 세션 것만 (행 없이 파일만 올라간 경우도 지운다)
-  await env.SESSION_FILES.delete([`${userId}/${id}.raw.json.gz`, `${userId}/${id}.processed.json.gz`]);
+  // 파일은 본인 폴더의 이 세션 것 + 이 기록 행에 저장된 것 (행 없이 파일만 올라간 경우도 지운다)
+  await env.SESSION_FILES.delete([...keys]);
   return { ok: true, existed: owner !== null };
 }
 

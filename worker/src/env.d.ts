@@ -11,6 +11,10 @@ declare namespace Cloudflare {
     LIVE: DurableObjectNamespace<import('./live').LiveRoom>;
     /** 웹앱 출처 (GitHub Pages): https://{주인}.github.io */
     ALLOWED_ORIGIN: string;
+    /** 카카오 로그인 REST API 키 (GitHub Secrets → 배포 때 Worker 비밀값). 없으면 카카오 로그인을 끈다 */
+    KAKAO_REST_API_KEY?: string;
+    /** 카카오 로그인 클라이언트 시크릿 */
+    KAKAO_CLIENT_SECRET?: string;
     /** 테스트에서만: 적용할 D1 마이그레이션 */
     TEST_MIGRATIONS?: import('cloudflare:test').D1Migration[];
   }

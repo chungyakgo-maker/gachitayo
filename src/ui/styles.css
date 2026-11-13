@@ -2589,3 +2589,27 @@ button.map-gps:active {
 .main-map .maplibregl-ctrl-bottom-right {
   bottom: var(--inset-b, 0px);
 }
+
+/* 카카오 로그인 버튼 (카카오 디자인 가이드: 노랑, 검정 말풍선, 글자 검정 85%) */
+.kakao-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-radius: 12px;
+  background: #fee500;
+  color: rgba(0, 0, 0, 0.85);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kakao-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.warn-text {
+  color: #ff8a3d;
+}

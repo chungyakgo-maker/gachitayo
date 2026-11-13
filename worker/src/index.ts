@@ -1,9 +1,13 @@
 // 같이타요 API + 파일 게이트웨이 (사양서 6.5, 6.6, M6 결정: Cloudflare만)
 //   POST /auth/signup {nickname}         익명 계정 만들기 → {userId, token} (폰 열쇠)
-//   GET/PUT /api/me {nickname}           닉네임
+//   POST /auth/logout                    이 폰 열쇠만 못 쓰게 (카카오 로그인)
+//   GET /auth/providers                  {kakao} 카카오 로그인을 쓸 수 있는지 (비밀값이 있는지)
+//   POST /auth/kakao/start · GET /auth/kakao/callback · POST /auth/kakao/finish   카카오 로그인 (kakao.ts)
+//   GET/PUT /api/me {nickname}           닉네임 (+ kakao: 카카오 연결 여부)
 //   GET /api/courses                     내 코스 목록
 //   PUT /api/courses/{id}                코스 올리기 (같은 id면 덮어씀)
 //   DELETE /api/courses/{id}             코스 지우기 (이 코스의 기록이 남아 있으면 409)
+//   GET /api/sessions                    내 기록 목록 (새 폰에서 되살리기)
 //   PUT /api/sessions/{id}               세션 올리기
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
 //   DELETE /api/sessions/{id}            기록 지우기 (랩·세션 행, 원본·처리된 파일) (M10)
@@ -17,12 +21,13 @@
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
-import { authenticate, signup, validNickname } from './auth';
-import { deleteCourse, deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession } from './data';
+import { authenticate, logout, signup, validNickname } from './auth';
+import { deleteCourse, deleteSession, getMe, listCourses, listSessions, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
+import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 
 export { LiveRoom } from './live';
 import { corsHeaders, errorResponse, HttpError, json, readJson, UUID_RE } from './http';
@@ -80,6 +85,29 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     return json(201, headers, await signup(env, nickname, ip));
   }
 
+  if (path === '/auth/logout') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await logout(env, req));
+  }
+
+  if (path === '/auth/providers') {
+    if (method !== 'GET') throw new HttpError(405);
+    return json(200, headers, { kakao: kakaoEnabled(env) });
+  }
+
+  if (path === '/auth/kakao/start') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await startKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+  if (path === '/auth/kakao/callback') {
+    if (method !== 'GET') throw new HttpError(405);
+    return kakaoCallback(req, env);
+  }
+  if (path === '/auth/kakao/finish') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await finishKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+
   if (path === '/api/me') {
     const userId = await authenticate(req, env);
     if (method === 'GET') return json(200, headers, await getMe(env, userId));
@@ -103,6 +131,11 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     const userId = await authenticate(req, env);
     if (method === 'DELETE') return json(200, headers, await deleteCourse(env, userId, id.toLowerCase()));
     return json(200, headers, await putCourse(env, userId, id.toLowerCase(), await readJson(req, MAX_JSON_BYTES)));
+  }
+
+  if (path === '/api/sessions') {
+    if (method !== 'GET') throw new HttpError(405);
+    return json(200, headers, await listSessions(env, await authenticate(req, env)));
   }
 
   const session = /^\/api\/sessions\/([^/]+)(\/laps)?$/.exec(path);

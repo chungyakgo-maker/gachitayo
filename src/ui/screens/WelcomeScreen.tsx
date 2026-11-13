@@ -1,6 +1,9 @@
 // 첫 실행 (사양서 8.1): 닉네임(익명 계정 만들기), 권한·홈 화면 추가 안내, 안전 안내 확인
-import { useState } from 'react';
-import { finishOnboarding, useAccount } from '../../app/account';
+import { useEffect, useState } from 'react';
+import { finishOnboarding, friendlyServerError, useAccount } from '../../app/account';
+import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
+import { KakaoButton } from '../components/KakaoButton';
+import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { IconPhone, IconPin, IconWarn } from '../icons';
 
 const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -13,6 +16,27 @@ export function WelcomeScreen() {
   const [name, setName] = useState(acc.nickname ?? '');
   const [agree, setAgree] = useState(false);
   const ok = name.trim().length >= 1 && name.trim().length <= 20 && agree && !acc.busy;
+  // 카카오로 시작하기 (설계 5.6): 서버가 켜 두었을 때만
+  const [kakao, setKakao] = useState(false);
+  const [kakaoBusy, setKakaoBusy] = useState(false);
+  const [kakaoError, setKakaoError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void getProviders().then((p) => alive && setKakao(p.kakao));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const kakaoStart = async () => {
+    setKakaoBusy(true);
+    setKakaoError(null);
+    try {
+      await startKakaoLogin('#/');
+    } catch (e) {
+      setKakaoError(friendlyServerError(e));
+      setKakaoBusy(false);
+    }
+  };
   return (
     <main className="page page-full">
       <header className="card-col" style={{ gap: 6, paddingTop: 16 }}>
@@ -65,15 +89,24 @@ export function WelcomeScreen() {
         </div>
       </section>
 
-      {acc.error && (
+      <KakaoPendingCard />
+      {(acc.error || kakaoError) && (
         <div className="notice warn">
           <IconWarn size={20} />
-          {acc.error}
+          {kakaoError ?? acc.error}
         </div>
       )}
       <div style={{ flex: 1 }} />
+      {kakao && (
+        <div className="card-col" style={{ gap: 6 }}>
+          <KakaoButton label="카카오로 시작하기" disabled={!agree || kakaoBusy || acc.busy} onClick={() => void kakaoStart()} />
+          <span className="sub" style={{ textAlign: 'center' }}>
+            폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요
+          </span>
+        </div>
+      )}
       <button type="button" className="primary-btn record" disabled={!ok} onClick={() => void finishOnboarding(name)}>
-        {acc.busy ? '계정을 만드는 중…' : '시작하기'}
+        {acc.busy ? '계정을 만드는 중…' : '로그인 없이 시작'}
       </button>
     </main>
   );

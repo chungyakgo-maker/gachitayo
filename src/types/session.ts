@@ -33,6 +33,8 @@ export interface SessionRecord {
   uploadedAt?: number | null;
   /** 다른 기기에서 내보낸 원본 파일을 가져온 기록 (PC에서 보기, 질문 6 결정). 이 기기에만 두고 서버에 올리지 않는다 */
   imported?: boolean;
+  /** 서버에서 되살리는 중 (카카오 로그인). 앱이 꺼져 남았으면 다음에 지우고 다시 받는다 */
+  restoring?: boolean;
 }
 
 /** 5초 단위로 저장하는 원본 덩어리 */

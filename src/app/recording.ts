@@ -81,6 +81,8 @@ function subscribe(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
 }
+/** 기록 상태가 바뀔 때 (되살리기가 주행이 끝나기를 기다릴 때) */
+export const subscribeRecording = subscribe;
 
 export const getRecordingState = (): RecordingState => state;
 
@@ -95,6 +97,13 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 let db: GachitayoDb | undefined;
 const getDb = () => (db ??= new GachitayoDb());
 let repo: SessionRepo | undefined;
+/** 폰 저장소를 비운다 (로그아웃): 기록·원본·결과·내 코스·비교 랩·업로드 대기열. 기본 코스는 남긴다 (설계 5.6) */
+export async function clearLocalData(): Promise<void> {
+  const d = getDb();
+  await Promise.all(d.tables.filter((t) => t.name !== 'courses').map((t) => t.clear()));
+  await d.courses.filter((c) => !c.builtin).delete();
+}
+
 export function getRepo(): SessionRepo {
   repo ??= createSessionRepo(getDb());
   return repo;

@@ -320,6 +320,11 @@ export async function processSession(sessionId: string, kind?: CourseKind): Prom
   return andUpload(sessionId, await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
 }
 
+/** 되살린 기록 다시 계산 (카카오 로그인 되살리기): 서버에 이미 있으니 업로드 대기열에 넣지 않는다 */
+export async function processRestoredSession(sessionId: string): Promise<DriveResultRecord | null> {
+  return track(sessionId, () => processStoredSession(deps(), sessionId));
+}
+
 export async function changeKind(sessionId: string, kind: CourseKind): Promise<DriveResultRecord | null> {
   return andUpload(sessionId, await track(sessionId, () => changeProposedKind(deps(), sessionId, kind)));
 }

@@ -15,7 +15,7 @@ vi.mock('../../src/app/friends', async (orig) => ({
 const { GapSection } = await import('../../src/ui/components/GapSection');
 const { getSettings, updateSettings, DEFAULT_SETTINGS } = await import('../../src/app/settings');
 
-const ready: AccountState = { status: 'ready', userId: 'u1', nickname: '민수', onboarded: true, lost: false, busy: false, error: null };
+const ready: AccountState = { status: 'ready', userId: 'u1', nickname: '민수', onboarded: true, lost: false, kakao: false, busy: false, error: null };
 const base: FriendsState = {
   available: true,
   code: 'K7P2Q9XM',
