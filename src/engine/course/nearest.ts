@@ -5,13 +5,15 @@ import { gateSegment } from './geometry';
 
 /** 이보다 멀면 "근처에 코스 없음" */
 const MAX_DISTANCE_M = 1000;
+/** 가장 가까운 코스와 이 안으로 차이 나면 같은 길로 본다 (정방향·역방향 코스): 출발선이 가까운 쪽 */
+const SAME_ROAD_M = 30;
 
 /**
  * 코스마다 현재 위치에서 중심선(없으면 출발선)까지 거리를 재서 가장 가까운 코스.
  * 중심선은 저장된 위경도 점 사이 선분까지의 거리.
  */
 export function nearestCourse(courses: Course[], lat: number, lon: number): { course: Course; distanceM: number } | null {
-  let best: { course: Course; distanceM: number } | null = null;
+  const found: Array<{ course: Course; distanceM: number }> = [];
   for (const c of courses) {
     const p = toLocal(c.origin, lat, lon);
     let d = Infinity;
@@ -28,9 +30,18 @@ export function nearestCourse(courses: Course[], lat: number, lon: number): { co
       const g = gateSegment(c.startGate, c.origin);
       d = Math.hypot(p.x - g.cx, p.y - g.cy);
     }
-    if (d <= MAX_DISTANCE_M && (!best || d < best.distanceM)) best = { course: c, distanceM: d };
+    if (d <= MAX_DISTANCE_M) found.push({ course: c, distanceM: d });
   }
-  return best;
+  if (found.length === 0) return null;
+  const min = Math.min(...found.map((f) => f.distanceM));
+  // 같은 길에 코스가 여럿이면(정방향·역방향, 사용자 신고 "출근 역방향으로 탔는데 인식 안 됨") 출발선이 가까운 쪽.
+  // 목록 순서로 고르면 반대 방향 코스가 잡혀 출발선·도착선을 반대로 지나 랩이 안 잡힌다
+  const toStart = (c: Course) => {
+    const p = toLocal(c.origin, lat, lon);
+    const g = gateSegment(c.startGate, c.origin);
+    return Math.hypot(p.x - g.cx, p.y - g.cy);
+  };
+  return found.filter((f) => f.distanceM <= min + SAME_ROAD_M).reduce((a, b) => (toStart(b.course) < toStart(a.course) ? b : a));
 }
 
 function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {

@@ -5,6 +5,7 @@ import { fromLocal } from '../../../src/engine/geo';
 import { courseFromTrack, ORIGIN } from './helpers';
 import { BUILTIN_COURSES, builtinCourse } from '../../../src/courses/builtin';
 import { BUILTIN_POINTS } from '../../../src/courses/builtinData';
+import { reverseCourse } from '../../../src/engine/course/edit';
 
 describe('현재 위치에서 가까운 코스 (사양서 8.3)', () => {
   const oval = { ...courseFromTrack(stadiumTrack(), { id: 'oval' }) };
@@ -37,5 +38,17 @@ describe('현재 위치에서 가까운 코스 (사양서 8.3)', () => {
     expect(r.course.id).toBe('bh');
     expect(r.distanceM).toBeLessThan(250);
     expect(nearestCourse([c], end[0] + 0.45, end[1])).toBeNull();
+  });
+
+  it('같은 길의 정방향·역방향 코스 (사용자 신고 "출근 역방향으로 탔는데 인식 안 됨"): 출발선이 가까운 쪽, 목록 순서와 상관없이', () => {
+    const b = BUILTIN_COURSES.find((x) => x.key === 'haogogae')!;
+    const fwd = { ...builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'fwd', gateWidthM: 30 }), builtin: undefined, name: '출근' };
+    const rev = reverseCourse(fwd, { id: 'rev', name: '출근 역방향' });
+    for (const list of [[fwd, rev], [rev, fwd]]) {
+      // 역방향 출발선(= 출근 도착선) 근처에 있으면 역방향
+      expect(nearestCourse(list, rev.startGate.lat + 0.00005, rev.startGate.lon)!.course.id).toBe('rev');
+      // 출근 출발선 근처에 있으면 출근
+      expect(nearestCourse(list, fwd.startGate.lat + 0.00005, fwd.startGate.lon)!.course.id).toBe('fwd');
+    }
   });
 });
