@@ -54,6 +54,8 @@ export interface LiveSnapshot {
   path: ReadonlyArray<readonly [number, number]>;
   /** 이번 랩(또는 랩 밖 구간)이 시작된 path 위치. 코스 주행 지도는 여기부터 그린다 (사용자 요청: 코스 주행도 지나온 길) */
   pathFrom: number;
+  /** 6000점 한도로 앞에서 잘라 낸 점 수의 누계 (path[i]의 절대 번호 = pathDropped + i, 재생 타임라인용) */
+  pathDropped: number;
 }
 
 const STEP_MS = 20;
@@ -89,6 +91,7 @@ export class LivePipeline {
   private pos: LiveSnapshot['pos'] = null;
   private path: Array<[number, number]> = [];
   private pathFrom = 0;
+  private pathDropped = 0;
   /** 랩 경계를 알아보려고: 직전 랩 번호·랩 안인지·랩 경과 시간 */
   private lapMark: { no: number; inLap: boolean; elapsed: number | null } | null = null;
 
@@ -192,6 +195,7 @@ export class LivePipeline {
       ghost: this.ghost(),
       path: this.path,
       pathFrom: this.pathFrom,
+      pathDropped: this.pathDropped,
     };
   }
 
@@ -245,6 +249,7 @@ export class LivePipeline {
         const cut = this.path.length - PATH_MAX;
         this.path.splice(0, cut);
         this.pathFrom = Math.max(0, this.pathFrom - cut);
+        this.pathDropped += cut;
       }
     }
   }

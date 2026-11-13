@@ -61,6 +61,7 @@ function snap(st: LiveState | null): LiveSnapshot {
     ghost: { x: 15, y: 25, s: 105 },
     path: [],
     pathFrom: 0,
+    pathDropped: 0,
   };
 }
 const props = (p: Partial<DriveViewProps> = {}): DriveViewProps => ({

@@ -24,6 +24,7 @@ function snap(tSec: number): LiveSnapshot {
     ghost: null,
     path: [],
     pathFrom: 0,
+    pathDropped: 0,
   };
 }
 const follow = (upTo: number): FollowState => ({

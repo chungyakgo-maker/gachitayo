@@ -77,6 +77,7 @@ describe('오버레이 상태 (시각 t의 주행 상태, 사양서 13.1)', () =
       ghost: { x: 3, y: 4, s: 10 },
       path: [[0, 0] as const, [1, 0] as const, [2, 0] as const],
       pathFrom: 1,
+      pathDropped: 0,
     };
     expect(frameFromLive(snap, true, true)).toMatchObject({ hasState: false, speedKmh: 0, ghost: { x: 3, y: 4 }, path: [[1, 0], [2, 0]] });
     expect(frameFromLive(snap, true, false).ghost).toBeNull();
