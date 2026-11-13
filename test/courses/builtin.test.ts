@@ -19,9 +19,9 @@ describe('기본 코스 (사양서 7.5)', () => {
       '남한산성',
       '진부면',
       '평화의댐',
-      '군위 남산리–칠곡 기성리',
-      '칠곡 연호리–덕산리',
-      '함백역–문곡리',
+      '팔공산 한티재',
+      '신동재',
+      '미륵고개전망대',
       '매봉산 바람의언덕',
       '적상산전망대',
     ]);
@@ -63,7 +63,7 @@ describe('기본 코스 (사양서 7.5)', () => {
     expect(near(pd!.startGate, 38.127392, 127.748373)).toBeLessThan(40);
     expect(near(pd!.finishGate, 38.159154, 127.964281)).toBeLessThan(40);
     expect(BUILTIN_COURSES.filter((b) => b.key === 'jinbu-myeon' || b.key === 'pyeonghwa-dam').map((b) => b.route)).toEqual(['진부 → 숙암', '화천 → 양구']);
-    // 사용자가 준 카카오맵 GPX 다섯 개 (2026-11-13 두 번째): 이름은 GPX에 적힌 곳 이름(사용자 확인 전)
+    // 사용자가 준 카카오맵 GPX 다섯 개 (2026-11-13 두 번째): 이름 셋은 사용자가 알려 줌, 둘은 GPX 도착지 이름
     const gate = (key: string) => built.find((c) => c.builtin === key)!;
     const ends: Array<[string, number, number, number, number]> = [
       ['gunwi-namsan-chilgok-giseong', 36.030296, 128.628896, 36.014036, 128.598824],
