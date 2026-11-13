@@ -1,7 +1,7 @@
 // 코스 관리 (사양서 8.7, M10): 이름 바꾸기, 출발선·도착선 옮기기, 코스 다듬기, 지도에서 새 코스, GPX 불러오기·내보내기.
 // 선을 옮기거나 다듬으면 version +1이고 이 코스의 내 기록을 모두 원본에서 다시 계산한다 (질문 5 결정).
 // 폰에서 원본을 정리한 기록은 서버에서 원본을 받아 다시 계산한다.
-import { builtinCourse, missingBuiltins, renamedBuiltins } from '../courses/builtin';
+import { BUILTIN_REV, builtinCourse, builtinInfo, missingBuiltins, renamedBuiltins } from '../courses/builtin';
 import { refineCourse, moveGate, reverseCourse, reverseName, sameCourse } from '../engine/course/edit';
 import { gateFromPoint } from '../engine/course/geometry';
 import { fromLocal, toLocal, type LatLon } from '../engine/geo';
@@ -34,6 +34,67 @@ async function saveCourseRecord(c: Course): Promise<void> {
 
 let seeding: Promise<void> | undefined;
 
+const REV_KEY = 'gachitayo.builtinRev';
+function storedRev(): number {
+  try {
+    return Number(localStorage.getItem(REV_KEY) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+function storeRev(): void {
+  try {
+    localStorage.setItem(REV_KEY, String(BUILTIN_REV));
+  } catch {
+    // 저장할 수 없으면 다음 시작 때 다시 확인 (바꿀 것이 없으면 그대로)
+  }
+}
+
+const sameGate = (a: Course['startGate'], b: Course['startGate']) =>
+  Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lon - b.lon) < 1e-6 && Math.abs(((a.bearingDeg - b.bearingDeg + 540) % 360) - 180) < 0.5;
+
+/**
+ * 기본 코스 선 고침 (사용자 요청 "북악 출발선 고쳐"): 폰에 예전 선으로 들어 있는 기본 코스를 지금 선으로 바꾼다.
+ * 이름·번호는 그대로, 버전 +1, 그 코스의 기록은 다시 계산한다(서버에 올린 기록이 있으면 코스도 다시 올린다).
+ * 사용자가 선을 옮기거나 다듬은 코스(버전 2 이상)는 그대로 둔다. 바꾼 코스 번호를 돌려준다
+ */
+export async function upgradeBuiltinCourses(): Promise<string[]> {
+  const drive = getDriveRepo();
+  const { BUILTIN_POINTS } = await import('../courses/builtinData');
+  const changed: string[] = [];
+  for (const c of await drive.listCourses()) {
+    const b = builtinInfo(c);
+    const pts = b ? BUILTIN_POINTS[b.key] : undefined;
+    if (!b || !pts || c.version !== 1) continue;
+    const fresh = builtinCourse(b, pts, { id: c.id, gateWidthM: c.startGate.widthM });
+    if (sameGate(c.startGate, fresh.startGate) && sameGate(c.finishGate, fresh.finishGate) && Math.abs((c.lengthM ?? 0) - (fresh.lengthM ?? 0)) < 0.5) continue;
+    await drive.putCourse({
+      ...c,
+      kind: fresh.kind,
+      origin: fresh.origin,
+      startGate: fresh.startGate,
+      finishGate: { ...fresh.finishGate, widthM: c.finishGate.widthM },
+      centerline: fresh.centerline,
+      lengthM: fresh.lengthM,
+      sectorBoundsM: fresh.sectorBoundsM,
+      version: c.version + 1,
+    });
+    changed.push(c.id);
+  }
+  if (changed.length === 0) return changed;
+  await loadCourses();
+  for (const id of changed) {
+    if ((await sessionsOfCourse(id)).length === 0) continue;
+    await queueCourse(id);
+    try {
+      await recomputeCourse(id);
+    } catch {
+      // 다시 계산하지 못한 기록은 예전 선 그대로 남는다 (코스 화면에서 다시 계산할 수 있다)
+    }
+  }
+  return changed;
+}
+
 /** 기본 코스(사양서 7.5)가 이 폰의 코스 목록에 없으면 넣는다. 앱 시작 때 한 번.
  *  서버로 따로 올리지 않는다 (공유·별점은 앱 출시 뒤 계획). 그 코스로 달린 기록을 올릴 때만 다른 코스처럼 내 코스로 함께 간다 */
 export function seedBuiltinCourses(): Promise<void> {
@@ -44,6 +105,11 @@ export function seedBuiltinCourses(): Promise<void> {
       // 기본 이름이 바뀐 코스 (폰에서만. 서버에는 그 코스로 달린 기록을 올릴 때 새 이름이 간다)
       const renamed = renamedBuiltins(have);
       for (const c of renamed) await drive.putCourse(c);
+      // 기본 코스 선 고침: 차례가 바뀐 뒤 처음 한 번 (경로 점 파일은 이때만 불러온다)
+      if (storedRev() < BUILTIN_REV) {
+        await upgradeBuiltinCourses();
+        storeRev();
+      }
       const missing = missingBuiltins(have);
       if (missing.length === 0) {
         if (renamed.length) await loadCourses();

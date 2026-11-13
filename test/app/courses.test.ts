@@ -8,7 +8,9 @@ import { BUILTIN_COURSES } from '../../src/courses/builtin';
 
 vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => []), processSession: vi.fn(async () => null) }));
 
-const { createMapCourse, deleteCourse, importGpx, makeReverseCourse, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses } = await import('../../src/app/courses');
+const { createMapCourse, deleteCourse, importGpx, makeReverseCourse, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses, upgradeBuiltinCourses } = await import('../../src/app/courses');
+const { builtinCourse } = await import('../../src/courses/builtin');
+const { BUILTIN_POINTS } = await import('../../src/courses/builtinData');
 const rec = await import('../../src/app/recording');
 const drive = await import('../../src/app/drive');
 
@@ -27,6 +29,34 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     expect(drive.loadCourses).toHaveBeenCalled();
     await seedBuiltinCourses();
     expect((await rec.getDriveRepo().listCourses()).filter((c) => c.builtin)).toHaveLength(BUILTIN_COURSES.length);
+    // 새로 넣은 기본 코스는 이미 지금 선이라 고칠 것이 없다
+    expect(await upgradeBuiltinCourses()).toEqual([]);
+  });
+
+  it('기본 코스 선 고침 (사용자 요청 "북악 출발선 고쳐"): 폰에 예전 선으로 있는 기본 코스는 새 선으로(이름·번호 그대로, 버전 +1, 기록 다시 계산), 사용자가 선을 옮긴 코스는 그대로', async () => {
+    const drive = rec.getDriveRepo();
+    const b = BUILTIN_COURSES.find((x) => x.key === 'bukak-skyway')!;
+    const fresh = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: crypto.randomUUID(), gateWidthM: 25 });
+    const old = { ...fresh, name: '내 북악', startGate: { ...fresh.startGate, bearingDeg: 297 }, lengthM: fresh.lengthM! + 18 };
+    const h = BUILTIN_COURSES.find((x) => x.key === 'haogogae')!;
+    const hf = builtinCourse(h, BUILTIN_POINTS[h.key]!, { id: crypto.randomUUID(), gateWidthM: 30 });
+    const movedByUser = { ...hf, version: 2, startGate: { ...hf.startGate, bearingDeg: 10 } };
+    await drive.putCourse(old);
+    await drive.putCourse(movedByUser);
+    const sid = crypto.randomUUID();
+    await rec.getRepo().create({ id: sid, courseId: old.id, courseVersion: 1, status: 'processed', startedAt: 1, endedAt: 2, device: { os: 'x', browser: 'y', userAgent: 'z', standalone: false }, calibration: null, summary: null });
+    await rec.getRepo().putChunk({ sessionId: sid, seq: 0, gps: s.gps, rawMotion: [], events: [] });
+    vi.mocked((await import('../../src/app/drive')).processSession).mockClear();
+    const changed = await upgradeBuiltinCourses();
+    expect(changed).toEqual([old.id]);
+    const got = (await drive.getCourse(old.id))!;
+    expect(got).toMatchObject({ id: old.id, name: '내 북악', builtin: 'bukak-skyway', version: 2, lengthM: fresh.lengthM });
+    expect(got.startGate.bearingDeg).toBeCloseTo(fresh.startGate.bearingDeg, 3);
+    expect(got.startGate.widthM).toBe(25);
+    expect((await import('../../src/app/drive')).processSession).toHaveBeenCalledWith(sid);
+    expect(await drive.getCourse(movedByUser.id)).toEqual(movedByUser);
+    // 다시 해도 바꿀 것이 없다
+    expect(await upgradeBuiltinCourses()).toEqual([]);
   });
 
   it('역방향 코스: 내 코스로 만들고, 다시 누르면 있는 것을 돌려준다. 역방향의 역방향은 원래 코스', async () => {

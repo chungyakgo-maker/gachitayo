@@ -134,6 +134,9 @@ export const config = {
       /** 편도 출발선·도착선을 주행 양 끝에서 이만큼 안쪽에 둔다 (M4 검토 결정) */
       p2pGateInsetM: 20,
     },
+    /** GPX(카카오맵 경로 등) 편도 코스 양 끝: 출발·도착 표시에서 도로까지 잇는 짧은 진입로를 건너뛴다 (사용자 요청 "북악 출발선 고쳐").
+     *  끝에서 안쪽으로 들어가며 앞으로 windowM 동안 방향이 그 현 방향과 tolDeg 안인 첫 자리. maxTrimM까지 못 찾으면 그대로 */
+    gpxEnds: { windowM: 30, tolDeg: 15, maxTrimM: 60 },
     /** 코스 다듬기에 필요한 유효 랩 수 */
     refineMinLaps: 3,
   },

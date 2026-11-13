@@ -1,9 +1,9 @@
 // GPX → 코스 (사양서 7.5 GPX 불러오기), GPX → 주행 기록 (사양서 8.7)
 import { config } from '../engine/config';
 import { toLocal } from '../engine/geo';
-import { centerlineFromPath, withCenterline } from '../engine/course/edit';
+import { centerlineFromPath, chordPsi, straightEnds, withCenterline } from '../engine/course/edit';
 import { gateFromPoint } from '../engine/course/geometry';
-import { polylinePoint } from '../engine/course/polyline';
+import { polylinePoint, slicePolyline } from '../engine/course/polyline';
 import type { Course } from '../types/course';
 import type { GpsSample } from '../types/samples';
 import type { GpxData } from './parse';
@@ -14,7 +14,8 @@ export const GPX_CREATOR = '같이타요';
 /** 자동 코스와 같은 최소 길이 */
 const MIN_COURSE_M = 50;
 
-/** 평활 후 1 m 재샘플. 양 끝이 30 m 이내면 랩 코스, 아니면 편도. 게이트는 양 끝점과 그곳의 진행 방향 */
+/** 평활 후 1 m 재샘플. 양 끝이 30 m 이내면 랩 코스, 아니면 편도. 게이트는 양 끝점과 그곳의 진행 방향.
+ *  다른 앱의 편도 경로(카카오맵 등)는 양 끝의 짧은 진입로를 건너뛰고, 선 방향은 끝 20 m 현 방향 (사용자 요청 "북악 출발선 고쳐") */
 export function courseFromGpx(gpx: GpxData, opts: { id: string; name: string }): Course {
   const tooShort = () => new Error(`코스가 너무 짧습니다 (${MIN_COURSE_M} m 이상이어야 합니다)`);
   if (gpx.points.length < 2) throw tooShort();
@@ -26,17 +27,32 @@ export function courseFromGpx(gpx: GpxData, opts: { id: string; name: string }):
   const loop = xy.length > 2 && Math.hypot(b.x - a.x, b.y - a.y) <= config.course.auto.loopReturnRadiusM;
   // 랩 코스의 마지막 점이 첫 점과 거의 같으면 빼고 닫는다
   const pts = loop && Math.hypot(b.x - a.x, b.y - a.y) < 0.5 ? xy.slice(0, -1) : xy;
-  const cl = centerlineFromPath(
+  const ours = gpx.creator === GPX_CREATOR;
+  let cl = centerlineFromPath(
     pts.map((p) => p.x),
     pts.map((p) => p.y),
     loop,
-    gpx.creator !== GPX_CREATOR,
+    !ours,
   );
   if (!(cl.length >= MIN_COURSE_M)) throw tooShort();
-  const s0 = polylinePoint(cl, 0);
-  const s1 = polylinePoint(cl, cl.length);
-  const start = gateFromPoint(s0.x, s0.y, polylinePoint(cl, Math.min(1, cl.length)).psi, origin);
-  const finish = loop ? start : gateFromPoint(s1.x, s1.y, s1.psi, origin);
+  let start;
+  let finish;
+  if (loop || ours) {
+    // 이 앱이 내보낸 GPX는 이미 게이트에서 시작·끝나는 중심선 (왕복해도 같은 코스)
+    const s0 = polylinePoint(cl, 0);
+    const s1 = polylinePoint(cl, cl.length);
+    start = gateFromPoint(s0.x, s0.y, polylinePoint(cl, Math.min(1, cl.length)).psi, origin);
+    finish = loop ? start : gateFromPoint(s1.x, s1.y, s1.psi, origin);
+  } else {
+    const w = config.course.gpxEnds.windowM;
+    const ends = straightEnds(cl);
+    if (ends.s0 > 0 || ends.s1 < cl.length) cl = slicePolyline(cl, ends.s0, ends.s1, config.course.centerlineSpacingM);
+    const L = cl.length;
+    const s0 = polylinePoint(cl, 0);
+    const s1 = polylinePoint(cl, L);
+    start = gateFromPoint(s0.x, s0.y, chordPsi(cl, 0, Math.min(w, L)), origin);
+    finish = gateFromPoint(s1.x, s1.y, chordPsi(cl, Math.max(0, L - w), L), origin);
+  }
   return withCenterline(
     {
       id: opts.id,

@@ -28,6 +28,10 @@ export const BUILTIN_COURSES: readonly BuiltinCourse[] = [
   { key: 'pyeonghwa-dam', name: '평화의댐', route: '화천 → 양구' },
 ];
 
+/** 기본 코스 선 고침 차례. 폰에 기록한 차례보다 크면 앱 시작 때 한 번, 예전 선으로 들어 있는 기본 코스를 새 선으로 바꾼다.
+ *  2: 카카오맵 경로 끝 진입로를 건너뛰고 출발·도착선을 도로 방향으로 (사용자 요청 "북악 출발선 고쳐") */
+export const BUILTIN_REV = 2;
+
 const byKey = new Map(BUILTIN_COURSES.map((b, i) => [b.key, { ...b, rank: i }]));
 
 export function builtinInfo(c: Course): BuiltinCourse | null {

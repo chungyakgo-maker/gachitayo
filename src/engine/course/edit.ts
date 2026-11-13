@@ -34,6 +34,38 @@ export function centerlineFromPath(
   return resamplePolyline(makePolyline(sm.x, sm.y), cfg.centerlineSpacingM);
 }
 
+/** 코스 선 위 a→b 현의 방향 ψ (rad) */
+export function chordPsi(cl: Polyline, a: number, b: number): number {
+  const p = polylinePoint(cl, a);
+  const q = polylinePoint(cl, b);
+  return Math.atan2(q.y - p.y, q.x - p.x);
+}
+
+/**
+ * 경로 양 끝의 짧은 진입로 건너뛰기 (사용자 요청 "북악 출발선 고쳐"): 카카오맵 경로는 출발·도착 표시 지점에서
+ * 도로까지 몇 m를 엉뚱한 방향으로 잇는다. 그 끝에 게이트를 두면 선 방향이 도로와 어긋나 랩이 안 잡힌다.
+ * 끝에서 안쪽으로 1 m씩 들어가며, 앞으로 windowM 동안 방향이 그 현 방향과 tolDeg 안인 첫 자리를 고른다.
+ * maxTrimM 안에 없으면 그 끝은 그대로. 너무 짧은 코스는 그대로.
+ */
+export function straightEnds(cl: Polyline, o: { windowM: number; tolDeg: number; maxTrimM: number } = cfg.gpxEnds): { s0: number; s1: number } {
+  const L = cl.length;
+  if (!(L >= 2 * (o.maxTrimM + o.windowM) + 100)) return { s0: 0, s1: L };
+  const tol = (o.tolDeg * Math.PI) / 180;
+  const straight = (a: number, b: number) => {
+    const c = chordPsi(cl, a, b);
+    // 1 m 걸음마다의 현 방향 (중심선 점이 1 m 칸에 딱 맞지 않아도 잘라 낸 선의 첫 칸과 같게)
+    for (let t = a; t + 1 <= b + 1e-9; t += 1) if (Math.abs(wrapAngle(chordPsi(cl, t, t + 1) - c)) > tol) return false;
+    return true;
+  };
+  let s0 = 0;
+  while (s0 <= o.maxTrimM && !straight(s0, s0 + o.windowM)) s0++;
+  if (s0 > o.maxTrimM) s0 = 0;
+  let e = 0;
+  while (e <= o.maxTrimM && !straight(L - e - o.windowM, L - e)) e++;
+  if (e > o.maxTrimM) e = 0;
+  return { s0, s1: L - e };
+}
+
 /** 평면 중심선으로 코스 저장 형식의 중심선·길이·구간을 채운다 */
 export function withCenterline(course: Course, p: Polyline): Course {
   // 길이는 저장하는(소수 7자리로 반올림한) 중심선 기준으로 계산해, 다시 불러온 기하와 같게 한다
