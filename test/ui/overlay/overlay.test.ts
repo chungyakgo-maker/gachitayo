@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeCtx } from './fakeCtx';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../../../src/ui/overlay/draw';
 import { frameFromLive, headline, widgetValue, type OverlayFrame } from '../../../src/ui/overlay/frame';
-import { drawMiniMap, fitView, followView, mapModel } from '../../../src/ui/overlay/minimap';
+import { anchorPadding, COURSE_DONE, COURSE_LINE, drawMiniMap, fitView, followView, mapModel, ME_ANCHOR, PATH_STYLE } from '../../../src/ui/overlay/minimap';
 import { overlayTheme } from '../../../src/ui/overlay/theme';
 import type { Course } from '../../../src/types/course';
 
@@ -83,6 +83,14 @@ describe('오버레이 상태 (시각 t의 주행 상태, 사양서 13.1)', () =
     expect(frameFromLive(snap, true, false).ghost).toBeNull();
     expect(frameFromLive(snap, false, false)).toMatchObject({ ghost: null, path: [[0, 0], [1, 0], [2, 0]] });
     expect(frameFromLive(null, true, true)).toMatchObject({ hasState: false, speedKmh: null, me: null });
+  });
+
+  it('코스 주행 진행 (사용자 요청 "지나온 길은 코스 선을 옅게"): 랩 안이면 코스 위치 s, 랩 밖이나 코스가 없으면 없음', () => {
+    const st = (p: Record<string, unknown>) => ({ t: 0, state: { lapNo: 1, lapElapsedMs: 5000, s: 120, onCourse: true, speedKmh: 40, ...p }, frame: 'course' as const, origin: null, utcOffsetMs: null, pos: null, gps: { ready: true, hAcc: 4, ageMs: 0 }, calibration: { state: 'calibrated' as const, stillProgress: 1, signsConfirmed: true, motionActive: true }, ghost: null, path: [], pathFrom: 0, pathDropped: 0 }) as never;
+    expect(frameFromLive(st({}), true, false).courseS).toBe(120);
+    expect(frameFromLive(st({ lapElapsedMs: null }), true, false).courseS).toBeNull();
+    expect(frameFromLive(st({ s: null }), true, false).courseS).toBeNull();
+    expect(frameFromLive(st({}), false, false).courseS).toBeNull();
   });
 });
 
@@ -207,6 +215,51 @@ describe('미니맵 (지도 모드, 사양서 8.4)', () => {
     const v = drawMiniMap(b.ctx, 390, 500, mapModel(null), frame({ ghost: null, path, me: { x: 60, y: 10 } }), th);
     expect(v).not.toBeNull();
     expect(b.calls.filter((c) => c.op === 'lineTo').length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('지도 선 (사용자 요청 "빨간 지나온 길은 처음 기록할 때만, 코스 주행은 지나온 코스 선을 옅게")', () => {
+  const styles = (calls: Array<{ op: string; strokeStyle: unknown }>) => new Set(calls.filter((c) => c.op === 'stroke').map((c) => String(c.strokeStyle)));
+  const path = [[0, 0], [0, 50], [0, 100]] as const;
+
+  it('코스 주행: 빨간 지나온 길 없음. 지나온 코스 선은 옅게, 남은 코스 선은 밝게(하얀 테두리)', () => {
+    const { ctx, calls } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, mapModel(course), frame({ ghost: null, path, courseS: 60 }), th);
+    const used = styles(calls);
+    expect(used.has(PATH_STYLE.line)).toBe(false);
+    expect(used.has(PATH_STYLE.glow)).toBe(false);
+    expect(used.has(COURSE_DONE.line)).toBe(true);
+    expect(used.has(COURSE_LINE.line)).toBe(true);
+    expect(used.has(COURSE_LINE.outline)).toBe(true);
+  });
+
+  it('코스 주행인데 아직 랩 전이면 코스 선 전체가 밝게', () => {
+    const { ctx, calls } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, mapModel(course), frame({ ghost: null, path, courseS: null }), th);
+    expect(styles(calls).has(COURSE_DONE.line)).toBe(false);
+    expect(styles(calls).has(PATH_STYLE.line)).toBe(false);
+  });
+
+  it('처음 기록(코스 없음): 빨간 지나온 길 그대로', () => {
+    const { ctx, calls } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, mapModel(null), frame({ ghost: null, path, me: { x: 0, y: 100 } }), th);
+    expect(styles(calls).has(PATH_STYLE.line)).toBe(true);
+  });
+});
+
+describe('내 위치 자리 (사용자 요청 "더 아래로, 앞쪽 경로가 더 잘 보이게")', () => {
+  it('나를 가운데·진행 방향 위: 가려지지 않은 영역의 위에서 75% 자리', () => {
+    expect(ME_ANCHOR).toBe(0.75);
+    const me = { x: 100, y: 50, psi: 0 };
+    // 위 100 px, 아래 120 px 가림 → 보이는 영역 280 px → 100 + 210
+    const v = followView(me, 390, 500, { spanM: 300, insetBottom: 120, top: 100, anchor: ME_ANCHOR });
+    expect(v.P(100, 50)).toEqual([195, 310]);
+  });
+
+  it('선 지도 카메라 여백: 여백 안 가운데가 같은 75% 자리', () => {
+    const pad = anchorPadding({ top: 100, bottom: 120 }, 500, ME_ANCHOR);
+    expect(pad).toEqual({ top: 240, bottom: 120 });
+    expect((pad.top + (500 - pad.bottom)) / 2).toBe(310);
   });
 });
 
