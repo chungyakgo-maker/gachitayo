@@ -29,8 +29,10 @@ function pair(v: unknown, what: string): [number, number] {
 // ── 닉네임 ────────────────────────────────────────────
 
 export async function getMe(env: Cloudflare.Env, userId: string) {
-  const row = await env.DB.prepare('SELECT id, nickname FROM users WHERE id = ?').bind(userId).first<{ id: string; nickname: string }>();
-  return { userId: row!.id, nickname: row!.nickname };
+  const row = await env.DB.prepare("SELECT id, nickname, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'kakao') AS kakao FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ id: string; nickname: string; kakao: number }>();
+  return { userId: row!.id, nickname: row!.nickname, kakao: row!.kakao === 1 };
 }
 
 export async function putMe(env: Cloudflare.Env, userId: string, nickname: string) {

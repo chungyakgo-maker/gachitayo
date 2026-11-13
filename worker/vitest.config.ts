@@ -10,7 +10,7 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: './wrangler.toml' },
         miniflare: {
-          bindings: { ALLOWED_ORIGIN: 'https://example.github.io', TEST_MIGRATIONS: migrations },
+          bindings: { ALLOWED_ORIGIN: 'https://example.github.io', KAKAO_REST_API_KEY: 'test-rest-key', KAKAO_CLIENT_SECRET: 'test-secret', TEST_MIGRATIONS: migrations },
         },
       }),
     ],

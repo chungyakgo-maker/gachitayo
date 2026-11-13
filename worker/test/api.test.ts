@@ -76,7 +76,7 @@ describe('익명 계정 (폰 열쇠)', () => {
     expect(u.userId).toMatch(/^[0-9a-f-]{36}$/);
     expect(u.token.length).toBeGreaterThanOrEqual(40);
     const me = await call('GET', '/api/me', { token: u.token });
-    expect(await me.json()).toEqual({ userId: u.userId, nickname: '지훈' });
+    expect(await me.json()).toEqual({ userId: u.userId, nickname: '지훈', kakao: false });
     const row = await env.DB.prepare('SELECT token_hash FROM users WHERE id = ?').bind(u.userId).first<{ token_hash: string }>();
     expect(row!.token_hash).not.toContain(u.token);
     expect(row!.token_hash).toMatch(/^[0-9a-f]{64}$/);
