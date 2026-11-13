@@ -2,6 +2,7 @@
 //
 // 아이폰 사파리는 공유 창을 버튼 탭 직후에만 열어 준다. 그래서 파일 만들기(시간이 걸림)와
 // 공유하기(탭에서 바로 호출)를 두 단계로 나눈다.
+import { isApp } from '../platform';
 import { buildRawFile } from './rawFile';
 import { gzipJson } from './gzip';
 import type { SessionRepo } from './sessionRepo';
@@ -37,8 +38,30 @@ export async function prepareRawFile(
   return new File([JSON.stringify(raw)], name, { type: 'application/json' });
 }
 
+/** 파일 → base64 (앱 파일 쓰기용) */
+async function toBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/** 아이폰 앱(사양서 13.3): 앱 안에서는 내려받기 링크가 안 되므로 앱 임시 폴더에 쓰고 아이폰 공유창으로 연다 */
+async function shareInApp(file: File): Promise<'shared' | 'cancelled'> {
+  const [{ Filesystem, Directory }, { Share }] = await Promise.all([import('@capacitor/filesystem'), import('@capacitor/share')]);
+  const { uri } = await Filesystem.writeFile({ path: file.name, data: await toBase64(file), directory: Directory.Cache });
+  try {
+    await Share.share({ title: file.name, files: [uri] });
+    return 'shared';
+  } catch (e) {
+    if (e instanceof Error && /cancel/i.test(e.message)) return 'cancelled';
+    throw e;
+  }
+}
+
 /** 2단계: 버튼 탭 처리 안에서 바로 부른다. */
 export async function shareOrDownload(file: File): Promise<'shared' | 'downloaded' | 'cancelled'> {
+  if (isApp()) return shareInApp(file);
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: file.name });

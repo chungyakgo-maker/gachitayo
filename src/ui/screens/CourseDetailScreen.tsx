@@ -15,11 +15,13 @@ import { formatLapTime, formatLength } from '../format';
 import { IconBack } from '../icons';
 import { PIN_LABEL } from '../map/courseStyle';
 import type { MapShape } from '../map/leafletMap';
-import { NAV_APP_LABEL, NAV_APP_WITH, navUrl, platformOf, storeUrl, type NavApp } from '../navLinks';
+import { NAV_APP_LABEL, NAV_APP_WITH, navUrl, openNavApp, platformOf, storeUrl, type NavApp } from '../navLinks';
+import { isApp } from '../../platform';
 import { useBestTimes } from './useBestTimes';
 
-/** 출발점·도착점을 네이버 지도·카카오맵으로 열기 (사용자 요청). 앱이 없으면 설치 화면 링크 */
-function NavOpen({ course }: { course: Course }) {
+/** 출발점·도착점을 네이버 지도·카카오맵으로 열기 (사용자 요청). 앱이 없으면 설치 화면 링크.
+ *  아이폰 앱(사양서 13.3)에서는 버튼으로 바깥 내비 앱을 열고, 없으면 앱스토어 */
+export function NavOpen({ course }: { course: Course }) {
   const platform = platformOf(typeof navigator === 'undefined' ? '' : navigator.userAgent);
   const appname = typeof window === 'undefined' ? 'gachitayo' : `${window.location.origin}${window.location.pathname}`;
   const loop = course.kind === 'loop';
@@ -34,11 +36,19 @@ function NavOpen({ course }: { course: Course }) {
       {points.map((p) => (
         <div key={p.label} className="nav-open-row">
           <span className="nav-open-label">{p.label}</span>
-          {apps.map((app) => (
-            <a key={app} className="btn small" href={navUrl(app, { lat: p.at.lat, lon: p.at.lon, name: p.name }, platform, appname)} aria-label={`${p.label}까지 ${NAV_APP_WITH[app]} 길안내`}>
-              {NAV_APP_LABEL[app]}
-            </a>
-          ))}
+          {apps.map((app) => {
+            const point = { lat: p.at.lat, lon: p.at.lon, name: p.name };
+            const label = `${p.label}까지 ${NAV_APP_WITH[app]} 길안내`;
+            return isApp() ? (
+              <button key={app} type="button" className="btn small" onClick={() => void openNavApp(app, point)} aria-label={label}>
+                {NAV_APP_LABEL[app]}
+              </button>
+            ) : (
+              <a key={app} className="btn small" href={navUrl(app, point, platform, appname)} aria-label={label}>
+                {NAV_APP_LABEL[app]}
+              </a>
+            );
+          })}
         </div>
       ))}
       <span className="sub">
