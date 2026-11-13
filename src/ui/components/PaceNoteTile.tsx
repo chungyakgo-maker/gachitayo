@@ -1,11 +1,11 @@
-// 커브 표지판 칸 (사양서 8.4, 사용자 요청 시안): 지도 모드 위쪽 칸 중 하나. 큰 표지판 + 남은 거리,
+// 커브 표지판 칸 (사양서 8.4, 사용자 요청 시안): 지도 모드 위쪽 오른쪽 칸 자리의 테두리 없는 가상 칸. 칸 높이만큼 큰 표지판 + 남은 거리,
 // 바로 이어지는 커브는 거리 아래 작은 표지판 (글자 "이어서"·조여짐·풀림·길게는 두지 않는다, 사용자 요청).
 // 다음 커브가 보이는 거리 밖이거나 랩 밖이면 회색 직진 표지판.
 import type { UpcomingNote } from '../../engine/course/paceNotes';
 import { PaceIdleSign, PaceNoteSign } from './PaceNoteSign';
 
-const MAIN = 74;
-const MINI = 34;
+const MAIN = 100;
+const MINI = 42;
 
 export function PaceNoteTile({ up }: { up: UpcomingNote | null }) {
   return (

@@ -3,7 +3,8 @@
 import type { PaceGrade, PaceMod } from '../../engine/course/paceNotes';
 
 const THEME = {
-  left: { bg: '#aacae6', fg: '#0d1a26' },
+  // 하늘색이 아니라 파랑에 가깝게 (사용자 요청)
+  left: { bg: '#84a2f5', fg: '#0a1640' },
   right: { bg: '#f4a7a3', fg: '#3b0f0d' },
 } as const;
 

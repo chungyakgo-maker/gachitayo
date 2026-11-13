@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PaceNoteSign } from '../../src/ui/components/PaceNoteSign';
-import { PaceNoteTile } from '../../src/ui/components/PaceNoteHud';
+import { PaceNoteTile } from '../../src/ui/components/PaceNoteTile';
 import type { PaceNote } from '../../src/engine/course/paceNotes';
 
 const note = (p: Partial<PaceNote>): PaceNote => ({ s0: 100, s1: 150, dir: 'left', grade: 3, mod: null, angleDeg: 80, radiusM: 40, ...p });
 
 describe('커브 표지판 (사양서 8.4, 시안)', () => {
-  it('왼쪽은 연한 파랑, 숫자는 위쪽 정가운데', () => {
+  it('왼쪽은 파랑(하늘색 말고, 사용자 요청), 숫자는 위쪽 정가운데', () => {
     const { container } = render(<PaceNoteSign dir="left" grade={3} />);
     const svg = screen.getByRole('img', { name: '왼쪽 3' });
-    expect(svg.querySelector('rect')!.getAttribute('fill')).toBe('#aacae6');
+    expect(svg.querySelector('rect')!.getAttribute('fill')).toBe('#84a2f5');
     const text = container.querySelector('text')!;
     expect(text.textContent).toBe('3');
     expect(text.getAttribute('x')).toBe('50');

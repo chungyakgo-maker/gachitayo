@@ -8,7 +8,7 @@ import { useAccount } from '../../app/account';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
-import { MAP_VIEW_LABEL, updateSettings, useSettings, WIDGET_LABEL, type DriveMode } from '../../app/settings';
+import { MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DriveMode } from '../../app/settings';
 import { Sheet } from '../components/Sheet';
 import { formatDayKst, formatLapTime, formatLength } from '../format';
 import { IconBack, IconCheck, IconChevron, IconGps, IconPhone, IconPin, IconWarn } from '../icons';
@@ -215,7 +215,7 @@ export function PrepareScreen() {
         <span className="card-col" style={{ gap: 3 }}>
           <span className="label">상단 표시 값</span>
           <span style={{ fontSize: 15, fontWeight: 600 }}>
-            델타 + {WIDGET_LABEL[settings.widgets[0]]} · {WIDGET_LABEL[settings.widgets[1]]}
+            {topSummary(settings)}
           </span>
         </span>
         <IconChevron size={20} color="#9AA1A9" />

@@ -17,7 +17,7 @@ import type { RefLapRecord } from '../../types/drive';
 import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
 import { ReplayBar } from '../components/ReplayBar';
-import { PaceNoteTile } from '../components/PaceNoteHud';
+import { PaceNoteTile } from '../components/PaceNoteTile';
 import { buildGeometry } from '../../engine/course/geometry';
 import { paceNotes, upcomingNote } from '../../engine/course/paceNotes';
 import { OverlayCanvas } from '../components/OverlayCanvas';
@@ -81,7 +81,7 @@ export function gpsStateOf(snap: LiveSnapshot | null): GpsState {
 }
 
 /** 지도 모드 상단의 고른 값 한 칸 (캔버스) */
-function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th: OverlayTheme }) {
+function WidgetCanvas({ id, frame, th }: { id: Exclude<WidgetId, 'pace' | 'none'>; frame: OverlayFrame; th: OverlayTheme }) {
   if (id === 'g') {
     return <OverlayCanvas className="tile g" label={gMeterLabel(frame)} draw={(ctx, w, h) => drawGTile(ctx, w, h, frame, th)} />;
   }
@@ -296,6 +296,18 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   const me = frame.me;
   const mapView = settings.mapView;
   const headPsi = headSm ?? me?.psi ?? null;
+  // 커브 표지판 (사용자 요청 시안): 랩 안에서 코스 위에 있을 때만 다음 커브 (출발선 전·돌아오는 길·코스 밖에서는 지나온 커브를 가리키게 되므로).
+  // 코스가 없으면(코스 선 없음) 칸을 비운다
+  const slotOf = (id: WidgetId, key: number) => {
+    if (id === 'none') return null;
+    if (id === 'pace') {
+      if (!pace) return null;
+      const up = st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null;
+      return <PaceNoteTile key={key} up={up} />;
+    }
+    return <WidgetCanvas key={key} id={id} frame={frame} th={th} />;
+  };
+  const slots = settings.widgets.map(slotOf);
   const mapRot = mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
   return (
     // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
@@ -320,28 +332,23 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />
         <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 10 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
         {/* 속도: 일반 내비처럼 오른쪽 아래, 칸 없이 숫자만 (사용자 요청 시안) */}
-        <div className="map-speed" style={{ bottom: ins.bottom + 30 }} aria-label={`속도 ${kmh(st?.speedKmh ?? null)} km/h`}>
+        <div className="map-speed" style={{ bottom: ins.bottom + 30 }} role="img" aria-label={`속도 ${kmh(st?.speedKmh ?? null)} km/h`}>
           {kmh(st?.speedKmh ?? null)}
         </div>
         <div className="drive-bottom" ref={bottomRef}>
           {end(false)}
         </div>
       </div>
+      {/* 위쪽 칸 1(델타)·칸 2(왼쪽)·칸 3(오른쪽): 설정에서 고른 값, 표시 안 함이면 비운다 (사용자 요청) */}
       <div className="drive-pad" ref={padRef}>
-        <OverlayCanvas
-          className={`delta-panel delta-map ${h.cls}`}
-          label={deltaLabel}
-          draw={(ctx, w, hh) => drawDeltaPanel(ctx, w, hh, frame, th, { deltaPx: hh >= 104 ? 64 : 48 })}
-        />
-        <div className="widget-row">
-          <WidgetCanvas id={settings.widgets[0]} frame={frame} th={th} />
-          {/* 커브 표지판: 위쪽 오른쪽 칸 (사용자 요청 시안). 랩 안에서 코스 위에 있을 때만 다음 커브 (출발선 전·돌아오는 길·코스 밖에서는 지나온 커브를 가리키게 되므로) */}
-          {pace && pace.notes.length > 0 ? (
-            <PaceNoteTile up={st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null} />
-          ) : (
-            <WidgetCanvas id={settings.widgets[1]} frame={frame} th={th} />
-          )}
-        </div>
+        {settings.topDelta && (
+          <OverlayCanvas
+            className={`delta-panel delta-map ${h.cls}`}
+            label={deltaLabel}
+            draw={(ctx, w, hh) => drawDeltaPanel(ctx, w, hh, frame, th, { deltaPx: hh >= 104 ? 64 : 48 })}
+          />
+        )}
+        {slots.some((c) => c !== null) && <div className="widget-row">{slots.map((c, i) => c ?? <div key={i} className="tile-empty" aria-hidden="true" />)}</div>}
       </div>
     </div>
   );

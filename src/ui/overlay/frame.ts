@@ -125,7 +125,7 @@ export interface ValueTile {
 }
 
 /** 상단 표시 값 한 칸 (G미터 제외, 사양서 8.3.1) */
-export function widgetValue(id: Exclude<WidgetId, 'g'>, f: OverlayFrame): ValueTile {
+export function widgetValue(id: Exclude<WidgetId, 'g' | 'pace' | 'none'>, f: OverlayFrame): ValueTile {
   const label = WIDGET_LABEL[id];
   if (id === 'gap') {
     const g = f.gap;
