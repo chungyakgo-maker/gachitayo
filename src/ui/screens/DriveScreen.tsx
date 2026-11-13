@@ -17,7 +17,7 @@ import type { RefLapRecord } from '../../types/drive';
 import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
 import { ReplayBar } from '../components/ReplayBar';
-import { PACE_HUD_RESERVE_PX, PaceNoteHud } from '../components/PaceNoteHud';
+import { PaceNoteTile } from '../components/PaceNoteHud';
 import { buildGeometry } from '../../engine/course/geometry';
 import { paceNotes, upcomingNote } from '../../engine/course/paceNotes';
 import { OverlayCanvas } from '../components/OverlayCanvas';
@@ -307,8 +307,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
           frame={frame}
           origin={snap?.origin ?? null}
           th={th}
-          // 커브 표지판 자리만큼 위를 비워, 나를 가운데 보기에서도 내 차가 표지판에 가려지지 않게 (사용자 요청)
-          insetTop={ins.top + (pace && pace.notes.length > 0 ? PACE_HUD_RESERVE_PX : 0)}
+          insetTop={ins.top}
           insetBottom={ins.bottom}
           label={mapLabel}
           friend={front}
@@ -320,14 +319,10 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
         <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />
         <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 10 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
-        {/* 커브 표지판: 위쪽 칸 3개 바로 아래 정가운데 (사용자 요청 시안) */}
-        {pace && pace.notes.length > 0 && (
-          <PaceNoteHud
-            style={{ top: ins.top + 10 }}
-            // 랩 안에서 코스 위에 있을 때만 (출발선 전·도착 뒤 돌아오는 길·코스 밖에서는 지나온 커브를 가리키게 되므로, 검토 지적)
-            up={st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null}
-          />
-        )}
+        {/* 속도: 일반 내비처럼 오른쪽 아래, 칸 없이 숫자만 (사용자 요청 시안) */}
+        <div className="map-speed" style={{ bottom: ins.bottom + 30 }} aria-label={`속도 ${kmh(st?.speedKmh ?? null)} km/h`}>
+          {kmh(st?.speedKmh ?? null)}
+        </div>
         <div className="drive-bottom" ref={bottomRef}>
           {end(false)}
         </div>
@@ -340,7 +335,12 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         />
         <div className="widget-row">
           <WidgetCanvas id={settings.widgets[0]} frame={frame} th={th} />
-          <WidgetCanvas id={settings.widgets[1]} frame={frame} th={th} />
+          {/* 커브 표지판: 위쪽 오른쪽 칸 (사용자 요청 시안). 랩 안에서 코스 위에 있을 때만 다음 커브 (출발선 전·돌아오는 길·코스 밖에서는 지나온 커브를 가리키게 되므로) */}
+          {pace && pace.notes.length > 0 ? (
+            <PaceNoteTile up={st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null} />
+          ) : (
+            <WidgetCanvas id={settings.widgets[1]} frame={frame} th={th} />
+          )}
         </div>
       </div>
     </div>

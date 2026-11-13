@@ -105,3 +105,14 @@ export function PaceNoteSign({ dir, grade, mod = null, size = 96 }: PaceNoteSign
     </svg>
   );
 }
+
+/** 앞에 보일 커브가 없을 때: 회색 직진 표지판 (글자 없음) */
+export function PaceIdleSign({ size = 96 }: { size?: number }) {
+  return (
+    <svg className="pace-sign idle" viewBox="0 0 100 100" width={size} height={size} role="img" aria-label="앞에 커브 없음">
+      <rect x="1" y="1" width="98" height="98" rx="14" fill="#2a2e33" stroke="rgba(255,255,255,.08)" strokeWidth="2" />
+      <path d="M50 84 L50 34" fill="none" stroke="#6b737c" strokeWidth="9" strokeLinecap="round" />
+      <polygon points="50,20 39,36 61,36" fill="#6b737c" />
+    </svg>
+  );
+}
