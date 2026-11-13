@@ -129,7 +129,7 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
   });
 
   it('재생 중에도 같은 나침반 버튼 (재생·주행 같은 지도)', () => {
-    render(<DriveView {...props({ replay: { label: '가상', speed: 5, ended: false } })} />);
+    render(<DriveView {...props({ replay: { label: '가상', speed: 5, ended: false, playing: true, posMs: 0, endMs: 60_000, preparing: null, seekable: true, returnTo: '#/dev/replay' } })} />);
     expect(screen.getByRole('button', { name: /^지도 보기: 전체 코스/ })).toBeInTheDocument();
   });
 

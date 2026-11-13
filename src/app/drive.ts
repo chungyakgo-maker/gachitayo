@@ -8,6 +8,7 @@ import { nearestCourse } from '../engine/course/nearest';
 import { LivePipeline, type LiveSnapshot } from '../engine/live/livePipeline';
 import type { LiveRef } from '../engine/live/liveEngine';
 import { processDrive } from '../engine/process/processDrive';
+import { buildReplayTimeline, type ReplayTimeline } from './replayTimeline';
 import type { Course, CourseKind } from '../types/course';
 import type { DriveResultRecord, RefLapRecord } from '../types/drive';
 import type { GpsSample, RawMotionSample } from '../types/samples';
@@ -30,10 +31,31 @@ import { changeProposedKind, loadRaw, processStoredSession, saveProposedCourse, 
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
 
+/** 재생 정보 (사양서 10.2: 재생 막대) */
+export interface ReplayInfo {
+  label: string;
+  speed: number;
+  /** 끝에 닿아 멈췄다 */
+  ended: boolean;
+  playing: boolean;
+  /** 지금 위치 (ms, 세션 시계) */
+  posMs: number;
+  endMs: number;
+  /** 시작할 때 전부 계산하는 중이면 0~1, 아니면 null */
+  preparing: number | null;
+  /** 재생 막대로 옮길 수 있다 (가상 친구 따라가기만 아니다) */
+  seekable: boolean;
+  /** 끝내면 돌아갈 화면 */
+  returnTo: string;
+}
+
+/** 배속 버튼 순서 (사양서 10.2) */
+export const REPLAY_SPEEDS = [1, 5, 10, 20] as const;
+
 export interface DriveState {
   phase: DrivePhase;
   /** 재생 모드면 재생 정보 */
-  replay: { label: string; speed: number; ended: boolean } | null;
+  replay: ReplayInfo | null;
   courses: Course[];
   course: Course | null;
   /** 사용자가 직접 골랐으면 더는 자동 감지로 바꾸지 않는다 */
@@ -330,14 +352,69 @@ export async function resumeDrive(sessionId: string): Promise<void> {
 
 // ── 재생 모드 (사양서 10.2) ──────────────────────────────
 
-export type ReplaySource = { kind: 'session'; id: string } | { kind: 'sim'; withRef: boolean } | { kind: 'friendSim' };
+export type ReplaySource = { kind: 'session'; id: string } | { kind: 'sim'; withRef: boolean } | { kind: 'friendSim' } | { kind: 'course'; course: Course };
 
 let replayTimer: (() => void) | null = null;
+/** 다 계산해 둔 재생 (재생 막대) */
+let timeline: ReplayTimeline | null = null;
+/** 가장 나중에 시작한 재생의 취소 표시 (끝내거나 새 재생을 시작하면 aborted) */
+let activeReplay: { aborted: boolean } | null = null;
+
+/** 코스 모의주행 (사용자 요청 "코스를 미리 보고 싶을 때"): 가상 차가 코스를 한 번 달린다. 비교 랩 없음, 5×로 시작 */
+export function startCoursePreview(course: Course): Promise<void> {
+  return startReplay({ kind: 'course', course }, 5);
+}
+
+function patchReplay(p: Partial<ReplayInfo>): void {
+  if (state.replay) set({ replay: { ...state.replay, ...p } });
+}
+
+/** 0.1초마다: 재생 중이면 배속만큼 앞으로. 끝에 닿으면 그 자리에서 멈춘다 */
+function stepPlayer(): void {
+  const r = state.replay;
+  if (!r || !timeline || !r.playing) return;
+  const posMs = Math.min(r.endMs, r.posMs + 100 * r.speed);
+  const ended = posMs >= r.endMs;
+  patchReplay({ posMs, playing: !ended, ended });
+  publish(timeline.frameAt(timeline.indexAt(posMs)));
+}
+
+/** 재생 막대로 옮기기: 그 시각 화면을 바로 보여 준다 (재생 중이면 거기서 계속) */
+export function seekReplay(ms: number): void {
+  const r = state.replay;
+  if (!r || !timeline) return;
+  const posMs = Math.min(Math.max(ms, 0), r.endMs);
+  patchReplay({ posMs, ended: false });
+  publish(timeline.frameAt(timeline.indexAt(posMs)));
+}
+
+/** 멈춤·재생. 끝난 뒤 재생하면 처음부터 */
+export function setReplayPlaying(on: boolean): void {
+  const r = state.replay;
+  if (!r || !timeline) return;
+  if (on && (r.ended || r.posMs >= r.endMs)) {
+    patchReplay({ posMs: 0, ended: false, playing: true });
+    publish(timeline.frameAt(0));
+    return;
+  }
+  patchReplay({ playing: on, ended: false });
+}
+
+/** 배속 버튼: 1× → 5× → 10× → 20× → 1× */
+export function cycleReplaySpeed(): void {
+  const r = state.replay;
+  if (!r) return;
+  const i = REPLAY_SPEEDS.findIndex((v) => v === r.speed);
+  patchReplay({ speed: REPLAY_SPEEDS[(i + 1) % REPLAY_SPEEDS.length]! });
+}
 
 /** 저장된 세션이나 가상 주행을 주행 화면에 배속으로 흘려보낸다 (기록·저장 없음) */
 export async function startReplay(src: ReplaySource, speed: number): Promise<void> {
   stopReplay(false);
   set({ error: null });
+  // 이 재생의 취소 표시: 준비 중에 끝내거나 다른 재생을 시작하면(버튼 두 번 누름 등) true. 기다린 뒤마다 확인한다
+  const signal = { aborted: false };
+  activeReplay = signal;
   try {
     let gps: GpsSample[];
     let motion: RawMotionSample[];
@@ -353,6 +430,13 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
       motion = sc.motion;
       friendFeed = { points: sc.friend, lagMs: sc.lagMs, startEpochMs: sc.startEpochMs };
       label = '가상 친구 따라가기';
+    } else if (src.kind === 'course') {
+      const sim = await import('../sim');
+      const d = sim.simulateCourseDrive(src.course);
+      gps = d.gps;
+      motion = d.motion;
+      course = src.course;
+      label = `모의주행 · ${src.course.name}`;
     } else if (src.kind === 'session') {
       const raw = await loadRaw(getRepo(), src.id);
       const session = await getRepo().get(src.id);
@@ -390,13 +474,30 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
       motion = s.motion;
       label = src.withRef ? '가상 주행 (비교 랩 있음)' : '가상 주행 (첫 주행)';
     }
+    if (signal.aborted) return;
     if (gps.length === 0) throw new Error('GPS 기록이 없어 재생할 수 없습니다');
     gps = [...gps].sort((a, b) => a.tRecv - b.tRecv);
     motion = [...motion].sort((a, b) => a.t - b.t);
     const end = Math.max(gps.at(-1)!.tRecv, motion.at(-1)?.t ?? 0);
+    const returnTo = src.kind === 'course' ? `#/course/${src.course.id}` : '#/dev/replay';
+    const info: ReplayInfo = { label, speed, ended: false, playing: true, posMs: 0, endMs: end, preparing: null, seekable: friendFeed === null, returnTo };
+    if (friendFeed === null) {
+      // 시작할 때 전부 계산해 두고(준비 중), 막대·배속으로 꺼내 보여 준다 (사양서 10.2)
+      set({ phase: 'driving', replay: { ...info, playing: false, preparing: 0 }, course, courseChosen: true, refs: ref ? [ref] : [], ref, mode: getSettings().defaultMode });
+      publish(null);
+      go('#/drive');
+      const tl = await buildReplayTimeline({ gps, motion, course, ref: toLiveRef(ref) }, { signal, onProgress: (f) => !signal.aborted && patchReplay({ preparing: f }) });
+      if (signal.aborted) return;
+      timeline = tl;
+      patchReplay({ preparing: null, playing: true, endMs: tl.endMs });
+      publish(tl.frameAt(0));
+      const timer = setInterval(stepPlayer, 100);
+      replayTimer = () => clearInterval(timer);
+      return;
+    }
     pipeline = new LivePipeline({ course: null, ref: null });
     pipeline.setCourse(course, toLiveRef(ref));
-    set({ phase: 'driving', replay: { label, speed, ended: false }, course, courseChosen: true, refs: ref ? [ref] : [], ref, mode: getSettings().defaultMode });
+    set({ phase: 'driving', replay: info, course, courseChosen: true, refs: ref ? [ref] : [], ref, mode: getSettings().defaultMode });
     publish(null);
     setVirtualFollow(friendFeed !== null);
     let simT = 0;
@@ -411,14 +512,17 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
       if (friendFeed)
         while (k < friendFeed.points.length && friendFeed.points[k]!.t - friendFeed.startEpochMs <= simT - friendFeed.lagMs) pushVirtualPoint(friendFeed.points[k++]!);
       publish(pipeline.tick(simT));
+      patchReplay({ posMs: simT });
       if (simT >= end) {
         clearInterval(id);
-        set({ replay: state.replay ? { ...state.replay, ended: true } : null });
+        patchReplay({ ended: true, playing: false });
       }
     }, 100);
     replayTimer = () => clearInterval(id);
     go('#/drive');
   } catch (e) {
+    // 준비 중에 끝냈으면(취소) 알릴 것이 없다
+    if (signal.aborted) return;
     set({ error: `재생할 수 없습니다: ${message(e)}` });
   }
 }
@@ -426,10 +530,14 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
 export function stopReplay(navigate = true): void {
   replayTimer?.();
   replayTimer = null;
+  if (activeReplay) activeReplay.aborted = true;
+  activeReplay = null;
+  timeline = null;
   setVirtualFollow(false);
   if (!state.replay) return;
+  const back = state.replay.returnTo;
   pipeline = null;
   publish(null);
   set({ phase: 'idle', replay: null, course: null, ref: null, refs: [] });
-  if (navigate) go('#/dev/replay');
+  if (navigate) go(back);
 }
