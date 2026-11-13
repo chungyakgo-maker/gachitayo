@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { recreateAccount, updateNickname, useAccount } from '../../app/account';
 import { deleteAccount } from '../../app/deleteAccount';
 import { Overlay } from '../components/Overlay';
+import { isApp } from '../../platform';
+import { LegalLink } from '../legal';
 import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
@@ -257,23 +259,33 @@ export function SettingsScreen() {
           <MountTips />
         </details>
         <DeleteAccountSection />
-        <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
-          <span className="label">개발자 메뉴</span>
-          <a className="list-link" href="#/dev/replay">
-            <span className="card-col" style={{ gap: 3 }}>
-              <strong style={{ fontSize: 15 }}>재생 모드</strong>
-              <span className="sub">저장된 기록이나 가상 주행을 주행 화면에 흘려 확인</span>
-            </span>
-            <IconChevron size={20} color="#9AA1A9" />
-          </a>
-          <a className="list-link" href="#/dev/recorder">
-            <span className="card-col" style={{ gap: 3 }}>
-              <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>
-              <span className="sub">원본 파일(.json.gz / .json) 내보내기</span>
-            </span>
-            <IconChevron size={20} color="#9AA1A9" />
-          </a>
+        <section className="card-col" style={{ gap: 8 }} aria-label="약관">
+          <span className="label">약관</span>
+          <span style={{ fontSize: 15, display: 'flex', gap: 16 }}>
+            <LegalLink kind="privacy">개인정보처리방침</LegalLink>
+            <LegalLink kind="location">위치정보 이용약관</LegalLink>
+          </span>
         </section>
+        {/* 개발자 메뉴는 웹(개발자용)에만. 아이폰 앱에서는 숨긴다 (사양서 13.3) */}
+        {!isApp() && (
+          <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
+            <span className="label">개발자 메뉴</span>
+            <a className="list-link" href="#/dev/replay">
+              <span className="card-col" style={{ gap: 3 }}>
+                <strong style={{ fontSize: 15 }}>재생 모드</strong>
+                <span className="sub">저장된 기록이나 가상 주행을 주행 화면에 흘려 확인</span>
+              </span>
+              <IconChevron size={20} color="#9AA1A9" />
+            </a>
+            <a className="list-link" href="#/dev/recorder">
+              <span className="card-col" style={{ gap: 3 }}>
+                <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>
+                <span className="sub">원본 파일(.json.gz / .json) 내보내기</span>
+              </span>
+              <IconChevron size={20} color="#9AA1A9" />
+            </a>
+          </section>
+        )}
         <footer className="build-info">
           버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
         </footer>
