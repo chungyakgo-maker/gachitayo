@@ -2293,8 +2293,9 @@ html.app-h .modal-backdrop {
   position: relative;
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
+  /* GPS 아이콘과 같은 크기 (사용자 요청) */
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: rgba(16, 17, 20, 0.9);
   border: 1px solid #3a3f45;
@@ -2303,20 +2304,11 @@ html.app-h .modal-backdrop {
 .map-compass .dial svg { transition: transform 0.2s linear; }
 .map-compass .dial .n {
   position: absolute;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 700;
   line-height: 1;
   color: var(--fg);
   transition: transform 0.2s linear;
-}
-.map-compass .name {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(16, 17, 20, 0.85);
-  border: 1px solid #2a2e33;
-  white-space: nowrap;
 }
 .map-compass:active .dial { transform: scale(0.94); }
 
@@ -2422,6 +2414,19 @@ html.app-h .modal-backdrop {
 .nav-open .sub a {
   color: inherit;
   text-decoration: underline;
+}
+
+/* 주행·재생 지도: GPS 아이콘은 나침반과 같은 32 px (사용자 요청). 메인 지도는 그대로 */
+.drive .map-gps {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+}
+
+.drive .map-gps svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* 메인 지도: GPS 아이콘을 누르면 내 위치로 */

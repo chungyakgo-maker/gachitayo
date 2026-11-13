@@ -17,6 +17,9 @@ import type { RefLapRecord } from '../../types/drive';
 import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
 import { ReplayBar } from '../components/ReplayBar';
+import { PACE_HUD_RESERVE_PX, PaceNoteHud } from '../components/PaceNoteHud';
+import { buildGeometry } from '../../engine/course/geometry';
+import { paceNotes, upcomingNote, type PaceNote } from '../../engine/course/paceNotes';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { LiveMap } from '../components/LiveMap';
 import { MapViewButton } from '../components/MapViewButton';
@@ -103,6 +106,11 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   const th = useMemo(() => overlayTheme(settings.deltaPalette), [settings.deltaPalette]);
   // 나침반 바늘용 진행 방향 (지도 자체는 LiveMap이 매 프레임 부드럽게 돌린다. 훅은 모드와 관계없이 늘 부른다)
   const headSm = useSmoothAngle(snap?.pos?.psi);
+  // 커브 표지판 (사양서 8.4): 코스 선에서 한 번 계산해 두고, 지금 코스 위치로 다음 커브를 고른다
+  const pace = useMemo(() => {
+    const cl = course?.centerline ? buildGeometry(course).centerline : null;
+    return cl ? { notes: paceNotes(cl) as PaceNote[], lengthM: cl.length, loop: course!.kind === 'loop' } : null;
+  }, [course]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .replay-bar')) return;
@@ -299,7 +307,8 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
           frame={frame}
           origin={snap?.origin ?? null}
           th={th}
-          insetTop={ins.top}
+          // 커브 표지판 자리만큼 위를 비워, 나를 가운데 보기에서도 내 차가 표지판에 가려지지 않게 (사용자 요청)
+          insetTop={ins.top + (pace && pace.notes.length > 0 ? PACE_HUD_RESERVE_PX : 0)}
           insetBottom={ins.bottom}
           label={mapLabel}
           friend={front}
@@ -310,7 +319,14 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         />
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
         <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />
-        <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 13 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
+        <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 10 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
+        {/* 커브 표지판: 위쪽 칸 3개 바로 아래 정가운데 (사용자 요청 시안) */}
+        {pace && pace.notes.length > 0 && (
+          <PaceNoteHud
+            style={{ top: ins.top + 10 }}
+            up={typeof st?.s === 'number' ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null}
+          />
+        )}
         <div className="drive-bottom" ref={bottomRef}>
           {end(false)}
         </div>

@@ -1,5 +1,5 @@
 // 지도 보기 나침반 버튼 (사용자 요청): 지도 왼쪽 위 버튼 하나를 누를 때마다 전체 코스 → 나를 가운데 → 진행 방향 위.
-// 바늘은 화면에서 북쪽을 가리킨다 (진행 방향 위 보기에서는 지도와 같이 돈다). 옆에 지금 보기 이름.
+// 바늘은 화면에서 북쪽을 가리킨다 (진행 방향 위 보기에서는 지도와 같이 돈다). 보기 이름 글자는 두지 않는다(사용자 요청, 화면 읽기용 이름만). GPS 아이콘과 같은 32 px.
 import type { CSSProperties } from 'react';
 import { MAP_VIEW_LABEL, type MapViewMode } from '../../app/settings';
 
@@ -25,15 +25,14 @@ export function MapViewButton({ view, rot, onChange, style }: MapViewButtonProps
       onClick={() => onChange(next)}
     >
       <span className="dial">
-        <svg width={30} height={30} viewBox="-15 -15 30 30" aria-hidden="true" style={{ transform: `rotate(${(-rot * 180) / Math.PI}deg)` }}>
+        <svg width={20} height={20} viewBox="-15 -15 30 30" aria-hidden="true" style={{ transform: `rotate(${(-rot * 180) / Math.PI}deg)` }}>
           <path d="M0 -12L4.5 0L-4.5 0Z" fill="#ff5b4f" />
           <path d="M0 12L4.5 0L-4.5 0Z" fill="#8a9199" />
         </svg>
-        <span className="n" style={{ transform: `rotate(${(-rot * 180) / Math.PI}deg) translateY(-19px) rotate(${(rot * 180) / Math.PI}deg)` }}>
+        <span className="n" style={{ transform: `rotate(${(-rot * 180) / Math.PI}deg) translateY(-11px) rotate(${(rot * 180) / Math.PI}deg)` }}>
           N
         </span>
       </span>
-      <span className="name">{MAP_VIEW_LABEL[view]}</span>
     </button>
   );
 }

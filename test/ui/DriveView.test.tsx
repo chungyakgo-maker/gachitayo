@@ -116,7 +116,8 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     const onCycle = vi.fn();
     const r = render(<DriveView {...props({ onMapView, onCycle, settings: { ...DEFAULT_SETTINGS, mapTiles: false } })} />);
     const btn = screen.getByRole('button', { name: '지도 보기: 전체 코스 (누르면 나를 가운데)' });
-    expect(btn).toHaveTextContent('전체 코스');
+    // 사용자 요청: 나침반 옆 보기 이름 글자는 없앤다 (화면 읽기용 이름만)
+    expect(btn).not.toHaveTextContent('전체 코스');
     fireEvent.pointerDown(btn);
     fireEvent.pointerDown(btn);
     fireEvent.click(btn);
@@ -158,6 +159,18 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     a.unmount();
     const b = render(<DriveView {...props({ replay: null, replayControls: controls() })} />);
     expect(b.container.querySelector('.replay-bar')).toBeNull();
+  });
+
+  it('커브 표지판 (사양서 8.4): 코스 위치가 커브 앞이면 다음 커브 표지판과 남은 거리', () => {
+    const { container } = render(<DriveView {...props({ snap: snap(state({ s: 40 })) })} />);
+    // 테스트 코스: 북쪽 111 m 뒤 동쪽으로 직각 (오른쪽)
+    expect(screen.getByRole('img', { name: /^오른쪽 / })).toBeInTheDocument();
+    expect(container.querySelector('.pace-hud .pace-dist')!.textContent).toMatch(/^\d+m$/);
+  });
+
+  it('코스 위치를 모르면(출발선 전·코스 밖) 표지판이 없다', () => {
+    render(<DriveView {...props({ snap: snap(state({ s: null })) })} />);
+    expect(screen.queryByRole('img', { name: /^(왼쪽|오른쪽) / })).toBeNull();
   });
 
   it('재생 중에도 같은 나침반 버튼 (재생·주행 같은 지도)', () => {
