@@ -281,3 +281,17 @@ describe('GPS 속도·진행 방향 값이 없는 기기의 주행 후 처리', 
     expect(r.laps.filter((l) => l.valid).length).toBeGreaterThanOrEqual(1);
   });
 });
+
+// 코스 이탈 (설계 docs/superpowers/specs/2026-11-13-off-course-design.md): 랩 안에서 코스를 벗어나 달린 거리
+describe('랩 안에서 코스를 벗어난 거리', () => {
+  const course = courseFromTrack(oval, { gateAtS: 100 });
+  it('코스대로 달리면 거의 0, 반지름이 더 큰 길로 돌면 수백 m', () => {
+    const on = session(base, 71);
+    const r1 = processDrive({ gps: on.gps, motion: on.motion, events: startEvent, course });
+    expect(r1.offCourseM).toBeLessThan(20);
+    const wide = session({ ...base, laps: 2 }, 72, {}, stadiumTrack(400, 120));
+    const r2 = processDrive({ gps: wide.gps, motion: wide.motion, events: startEvent, course });
+    expect(r2.laps.some((l) => l.invalidReason === 'off_course')).toBe(true);
+    expect(r2.offCourseM).toBeGreaterThan(400);
+  });
+});

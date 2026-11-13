@@ -1,6 +1,6 @@
 // 주행 종료 요약 (사양서 8.5, 디자인 시안 Summary)
 import { useEffect, useState } from 'react';
-import { changeKind, processSession, saveCourse, useProcessing } from '../../app/drive';
+import { changeKind, dismissDetourOf, overwriteDetour, processSession, saveCourse, saveDetour, useProcessing } from '../../app/drive';
 import { getDriveRepo, getRepo } from '../../app/recording';
 import { useSync } from '../../app/sync';
 import type { InvalidReason } from '../../engine/course/laps';
@@ -32,6 +32,9 @@ export function SummaryView({
   onRetry,
   onKind,
   onSave,
+  onDetourNew,
+  onDetourOverwrite,
+  onDetourDismiss,
   upload = '폰에 저장됨',
 }: {
   data: Loaded;
@@ -40,6 +43,11 @@ export function SummaryView({
   onRetry: () => void;
   onKind: (k: CourseKind) => void;
   onSave: (name: string) => void;
+  /** 벗어난 길을 새 코스로 (이 주행을 옮긴다) */
+  onDetourNew?: (name: string) => void;
+  /** 지금 코스(내 코스)를 벗어난 길로 덮어쓰기 */
+  onDetourOverwrite?: () => void;
+  onDetourDismiss?: () => void;
   /** 업로드 상태 한 줄 */
   upload?: string;
 }) {
@@ -52,6 +60,10 @@ export function SummaryView({
   const proposed = result?.proposedCourse ?? null;
   const unsaved = result !== null && !result.courseId;
   const shownCourse = course ?? proposed;
+  // 코스를 벗어난 길 (설계 2026-11-13-off-course): 기본 코스는 새 코스로만, 내 코스는 덮어쓰기도
+  const detour = course && result?.detourCourse ? result.detourCourse : null;
+  const [detourName, setDetourName] = useState('');
+  const [askOverwrite, setAskOverwrite] = useState(false);
   const kind = proposed?.kind ?? tried;
 
   return (
@@ -132,6 +144,54 @@ export function SummaryView({
             </>
           )}
           <span className="sub">저장하지 않으면 코스 없이 주행 기록만 남습니다.</span>
+        </section>
+      )}
+
+      {detour && course && !busy && (
+        <section aria-label="벗어난 길 저장" className="newcourse">
+          <div className="card-col">
+            <h2>코스를 벗어난 길로 달렸어요</h2>
+            <span style={{ fontSize: 13 }} className="dim">
+              {course.builtin ? '이 길을 새 코스로 저장할까요?' : '이 길을 새 코스로 저장하거나, 지금 코스를 이 길로 바꿀 수 있어요'}
+            </span>
+          </div>
+          <div className="mini-map" style={{ position: 'relative' }}>
+            <CourseMap variant="mini" course={detour} label="실제로 달린 길 미리보기: 출발선과 도착선" />
+          </div>
+          <span className="sub">
+            {detour.kind === 'loop' ? '랩' : '편도'} · {formatLength(detour.lengthM)} · 코스를 벗어나 달린 거리 {Math.round(result?.offCourseM ?? 0)} m
+          </span>
+          <label htmlFor="detourName" className="label">
+            새 코스 이름
+          </label>
+          <div className="name-row" style={{ marginTop: -6 }}>
+            <input id="detourName" type="text" placeholder={`예: ${course.name} 우회`} value={detourName} maxLength={40} onChange={(e) => setDetourName(e.target.value)} />
+            <button type="button" onClick={() => onDetourNew?.(detourName)}>
+              새 코스로 저장
+            </button>
+          </div>
+          {!course.builtin &&
+            (askOverwrite ? (
+              <div className="notice warn" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+                <span style={{ lineHeight: 1.6 }}>{`'${course.name}' 코스를 이 길로 바꿀까요? 이번 주행은 바뀐 코스로 다시 계산하고, 예전 기록은 예전 버전 기록으로 남아요.`}</span>
+                <div className="modal-actions">
+                  <button type="button" className="btn danger" onClick={() => onDetourOverwrite?.()}>
+                    덮어쓰기
+                  </button>
+                  <button type="button" className="btn" onClick={() => setAskOverwrite(false)}>
+                    취소
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn" onClick={() => setAskOverwrite(true)}>
+                지금 코스 덮어쓰기
+              </button>
+            ))}
+          <button type="button" className="ghost-btn" onClick={() => onDetourDismiss?.()}>
+            안 함
+          </button>
+          <span className="sub">저장하면 이번 주행 기록이 그 코스로 옮겨 가요 (원래 코스 기록에서는 빠져요).</span>
         </section>
       )}
 
@@ -217,6 +277,8 @@ export function SummaryScreen({ sessionId }: { sessionId: string }) {
   const sync = useSync();
   const [data, setData] = useState<Loaded | 'missing' | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // 벗어난 길 제안을 닫으면 다시 읽는다
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -239,7 +301,7 @@ export function SummaryScreen({ sessionId }: { sessionId: string }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // 업로드가 끝나면 세션 상태(업로드됨)를 다시 읽는다
-  }, [sessionId, proc?.state, sync.pending, sync.lastSyncAt]);
+  }, [sessionId, proc?.state, sync.pending, sync.lastSyncAt, reload]);
 
   if (data === 'missing') {
     return (
@@ -270,6 +332,15 @@ export function SummaryScreen({ sessionId }: { sessionId: string }) {
       onKind={(k) => void changeKind(sessionId, k)}
       onSave={(name) => {
         void saveCourse(sessionId, name).then((ok) => setSaveError(ok ? null : '코스를 저장하지 못했습니다'));
+      }}
+      onDetourNew={(name) => {
+        void saveDetour(sessionId, name).then((ok) => setSaveError(ok ? null : '새 코스로 저장하지 못했습니다'));
+      }}
+      onDetourOverwrite={() => {
+        void overwriteDetour(sessionId).then((ok) => setSaveError(ok ? null : '코스를 덮어쓰지 못했습니다'));
+      }}
+      onDetourDismiss={() => {
+        void dismissDetourOf(sessionId).then(() => setReload((n) => n + 1));
       }}
     />
   );

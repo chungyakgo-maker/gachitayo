@@ -27,7 +27,7 @@ import {
 } from './recording';
 import { getSettings, type DriveMode } from './settings';
 import { enqueueSessionUpload } from './sync';
-import { changeProposedKind, loadRaw, processStoredSession, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
+import { changeProposedKind, dismissDetour, loadRaw, overwriteWithDetour, processStoredSession, saveDetourAsNew, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
 
@@ -318,6 +318,25 @@ async function andUpload<T>(sessionId: string, r: T | null): Promise<T | null> {
 
 export async function processSession(sessionId: string, kind?: CourseKind): Promise<DriveResultRecord | null> {
   return andUpload(sessionId, await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
+}
+
+/** 벗어난 길을 새 코스로 저장하고 이 주행을 그 코스로 옮긴다 (코스 이탈) */
+export async function saveDetour(sessionId: string, name: string): Promise<boolean> {
+  const r = await andUpload(sessionId, await track(sessionId, () => saveDetourAsNew(deps(), sessionId, name)));
+  if (r) await loadCourses();
+  return r !== null;
+}
+
+/** 지금 코스(내 코스)를 벗어난 길로 덮어쓴다 */
+export async function overwriteDetour(sessionId: string): Promise<boolean> {
+  const r = await andUpload(sessionId, await track(sessionId, () => overwriteWithDetour(deps(), sessionId)));
+  if (r) await loadCourses();
+  return r !== null;
+}
+
+/** 벗어난 길 저장 제안을 닫는다 */
+export async function dismissDetourOf(sessionId: string): Promise<void> {
+  await dismissDetour(deps(), sessionId);
 }
 
 /** 되살린 기록 다시 계산 (카카오 로그인 되살리기): 서버에 이미 있으니 업로드 대기열에 넣지 않는다 */

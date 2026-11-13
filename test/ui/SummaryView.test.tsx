@@ -95,3 +95,40 @@ describe('주행 종료 요약 (사양서 8.5, 시안 Summary)', () => {
     expect(onRetry).toHaveBeenCalled();
   });
 });
+
+// 벗어난 길 저장 (설계 docs/superpowers/specs/2026-11-13-off-course-design.md): 기본 코스는 새 코스로만, 내 코스는 덮어쓰기도
+describe('요약: 코스를 벗어난 길', () => {
+  const detour: Course = { ...course, id: 'd1', name: '', lengthM: 4600 };
+  const props = () => ({ busy: false, error: null, onRetry: vi.fn(), onKind: vi.fn(), onSave: vi.fn(), onDetourNew: vi.fn(), onDetourOverwrite: vi.fn(), onDetourDismiss: vi.fn() });
+
+  it('내 코스: 새 코스로 저장과 지금 코스 덮어쓰기(한 번 더 확인)를 보인다', () => {
+    const p = props();
+    render(<SummaryView {...p} data={{ session, result: result({ offCourseM: 640, detourCourse: detour }), course }} />);
+    expect(screen.getByText('코스를 벗어난 길로 달렸어요')).toBeInTheDocument();
+    expect(screen.getByText(/코스를 벗어나 달린 거리 640 m/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('새 코스 이름'), { target: { value: '인제 우회' } });
+    fireEvent.click(screen.getByRole('button', { name: '새 코스로 저장' }));
+    expect(p.onDetourNew).toHaveBeenCalledWith('인제 우회');
+    fireEvent.click(screen.getByRole('button', { name: '지금 코스 덮어쓰기' }));
+    expect(p.onDetourOverwrite).not.toHaveBeenCalled();
+    expect(screen.getByText(/'인제 풀코스' 코스를 이 길로 바꿀까요/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '덮어쓰기' }));
+    expect(p.onDetourOverwrite).toHaveBeenCalledTimes(1);
+  });
+
+  it('기본 코스: 덮어쓰기 없이 새 코스로만', () => {
+    render(<SummaryView {...props()} data={{ session, result: result({ offCourseM: 640, detourCourse: detour }), course: { ...course, builtin: 'baehuryeong' } }} />);
+    expect(screen.getByRole('button', { name: '새 코스로 저장' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '지금 코스 덮어쓰기' })).toBeNull();
+  });
+
+  it('안 함을 누르면 닫기를 부르고, 제안이 없으면 카드가 없다', () => {
+    const p = props();
+    const { unmount } = render(<SummaryView {...p} data={{ session, result: result({ offCourseM: 640, detourCourse: detour }), course }} />);
+    fireEvent.click(screen.getByRole('button', { name: '안 함' }));
+    expect(p.onDetourDismiss).toHaveBeenCalledTimes(1);
+    unmount();
+    render(<SummaryView {...props()} data={{ session, result: result(), course }} />);
+    expect(screen.queryByText('코스를 벗어난 길로 달렸어요')).toBeNull();
+  });
+});

@@ -41,6 +41,7 @@ function state(p: Partial<LiveState> = {}): LiveState {
     delta: -0.31,
     s: 100,
     onCourse: true,
+    offCourseM: null,
     gx: -0.31,
     gy: 0.82,
     gEstimated: false,
