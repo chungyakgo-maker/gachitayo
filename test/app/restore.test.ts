@@ -223,24 +223,50 @@ describe('되살리기', () => {
     expect((await rec.getRepo().list()).length).toBe(2);
   });
 
-  it('폰에만 있는 기록은 원본이 있으면 올리고, PC에서 가져온 기록은 올리지 않는다', async () => {
+  it('계산이 실패하면 되살린 것으로 치지 않고, 그 기록을 남기지 않아 다음에 다시 한다', async () => {
+    const a = await serverSession();
     const { rec, restore } = await load();
-    const local = crypto.randomUUID();
+    processRestoredSession.mockResolvedValueOnce(null as never);
+    await restore.startRestore();
+    expect(restore.getRestoreState()).toMatchObject({ done: 0, total: 1, failed: 1 });
+    expect(await rec.getRepo().get(a)).toBeUndefined();
+  });
+
+  it('되살리다 앱이 꺼져 남은 기록(되살리는 중 표시)은 지우고 다시 받는다', async () => {
+    const a = await serverSession();
+    const { rec, restore } = await load();
+    await rec.getRepo().create({ id: a, courseId: null, courseVersion: null, status: 'finished', startedAt: 1, endedAt: null, device, calibration: null, summary: null, restoring: true });
+    await restore.startRestore();
+    expect(processRestoredSession.mock.calls.map((c) => c[0])).toEqual([a]);
+    expect((await rec.getRepo().get(a))!).toMatchObject({ status: 'uploaded' });
+    expect((await rec.getRepo().get(a))!.restoring).toBeFalsy();
+  });
+
+  it('한 번도 올리지 않은 계산된 기록만 올린다: 다른 계정에 올렸던 기록·가져온 기록·중단된 주행·계산 전 기록은 그대로', async () => {
+    const { rec, restore } = await load();
+    const fresh = crypto.randomUUID();
+    const elsewhere = crypto.randomUUID();
     const imported = crypto.randomUUID();
-    const noRaw = crypto.randomUUID();
-    for (const [id, extra] of [
-      [local, { uploadedAt: 99 }],
-      [imported, { imported: true }],
-      [noRaw, { uploadedAt: 99 }],
-    ] as const) {
-      await rec.getRepo().create({ id, courseId: null, courseVersion: null, status: 'uploaded', startedAt: 1, endedAt: null, device, calibration: null, summary: null, ...extra });
-      if (id !== noRaw) await rec.getRepo().putChunk({ sessionId: id, seq: 0, gps, rawMotion: [], events: [] } as never);
+    const interrupted = crypto.randomUUID();
+    const unprocessed = crypto.randomUUID();
+    const rows: Array<[string, Record<string, unknown>, boolean]> = [
+      [fresh, { status: 'processed', uploadedAt: null }, true],
+      [elsewhere, { status: 'uploaded', uploadedAt: 99 }, true],
+      [imported, { status: 'processed', imported: true }, true],
+      [interrupted, { status: 'interrupted' }, false],
+      [unprocessed, { status: 'finished' }, false],
+    ];
+    for (const [id, extra, withResult] of rows) {
+      await rec.getRepo().create({ id, courseId: null, courseVersion: null, status: 'processed', startedAt: 1, endedAt: null, device, calibration: null, summary: null, ...extra } as never);
+      await rec.getRepo().putChunk({ sessionId: id, seq: 0, gps, rawMotion: [], events: [] } as never);
+      if (withResult) await rec.getDriveRepo().putResult({ sessionId: id, courseId: null, courseVersion: null, processedAt: 1, laps: [] } as never);
     }
     await restore.startRestore();
-    const queued = (await rec.getQueueRepo().all()).map((q) => q.targetId);
-    expect(queued).toEqual([local]);
-    expect((await rec.getRepo().get(local))!).toMatchObject({ status: 'processed', uploadedAt: null });
-    expect((await restore.localOnlySessions()).map((s) => s.id).sort()).toEqual([local, imported, noRaw].sort());
+    expect((await rec.getQueueRepo().all()).map((q) => q.targetId)).toEqual([fresh]);
+    expect((await rec.getRepo().get(interrupted))!.status).toBe('interrupted');
+    expect((await rec.getRepo().get(unprocessed))!.status).toBe('finished');
+    expect((await rec.getRepo().get(elsewhere))!).toMatchObject({ status: 'uploaded', uploadedAt: 99 });
+    expect((await restore.localOnlySessions()).map((s) => s.id).sort()).toEqual([fresh, elsewhere, imported, interrupted, unprocessed].sort());
   });
 
   it('주행(기록) 중에는 하지 않고, 끝난 뒤에 한다', async () => {

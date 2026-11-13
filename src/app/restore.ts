@@ -143,12 +143,13 @@ async function restoreOne(s: ServerSession, userId: string, token: string, cours
     device: s.device ?? { os: '', browser: '', userAgent: '', standalone: false },
     calibration: null,
     summary: null,
+    restoring: true,
   });
   try {
     await repo.putChunk({ sessionId: s.id, seq: 0, gps, rawMotion: motion, events, channels });
-    await processRestoredSession(s.id);
+    if (!(await processRestoredSession(s.id))) throw new Error('다시 계산하지 못했어요');
     // 서버에 이미 있는 기록: 다시 올리지 않는다
-    await repo.update(s.id, { status: 'uploaded', uploadedAt: Date.now() });
+    await repo.update(s.id, { status: 'uploaded', uploadedAt: Date.now(), restoring: false });
   } catch (e) {
     await getDriveRepo().deleteSession(s.id);
     throw e;
@@ -181,8 +182,9 @@ async function run(): Promise<void> {
   }
   if (coursesChanged) await loadCourses();
 
-  // 2. 서버에 있고 폰에 없는 기록 (새것부터)
+  // 2. 서버에 있고 폰에 없는 기록 (새것부터). 지난번에 되살리다 앱이 꺼져 남은 것은 지우고 다시 받는다
   const repo = getRepo();
+  for (const s of await repo.list()) if (s.restoring) await drive.deleteSession(s.id);
   const mine = new Set((await repo.list()).map((s) => s.id));
   const todo = sessions.filter((s) => !mine.has(s.id) && s.rawKey);
   set({ done: 0, total: todo.length, failed: 0 });
@@ -199,13 +201,14 @@ async function run(): Promise<void> {
   }
   if (todo.length) await refreshSessions();
 
-  // 3. 이 폰에만 있는 기록: 원본이 남아 있으면 이 계정으로 올린다 (PC에서 가져온 기록은 빼고)
+  // 3. 이 폰에서 계산했지만 한 번도 올리지 않은 기록은 이 계정으로 올린다 (대기열에 없을 때).
+  //    다른 계정(끊긴 계정 등)에 올렸던 기록은 서버에서 그 계정 것이라 올릴 수 없고, 지운 기록이 되살아나면 안 되므로
+  //    올리지 않는다(로그아웃 때 "이 폰에만 있는 기록"으로 알린다). 중단된 주행·계산 전 기록·가져온 기록도 건드리지 않는다
   const onServer = new Set(sessions.map((s) => s.id));
   const queued = new Set((await getQueueRepo().all()).map((q) => q.targetId));
   for (const s of await repo.list()) {
-    if (s.imported || s.status === 'recording' || onServer.has(s.id) || queued.has(s.id)) continue;
-    if ((await repo.chunks(s.id)).length === 0) continue;
-    await repo.update(s.id, { status: 'processed', uploadedAt: null });
+    if (s.status !== 'processed' || s.uploadedAt || s.imported || onServer.has(s.id) || queued.has(s.id)) continue;
+    if (!(await drive.getResult(s.id))) continue;
     await enqueueSessionUpload(s.id);
   }
 }

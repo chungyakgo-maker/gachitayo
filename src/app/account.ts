@@ -62,6 +62,25 @@ function set(patch: Partial<AccountState>): void {
   listeners.forEach((l) => l());
 }
 export const getAccountState = (): AccountState => state;
+
+/** 다른 탭(같은 저장소)에서 로그인·로그아웃하면 이 탭도 따라간다 (카카오 로그인이 다른 탭에서 끝난 경우) */
+function syncFromStorage(): void {
+  token = read(TOKEN_KEY);
+  const userId = read(USER_KEY);
+  set({
+    status: !accountEnabled() ? 'disabled' : token && userId ? 'ready' : 'none',
+    userId,
+    nickname: read(NICKNAME_KEY),
+    onboarded: read(ONBOARDED_KEY) === '1',
+    kakao: read(KAKAO_KEY) === '1',
+    lost: accountEnabled() && !token && userId !== null,
+  });
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === null || e.key === TOKEN_KEY) syncFromStorage();
+  });
+}
 export function subscribeAccount(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
@@ -109,9 +128,11 @@ export async function logoutRemote(): Promise<void> {
   if (state.status === 'ready' && token) await apiFetch('POST', '/auth/logout', { token });
 }
 
-/** 서버가 열쇠를 모른다고 하면(401) 계정이 끊긴 것으로 본다 (사양서 9장: 첫 화면에 경고) */
-export function markAccountLost(): void {
+/** 서버가 열쇠를 모른다고 하면(401) 계정이 끊긴 것으로 본다 (사양서 9장: 첫 화면에 경고).
+ *  usedToken: 401을 받은 요청의 열쇠. 그사이 로그인으로 열쇠가 바뀌었으면(예전 열쇠의 401) 무시한다 */
+export function markAccountLost(usedToken?: string | null): void {
   if (state.status !== 'ready' || finishingLogin > 0) return;
+  if (usedToken != null && (usedToken !== token || read(TOKEN_KEY) !== usedToken)) return;
   token = null;
   write(TOKEN_KEY, null);
   set({ status: 'none', lost: true });
@@ -148,7 +169,7 @@ export function initAccount(): Promise<void> {
         set({ kakao });
       }
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) markAccountLost();
+      if (e instanceof ApiError && e.status === 401) markAccountLost(token);
     }
   })();
   return initPromise;

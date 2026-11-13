@@ -125,6 +125,31 @@ describe('카카오 로그인 시작·마치기 (앱)', () => {
     expect(a.getAccountState()).toMatchObject({ status: 'ready', lost: false });
   });
 
+  it('예전 열쇠로 받은 401은 지금 열쇠를 지우지 않는다', async () => {
+    localStorage.setItem('gachitayo.token', 'new'.repeat(15));
+    localStorage.setItem('gachitayo.userId', 'u1');
+    localStorage.setItem('gachitayo.onboarded', '1');
+    const { a } = await load();
+    a.markAccountLost('old'.repeat(15));
+    expect(a.getAccountState()).toMatchObject({ status: 'ready', lost: false });
+    expect(localStorage.getItem('gachitayo.token')).toBe('new'.repeat(15));
+    a.markAccountLost('new'.repeat(15));
+    expect(a.getAccountState()).toMatchObject({ status: 'none', lost: true });
+  });
+
+  it('다른 탭에서 로그인하면(저장소 이벤트) 이 탭도 새 계정을 쓴다', async () => {
+    localStorage.setItem('gachitayo.token', 'old'.repeat(15));
+    localStorage.setItem('gachitayo.userId', 'u1');
+    localStorage.setItem('gachitayo.onboarded', '1');
+    const { a } = await load();
+    localStorage.setItem('gachitayo.token', 'new'.repeat(15));
+    localStorage.setItem('gachitayo.userId', 'u2');
+    localStorage.setItem('gachitayo.kakao', '1');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'gachitayo.token' }));
+    expect(a.getAuth()).toEqual({ userId: 'u2', token: 'new'.repeat(15) });
+    expect(a.getAccountState().kakao).toBe(true);
+  });
+
   it('주소로 돌아왔을 때(같은 창) 계정 확인보다 먼저 마친다', async () => {
     localStorage.setItem('gachitayo.kakaoLogin', JSON.stringify({ state: STATE, verifier: 'v'.repeat(43), from: '#/', startedAt: Date.now() }));
     const { k, a } = await load();

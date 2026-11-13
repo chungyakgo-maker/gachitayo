@@ -105,12 +105,17 @@ describe('로그아웃', () => {
     const reload = vi.fn();
     logout.logoutNav.reload = reload;
     await rec.getRepo().create(session('a'));
-    await rec.getDriveRepo().putCourse({ id: 'c1', name: 'x', kind: 'loop', source: 'auto', origin: { lat: 1, lon: 2 }, startGate: { lat: 1, lon: 2, bearingDeg: 0, widthM: 30 }, finishGate: { lat: 1, lon: 2, bearingDeg: 0, widthM: 30 }, centerline: null, lengthM: null, sectorBoundsM: null, version: 1 });
+    const c = { id: 'c1', name: 'x', kind: 'loop' as const, source: 'auto' as const, origin: { lat: 1, lon: 2 }, startGate: { lat: 1, lon: 2, bearingDeg: 0, widthM: 30 }, finishGate: { lat: 1, lon: 2, bearingDeg: 0, widthM: 30 }, centerline: null, lengthM: null, sectorBoundsM: null, version: 1 };
+    await rec.getDriveRepo().putCourse(c);
+    // 기본 코스는 남긴다 (설계 5.6, 출발·도착선 고친 것도 그대로)
+    await rec.getDriveRepo().putCourse({ ...c, id: 'b1', name: '배후령', builtin: 'baehuryeong' });
+    await rec.getDriveRepo().putRefLaps([{ id: 'r1', sessionId: 'a', courseId: 'b1', courseVersion: 1, lapNo: 1, lapTimeMs: 60000 } as never]);
     serverIds = ['a'];
     expect(await logout.logout()).toEqual({ ok: true });
     expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/auth/logout'))).toBe(true);
     expect(await rec.getRepo().list()).toEqual([]);
-    expect(await rec.getDriveRepo().listCourses()).toEqual([]);
+    expect((await rec.getDriveRepo().listCourses()).map((c) => c.id)).toEqual(['b1']);
+    expect(await rec.getDriveRepo().refLaps('b1', 1)).toEqual([]);
     for (const k of ['gachitayo.token', 'gachitayo.userId', 'gachitayo.nickname', 'gachitayo.onboarded', 'gachitayo.kakao']) expect(localStorage.getItem(k)).toBeNull();
     expect(localStorage.getItem('gachitayo.settings')).toBe('{"defaultMode":"map"}');
     expect(account.getAccountState()).toMatchObject({ status: 'none', onboarded: false, kakao: false, userId: null });

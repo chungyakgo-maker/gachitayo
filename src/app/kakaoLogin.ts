@@ -24,6 +24,12 @@ export const kakaoNav = { go: (url: string) => window.location.assign(url) };
 
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
+// 다른 탭에서 로그인을 마치거나 취소하면 이 탭의 "진행 중" 표시도 따라간다
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === null || e.key === PENDING_KEY) notify();
+  });
+}
 
 function readStored(): StoredPending | null {
   try {

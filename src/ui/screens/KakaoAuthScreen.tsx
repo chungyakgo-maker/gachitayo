@@ -62,6 +62,9 @@ export function KakaoAuthScreen() {
         <span className="dim" style={{ fontSize: 13, lineHeight: 1.6 }}>
           다른 사람에게 알려 주지 마세요. 10분 동안만 쓸 수 있어요.
         </span>
+        <span className="warn-text" style={{ fontSize: 13, lineHeight: 1.6 }}>
+          이 앱에서 방금 로그인을 시작하지 않았다면 이 창을 닫으세요.
+        </span>
       </main>
     );
   }

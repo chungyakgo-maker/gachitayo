@@ -34,6 +34,7 @@ describe('카카오에서 돌아온 화면', () => {
     expect(screen.getByText('482913')).toBeInTheDocument();
     expect(screen.getByText(/앱으로 돌아가서 이 번호를 입력해 주세요/)).toBeInTheDocument();
     expect(screen.getByText(/다른 사람에게 알려 주지 마세요/)).toBeInTheDocument();
+    expect(screen.getByText('이 앱에서 방금 로그인을 시작하지 않았다면 이 창을 닫으세요.')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

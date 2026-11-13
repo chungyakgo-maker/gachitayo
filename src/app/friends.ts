@@ -94,7 +94,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   try {
     return await apiFetch<T>(method, path, { token: auth.token, body });
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) markAccountLost();
+    if (e instanceof ApiError && e.status === 401) markAccountLost(auth.token);
     throw e;
   }
 }

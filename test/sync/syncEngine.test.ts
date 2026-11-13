@@ -167,6 +167,17 @@ describe('업로드 (사양서 5.4-4, 6.6, 9장)', () => {
     expect(await s.queue.count()).toBe(0);
   });
 
+  it('지우기가 403(다른 계정의 것)이면 다시 시도하지 않고 대기열에서 뺀다 (카카오 로그인 검토)', async () => {
+    const s = await setup({
+      deleteSession: async () => {
+        throw Object.assign(new Error('기록 지우기 실패 (403 다른 사람의 세션)'), { status: 403 });
+      },
+    });
+    await s.queue.enqueue('session-delete', SID, s.getNow());
+    expect(await syncOnce(s.deps)).toMatchObject({ done: 1, failed: 0 });
+    expect(await s.queue.count()).toBe(0);
+  });
+
   it('코스 지우기: 그 코스의 기록 지우기 뒤에 서버 코스 행을 지운다 (넣은 순서)', async () => {
     const s = await setup();
     const CID = '0b0b0b0b-0000-4000-8000-000000000001';
