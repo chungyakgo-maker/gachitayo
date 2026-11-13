@@ -5,12 +5,15 @@ import { VitePWA } from 'vite-plugin-pwa';
 // 화면에 표시할 버전: GitHub Actions에서는 커밋 앞 7자리, 이 밖에서는 'local'
 const appVersion = process.env.GITHUB_SHA?.slice(0, 7) ?? 'local';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // GitHub Pages 하위 경로: https://chungyakgo-maker.github.io/gachitayo/
-  base: '/gachitayo/',
+  // 아이폰 앱(--mode app, 사양서 13.3)은 앱 안 파일이라 상대 경로
+  base: mode === 'app' ? './' : '/gachitayo/',
   plugins: [
     react(),
     VitePWA({
+      // 아이폰 앱에는 서비스워커가 없다 (새 버전은 앱 업데이트로)
+      disable: mode === 'app',
       // 새 버전은 사용자가 '업데이트'를 눌러야 적용 (주행 중 자동 새로고침 방지)
       registerType: 'prompt',
       // 등록은 usePwaUpdate 훅에서 한다
@@ -80,4 +83,4 @@ export default defineConfig({
       },
     ],
   },
-});
+}));
