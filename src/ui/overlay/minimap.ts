@@ -46,10 +46,19 @@ export interface MapView {
 export type { MapViewMode } from '../../app/settings';
 
 /** 나를 가운데 두는 보기: span = 화면 너비에 보일 거리(m), psi = 진행 방향(진행 방향 위일 때) */
-export function followView(me: { x: number; y: number }, w: number, h: number, opts: { spanM: number; insetBottom?: number; top?: number; headingUp?: number | null }): MapView {
+/** 나를 가운데·진행 방향 위 보기에서 내 위치 자리: 가려지지 않은 영역의 위에서 75% (사용자 요청 "더 아래로, 앞쪽 경로가 더 잘 보이게") */
+export const ME_ANCHOR = 0.75;
+
+/** 선 지도 카메라 여백: 여백 안 가운데가 가려지지 않은 영역의 anchor 자리가 되게 (위 여백을 늘린다) */
+export function anchorPadding(ins: { top: number; bottom: number }, h: number, anchor: number): { top: number; bottom: number } {
+  const free = Math.max(0, h - ins.top - ins.bottom);
+  return { top: ins.top + (2 * anchor - 1) * free, bottom: ins.bottom };
+}
+
+export function followView(me: { x: number; y: number }, w: number, h: number, opts: { spanM: number; insetBottom?: number; top?: number; headingUp?: number | null; anchor?: number }): MapView {
   const top = opts.top ?? 0;
   const cx = w / 2;
-  const cy = (top + h - (opts.insetBottom ?? 0)) / 2;
+  const cy = top + (h - (opts.insetBottom ?? 0) - top) * (opts.anchor ?? 0.5);
   const sc = w / Math.max(50, opts.spanM);
   // 진행 방향을 위(북쪽 자리)로: π/2 − psi 만큼 돌린다
   const rot = opts.headingUp === null || opts.headingUp === undefined ? 0 : Math.PI / 2 - opts.headingUp;
@@ -133,6 +142,28 @@ const STYLE = { gate: '#C9CDD2' };
  * 테두리는 하얀색(사용자 요청 "검정색 말고 하얀색"). 지나온 길(빨강)은 이 위에 그린다.
  */
 export const COURSE_LINE = { outline: '#ffffff', outlineW: 10, line: '#9fd0ff', lineW: 6 } as const;
+/** 코스 주행에서 이번 랩에 이미 지나온 코스 선: 옅게 (사용자 요청 "지나온 길이 빨간색이라 더 눈에 띄어 집중이 안 된다") */
+export const COURSE_DONE = { line: 'rgba(159, 208, 255, 0.28)', lineW: 6 } as const;
+
+/** 코스 선을 s(m)에서 둘로 나눈다 (점 사이 거리로) */
+function splitAt(pts: ReadonlyArray<XY>, s: number): [XY[], XY[]] {
+  const done: XY[] = [pts[0]!];
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1]!;
+    const [bx, by] = pts[i]!;
+    const d = Math.hypot(bx - ax, by - ay);
+    if (acc + d >= s) {
+      const f = d > 0 ? (s - acc) / d : 0;
+      const m: XY = [ax + (bx - ax) * f, ay + (by - ay) * f];
+      done.push(m);
+      return [done, [m, ...pts.slice(i)]];
+    }
+    acc += d;
+    done.push(pts[i]!);
+  }
+  return [done, [pts[pts.length - 1]!]];
+}
 
 function polyline(ctx: Ctx, pts: ReadonlyArray<XY>, v: MapView, close: boolean): void {
   ctx.beginPath();
@@ -171,16 +202,29 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.setLineDash([]);
-  if (model.line.length >= 2) {
-    polyline(ctx, model.line, v, model.loop);
-    ctx.strokeStyle = COURSE_LINE.outline;
-    ctx.lineWidth = COURSE_LINE.outlineW;
-    ctx.stroke();
-    ctx.strokeStyle = COURSE_LINE.line;
-    ctx.lineWidth = COURSE_LINE.lineW;
-    ctx.stroke();
+  const hasLine = model.line.length >= 2;
+  if (hasLine) {
+    // 코스 주행: 이번 랩에 지나온 코스 선은 옅게, 남은 코스 선은 밝게 (빨간 지나온 길 대신, 사용자 요청)
+    const s = f.courseS ?? null;
+    const [done, rest] = s !== null && s > 0 ? splitAt(model.line, s) : [[], model.line];
+    if (done.length >= 2) {
+      polyline(ctx, done, v, false);
+      ctx.strokeStyle = COURSE_DONE.line;
+      ctx.lineWidth = COURSE_DONE.lineW;
+      ctx.stroke();
+    }
+    if (rest.length >= 2) {
+      polyline(ctx, rest, v, model.loop && done.length < 2);
+      ctx.strokeStyle = COURSE_LINE.outline;
+      ctx.lineWidth = COURSE_LINE.outlineW;
+      ctx.stroke();
+      ctx.strokeStyle = COURSE_LINE.line;
+      ctx.lineWidth = COURSE_LINE.lineW;
+      ctx.stroke();
+    }
   }
-  if (f.path && f.path.length >= 2) {
+  // 지나온 길(빨강)은 처음 기록할 때(코스 선이 없을 때)만 (사용자 요청)
+  if (!hasLine && f.path && f.path.length >= 2) {
     // 지나온 길: 코스 지도와 같은 빨간 선 + 빛 번짐 (사용자 요청 "너무 옅어서 안 보인다")
     polyline(ctx, f.path, v, false);
     ctx.strokeStyle = PATH_STYLE.glow;

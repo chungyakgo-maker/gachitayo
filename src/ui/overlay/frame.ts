@@ -38,6 +38,8 @@ export interface OverlayFrame {
   ghost: { x: number; y: number } | null;
   /** 지나온 경로 (첫 주행은 처음부터, 코스 주행은 이번 랩만) */
   path?: ReadonlyArray<XY>;
+  /** 코스 주행 진행: 랩 안이면 지금 코스 위치 s (m). 지도에서 지나온 코스 선을 옅게 그린다 (사용자 요청) */
+  courseS?: number | null;
   /** 앞 친구 간격 (M9). 앞 친구를 고르지 않았으면 없음 */
   gap?: GapInfo | null;
 }
@@ -77,6 +79,7 @@ export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, has
     ghost: hasCourse && hasRef && snap?.ghost ? { x: snap.ghost.x, y: snap.ghost.y } : null,
     // 코스가 있으면 이번 랩에서 지나온 길만 (한 바퀴 돌면 코스 전체가 빨개지지 않게)
     path: snap ? (hasCourse ? snap.path.slice(snap.pathFrom) : snap.path) : undefined,
+    courseS: hasCourse && st && st.lapElapsedMs !== null && typeof st.s === 'number' ? st.s : null,
   };
 }
 

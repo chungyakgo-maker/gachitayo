@@ -63,10 +63,9 @@ export interface CourseLayers {
 export function addCourseLayers(map: MapLibreMap): CourseLayers {
   for (const id of SOURCES) map.addSource(`c-${id}`, { type: 'geojson', data: emptyFC() });
   const round = { 'line-join': 'round', 'line-cap': 'round' } as const;
-  // 코스 선: 빛 번짐 + 진한 빨강 + 가운데 밝은 줄
-  map.addLayer({ id: 'c-route-glow', type: 'line', source: 'c-routes', layout: round, paint: { 'line-color': COURSE_STYLE.glow, 'line-width': 16, 'line-opacity': 0.45, 'line-blur': 9 } });
-  map.addLayer({ id: 'c-route', type: 'line', source: 'c-routes', layout: round, paint: { 'line-color': COURSE_STYLE.route, 'line-width': 4 } });
-  map.addLayer({ id: 'c-route-hi', type: 'line', source: 'c-routes', layout: round, paint: { 'line-color': COURSE_STYLE.highlight, 'line-width': 1.2, 'line-opacity': 0.9 } });
+  // 코스 선: 하얀 테두리 + 밝은 하늘색 (주행 지도와 같게, 사용자 요청)
+  map.addLayer({ id: 'c-route-glow', type: 'line', source: 'c-routes', layout: round, paint: { 'line-color': COURSE_STYLE.routeOutline, 'line-width': 9 } });
+  map.addLayer({ id: 'c-route', type: 'line', source: 'c-routes', layout: round, paint: { 'line-color': COURSE_STYLE.route, 'line-width': 5 } });
   // 다른 선 (새 코스의 방향 점선 등)
   map.addLayer({ id: 'c-lines', type: 'line', source: 'c-lines', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'weight'], 'line-opacity': ['get', 'opacity'] } });
   map.addLayer({ id: 'c-dashed', type: 'line', source: 'c-dashed', paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'weight'], 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 1.4] } });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { courseThumbPath } from '../../src/ui/components/CourseThumb';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { CourseThumb, courseThumbPath } from '../../src/ui/components/CourseThumb';
+import { COURSE_STYLE } from '../../src/ui/map/courseStyle';
 import { BUILTIN_COURSES, builtinCourse } from '../../src/courses/builtin';
 import { BUILTIN_POINTS } from '../../src/courses/builtinData';
 
@@ -23,5 +26,18 @@ describe('코스 썸네일 (사용자 요청)', () => {
     const g = courseThumbPath(loop, 64)!;
     expect(g.finish).toBeNull();
     expect(courseThumbPath({ ...c, centerline: null }, 64)).toBeNull();
+  });
+});
+
+// 사용자 요청 "1번": 모든 지도·썸네일의 코스 선을 주행 지도와 같은 하늘색 + 흰 테두리로 (빨간 번짐 없음)
+
+describe('코스 썸네일 색 (모든 지도 같은 하늘색)', () => {
+  const b = BUILTIN_COURSES[0]!;
+  const c = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'x', gateWidthM: 30 });
+  it('선은 흰 테두리 + 하늘색 두 줄뿐이고 빨강이 없다', () => {
+    const html = renderToStaticMarkup(createElement(CourseThumb, { course: c }));
+    const strokes = [...html.matchAll(/<path[^>]*stroke="([^"]+)"/g)].map((m) => m[1]);
+    expect(strokes).toEqual([COURSE_STYLE.routeOutline, COURSE_STYLE.route]);
+    expect(html.toLowerCase()).not.toContain('#ff3b30');
   });
 });

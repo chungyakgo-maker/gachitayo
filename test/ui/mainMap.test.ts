@@ -80,13 +80,17 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     m.destroy();
   });
 
-  it('코스 그리기 (사용자 요청): 빨간 선 + 빛 번짐, 출발·도착 하늘색 핀 + START / FINISH, 출발선 하늘색', async () => {
+  it('코스 그리기 (사용자 요청 "모든 지도에 주행 지도와 같은 코스 선"): 밝은 하늘색 + 하얀 테두리(빨강 없음), 출발·도착 하늘색 핀 + START / FINISH, 출발선 하늘색', async () => {
     const { createMainMap, COURSE_STYLE } = await import('../../src/ui/map/leafletMap');
+    const { COURSE_LINE } = await import('../../src/ui/overlay/minimap');
+    expect(COURSE_STYLE.route).toBe(COURSE_LINE.line);
+    expect(COURSE_STYLE.routeOutline).toBe(COURSE_LINE.outline);
     const el = host();
     const m = createMainMap(el);
     m.update(course, null);
-    expect(el.querySelectorAll(`path[stroke="${COURSE_STYLE.glow}"].course-glow`).length).toBe(2);
+    expect(el.querySelector(`path[stroke="${COURSE_STYLE.routeOutline}"].course-outline`)).not.toBeNull();
     expect(el.querySelector(`path[stroke="${COURSE_STYLE.route}"].course-line`)).not.toBeNull();
+    expect(el.querySelector('path[stroke="#ff453a"], path[stroke="#ff3b30"]')).toBeNull();
     expect(el.querySelector(`path[stroke="${COURSE_STYLE.start}"]`)).not.toBeNull();
     const start = el.querySelector('.map-pin.start')!;
     const finish = el.querySelector('.map-pin.finish')!;

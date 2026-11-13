@@ -10,7 +10,7 @@ import { fromLocal, type LatLon } from '../../engine/geo';
 import type { ReplayMapController } from '../map/mapTypes';
 import { lineMapConfig } from '../map/lineMapSupport';
 import { headingToBearing } from '../map/lineShapes';
-import { drawMiniMap, followView, type MapModel, type MapView, type MiniMapOpts } from '../overlay/minimap';
+import { anchorPadding, drawMiniMap, followView, ME_ANCHOR, type MapModel, type MapView, type MiniMapOpts } from '../overlay/minimap';
 import type { OverlayFrame } from '../overlay/frame';
 import type { OverlayTheme } from '../overlay/theme';
 import { PoseLerp, smoothAngleStep } from '../overlay/poseLerp';
@@ -115,7 +115,8 @@ export function LiveMap(props: LiveMapProps) {
   // 진행 방향 위: 돌려도 화면 네 모서리가 다 덮이는 지도판 크기 (돌리는 각도는 매 프레임)
   const W = box.width;
   const H = box.height;
-  const vc = insetTop + (H - insetTop - insetBottom) / 2;
+  // 내 위치 자리: 가려지지 않은 영역의 위에서 75% (사용자 요청 "더 아래로, 앞쪽 경로가 더 잘 보이게")
+  const vc = insetTop + (H - insetTop - insetBottom) * ME_ANCHOR;
   const D = Math.ceil(2 * Math.hypot(W / 2, Math.max(vc, H - vc))) + 8;
   // 사진 지도만 지도판을 크게 만들어 CSS로 돌린다
   const rotating = view === 'heading' && !native;
@@ -136,7 +137,9 @@ export function LiveMap(props: LiveMapProps) {
     const target = 300 + Math.min(100, Math.max(0, (p.speedKmh ?? 0) - 60)) * 5;
     sm.span += (target - sm.span) * (1 - Math.exp(-dt / 1000));
     const ins = { top: p.insetTop, bottom: p.insetBottom };
-    const vcNow = ins.top + (h - ins.top - ins.bottom) / 2;
+    const vcNow = ins.top + (h - ins.top - ins.bottom) * ME_ANCHOR;
+    // 선 지도 카메라 여백: 여백 안 가운데가 내 위치 자리(75%)가 되게
+    const pad = anchorPadding(ins, h, ME_ANCHOR);
 
     let mapView: MapView | undefined;
     const k = ctl.current;
@@ -146,8 +149,8 @@ export function LiveMap(props: LiveMapProps) {
       if (host.current) host.current.style.transform = '';
       if (p.view !== 'fit' && me) {
         const ll = fromLocal(p.origin, me.x, me.y);
-        if (turn) k.trackHeading(ll.lat, ll.lon, headingToBearing(sm.head!), ins);
-        else k.track(ll.lat, ll.lon, ins);
+        if (turn) k.trackHeading(ll.lat, ll.lon, headingToBearing(sm.head!), pad);
+        else k.track(ll.lat, ll.lon, pad);
       }
       const origin = p.origin;
       mapView = {
@@ -164,7 +167,7 @@ export function LiveMap(props: LiveMapProps) {
       if (host.current) host.current.style.transform = turn ? `rotate(${rotDeg}deg)` : '';
       if (p.view !== 'fit' && me) {
         const ll = fromLocal(p.origin, me.x, me.y);
-        k.track(ll.lat, ll.lon, turn ? { top: 0, bottom: 0 } : ins);
+        k.track(ll.lat, ll.lon, turn ? { top: 0, bottom: 0 } : pad);
       }
       const origin = p.origin;
       if (turn) {
@@ -193,7 +196,7 @@ export function LiveMap(props: LiveMapProps) {
         };
       }
     } else if (p.view !== 'fit' && me) {
-      mapView = followView(me, w, h, { spanM: sm.span, insetBottom: ins.bottom, top: ins.top, headingUp: p.view === 'heading' ? sm.head : null });
+      mapView = followView(me, w, h, { spanM: sm.span, insetBottom: ins.bottom, top: ins.top, headingUp: p.view === 'heading' ? sm.head : null, anchor: ME_ANCHOR });
     }
 
     const dpr = typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
