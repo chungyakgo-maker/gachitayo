@@ -1097,6 +1097,79 @@ html.app-h .modal-backdrop {
   color: var(--warn);
 }
 
+/* 커브 표지판 (사양서 8.4, 시안): 지도 모드 위쪽 칸 아래 정가운데. 큰 표지판 기준으로 가운데 */
+.pace-hud {
+  position: absolute;
+  z-index: 1000;
+  left: 50%;
+  width: 96px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.pace-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+}
+
+.pace-sign {
+  display: block;
+  font-family: var(--sans);
+}
+
+.pace-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.pace-dist {
+  min-width: 44px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fff;
+  color: #0b0c0e;
+  font: 700 18px/22px var(--mono);
+  text-align: center;
+}
+
+.pace-dist small {
+  margin-left: 1px;
+  font-size: 12px;
+}
+
+.pace-mod {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.pace-next {
+  position: absolute;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.pace-next > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-2);
+  text-shadow: 0 1px 3px #000;
+}
+
 /* 재생 막대 (사양서 10.2, 시안): 길게 눌러 끝내기 바로 위 */
 .replay-bar {
   display: flex;
