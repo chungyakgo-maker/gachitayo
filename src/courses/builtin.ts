@@ -26,6 +26,12 @@ export const BUILTIN_COURSES: readonly BuiltinCourse[] = [
   { key: 'namhansanseong', name: '남한산성', route: '성남 산성동 → 남한산성' },
   { key: 'jinbu-myeon', name: '진부면', route: '진부 → 숙암' },
   { key: 'pyeonghwa-dam', name: '평화의댐', route: '화천 → 양구' },
+  // 사용자가 준 카카오맵 GPX (2026-11-13 두 번째). 이름은 GPX에 적힌 곳 이름 (사용자가 바꿔 달라고 하면 oldNames로 옮긴다)
+  { key: 'gunwi-namsan-chilgok-giseong', name: '군위 남산리–칠곡 기성리', route: '군위 부계면 → 칠곡 동명면' },
+  { key: 'chilgok-yeonho-deoksan', name: '칠곡 연호리–덕산리', route: '칠곡 지천면 연호리 → 덕산리' },
+  { key: 'hambaek-mungok', name: '함백역–문곡리', route: '함백역 → 정선 남면 문곡리' },
+  { key: 'maebongsan-baramui-eondeok', name: '매봉산 바람의언덕', route: '태백 적각동 → 매봉산 바람의언덕' },
+  { key: 'jeoksangsan-observatory', name: '적상산전망대', route: '무주 적상면 북창리 → 적상산전망대' },
 ];
 
 /** 기본 코스 선 고침 차례. 폰에 기록한 차례보다 크면 앱 시작 때 한 번, 예전 선으로 들어 있는 기본 코스를 새 선으로 바꾼다.
