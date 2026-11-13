@@ -20,6 +20,9 @@ jobs:
     name: 시뮬레이터 빌드·첫 화면
     runs-on: macos-15
     timeout-minutes: 45
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -27,12 +30,13 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Cloudflare 비밀값 다듬기 (배포 작업과 같은 스크립트, 읽기만)
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
+        run: bash .github/scripts/cloudflare-secrets.sh
       - name: 서버 주소 (Actions 변수, 없으면 Cloudflare에서 Worker 주소 읽기만)
         id: api
         env:
           VAR_URL: ${{ vars.VITE_API_URL }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           url="$VAR_URL"
           if [ -z "$url" ] && [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
