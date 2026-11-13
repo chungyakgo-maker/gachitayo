@@ -22,7 +22,8 @@ const course: Course = {
 let courses: Course[] = [];
 const deleteCourse = vi.fn(async () => 2);
 const prepareWithCourse = vi.fn();
-vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => courses), useDrive: () => ({ courses }), prepareWithCourse }));
+const startCoursePreview = vi.fn(async () => {});
+vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => courses), useDrive: () => ({ courses }), prepareWithCourse, startCoursePreview }));
 const makeReverseCourse = vi.fn(async () => ({ course: { id: 'rev1' }, created: true }));
 vi.mock('../../src/ui/screens/useBestTimes', () => ({ useBestTimes: () => ({}) }));
 vi.mock('../../src/app/courses', () => ({
@@ -98,6 +99,19 @@ describe('이 코스로 주행 · 역방향 코스 (사용자 요청)', () => {
     render(<CourseDetailScreen courseId="c1" />);
     fireEvent.click(screen.getByRole('button', { name: '이 코스로 주행' }));
     expect(prepareWithCourse).toHaveBeenCalledWith(course);
+  });
+
+  it('"모의주행 (코스 미리 보기)"는 이 코스로 가상 차를 달린다, 코스 선이 없으면 누를 수 없다 (사양서 8.7)', () => {
+    courses = [course];
+    const r = render(<CourseDetailScreen courseId="c1" />);
+    const btn = screen.getByRole('button', { name: '모의주행 (코스 미리 보기)' });
+    expect(btn.compareDocumentPosition(screen.getByRole('button', { name: '이 코스로 주행' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    fireEvent.click(btn);
+    expect(startCoursePreview).toHaveBeenCalledWith(course);
+    r.unmount();
+    courses = [{ ...course, centerline: null }];
+    render(<CourseDetailScreen courseId="c1" />);
+    expect(screen.getByRole('button', { name: '모의주행 (코스 미리 보기)' })).toBeDisabled();
   });
 
   it('"역방향 코스"는 만들고 그 코스 상세로 (기본 코스도 된다)', async () => {

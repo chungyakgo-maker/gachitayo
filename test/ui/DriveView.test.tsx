@@ -128,6 +128,38 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.queryByRole('group', { name: '지도 보기' })).toBeNull();
   });
 
+  const playing = { label: '모의주행 · 하오고개', speed: 5, ended: false, playing: true, posMs: 112_000, endMs: 364_000, preparing: null, seekable: true, returnTo: '#/course/c1' };
+  const controls = () => ({ onPlayPause: vi.fn(), onSeek: vi.fn(), onSpeed: vi.fn() });
+
+  it('재생 막대 (사양서 10.2): 길게 눌러 끝내기 바로 위, 막대 위 두 번 탭은 보기 바꾸기가 아니다', () => {
+    const onCycle = vi.fn();
+    const { container } = render(<DriveView {...props({ replay: playing, replayControls: controls(), onCycle })} />);
+    const bar = container.querySelector('.replay-bar')!;
+    const end = container.querySelector('.end-btn')!;
+    expect(bar).not.toBeNull();
+    expect(bar.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const range = screen.getByRole('slider', { name: '재생 위치' });
+    fireEvent.pointerDown(range);
+    fireEvent.pointerDown(range);
+    fireEvent.pointerDown(bar);
+    fireEvent.pointerDown(bar);
+    expect(onCycle).not.toHaveBeenCalled();
+  });
+
+  it('준비 중이면 진행률만 보이고 막대는 아직 없다', () => {
+    const { container } = render(<DriveView {...props({ replay: { ...playing, preparing: 0.4, playing: false }, replayControls: controls() })} />);
+    expect(screen.getByRole('status')).toHaveTextContent('준비 중 40%');
+    expect(container.querySelector('.replay-bar')).toBeNull();
+  });
+
+  it('옮길 수 없는 재생(가상 친구 따라가기)과 실제 주행에는 막대가 없다', () => {
+    const a = render(<DriveView {...props({ replay: { ...playing, seekable: false }, replayControls: controls() })} />);
+    expect(a.container.querySelector('.replay-bar')).toBeNull();
+    a.unmount();
+    const b = render(<DriveView {...props({ replay: null, replayControls: controls() })} />);
+    expect(b.container.querySelector('.replay-bar')).toBeNull();
+  });
+
   it('재생 중에도 같은 나침반 버튼 (재생·주행 같은 지도)', () => {
     render(<DriveView {...props({ replay: { label: '가상', speed: 5, ended: false, playing: true, posMs: 0, endMs: 60_000, preparing: null, seekable: true, returnTo: '#/dev/replay' } })} />);
     expect(screen.getByRole('button', { name: /^지도 보기: 전체 코스/ })).toBeInTheDocument();

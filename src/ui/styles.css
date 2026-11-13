@@ -1097,6 +1097,99 @@ html.app-h .modal-backdrop {
   color: var(--warn);
 }
 
+/* 재생 막대 (사양서 10.2, 시안): 길게 눌러 끝내기 바로 위 */
+.replay-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-line);
+  border-radius: 16px;
+  background: rgba(16, 17, 20, 0.92);
+}
+
+.replay-bar .pp {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.replay-bar .t {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
+
+.replay-bar input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  touch-action: none;
+}
+
+.replay-bar input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) var(--pct, 0%), #2a2e33 var(--pct, 0%));
+}
+
+.replay-bar input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) var(--pct, 0%), #2a2e33 var(--pct, 0%));
+}
+
+.replay-bar input[type='range']::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  -webkit-appearance: none;
+}
+
+.replay-bar input[type='range']::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.replay-bar .spd {
+  flex: none;
+  min-width: 48px;
+  height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.replay-preparing {
+  margin: 0 0 10px;
+  text-align: center;
+}
+
 .end-btn {
   position: relative;
   overflow: hidden;
@@ -1770,6 +1863,15 @@ html.app-h .modal-backdrop {
 
 .btn:disabled {
   opacity: 0.5;
+}
+
+/* 코스 상세 "모의주행 (코스 미리 보기)" (시안): 이 코스로 주행 아래 큰 버튼 */
+.btn.preview-btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  font-size: 17px;
+  font-weight: 600;
 }
 
 .btn.small {

@@ -9,13 +9,14 @@ import { toLocal } from '../../engine/geo';
 import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
 import { makePolyline } from '../../engine/course/polyline';
-import { cycleDriveMode, endDrive, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
+import { cycleDriveMode, cycleReplaySpeed, endDrive, getDriveState, seekReplay, setReplayPlaying, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
 import { updateSettings, useSettings, type DriveMode, type MapViewMode, type Settings, type WidgetId } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
 import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
+import { ReplayBar } from '../components/ReplayBar';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { LiveMap } from '../components/LiveMap';
 import { MapViewButton } from '../components/MapViewButton';
@@ -47,9 +48,17 @@ export interface DriveViewProps {
   onEnd: () => void;
   /** 주행 중 지도 보기 바꾸기 (사용자 요청). 기본: 설정에 저장 */
   onMapView?: (v: MapViewMode) => void;
+  /** 재생 막대 (사양서 10.2): 옮길 수 있는 재생일 때만 보인다 */
+  replayControls?: { onPlayPause(): void; onSeek(ms: number): void; onSpeed(): void };
 }
 
 const DOUBLE_TAP_MS = 350;
+
+const REPLAY_CONTROLS = {
+  onPlayPause: () => setReplayPlaying(!getDriveState().replay?.playing),
+  onSeek: seekReplay,
+  onSpeed: cycleReplaySpeed,
+};
 const LAP_FLASH_MS = 3000;
 
 const deltaClass = (d: number | null) => (d === null ? '' : d < 0 ? 'fast' : d > 0 ? 'slow' : '');
@@ -77,7 +86,7 @@ function WidgetCanvas({ id, frame, th }: { id: WidgetId; frame: OverlayFrame; th
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }) }: DriveViewProps) {
+export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), replayControls }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   // 지도 모드: 위에 얹은 칸들이 지도를 가리는 높이 (다른 모드에서는 0)
   const mapRef = useRef<HTMLDivElement>(null);
@@ -96,7 +105,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   const headSm = useSmoothAngle(snap?.pos?.psi);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('.end-btn, .map-compass')) return;
+    if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .replay-bar')) return;
     const now = Date.now();
     const prev = lastTap.current;
     if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 40) {
@@ -110,6 +119,14 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   const end = (tall: boolean) => (
     <>
       {error && <div className="notice warn">{error}</div>}
+      {replay && replay.preparing !== null && (
+        <div className="notice replay-preparing" role="status">
+          준비 중 {Math.round(replay.preparing * 100)}%
+        </div>
+      )}
+      {replay && replay.seekable && replay.preparing === null && replayControls && (
+        <ReplayBar posMs={replay.posMs} endMs={replay.endMs} playing={replay.playing} speed={replay.speed} {...replayControls} />
+      )}
       <LongPressButton tall={tall} onDone={onEnd} label={replay ? '길게 눌러 재생 끝내기' : '길게 눌러 종료'} />
     </>
   );
@@ -398,6 +415,7 @@ export function DriveScreen() {
       error={d.error}
       onCycle={cycleDriveMode}
       onEnd={() => void endDrive()}
+      replayControls={REPLAY_CONTROLS}
     />
   );
 }

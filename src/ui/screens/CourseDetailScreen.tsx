@@ -2,7 +2,7 @@
 // 코스 다듬기, GPX 내보내기, 코스 지우기(내 코스만), 출발점·도착점을 내비 앱으로 열기. 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
 import { useEffect, useMemo, useState } from 'react';
 import { courseGpxFile, deleteCourse, makeReverseCourse, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
-import { loadCourses, prepareWithCourse, useDrive } from '../../app/drive';
+import { loadCourses, prepareWithCourse, startCoursePreview, useDrive } from '../../app/drive';
 import { config } from '../../engine/config';
 import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal, type LatLon } from '../../engine/geo';
@@ -165,6 +165,12 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
       {!mode && (
         <button type="button" className="primary-btn" disabled={!!busy} onClick={() => prepareWithCourse(course)}>
           이 코스로 주행
+        </button>
+      )}
+      {!mode && (
+        // 코스 미리 보기 (사용자 요청, 사양서 8.7·10.2): 가상 차가 이 코스를 한 번 달린다. 코스 선이 없으면(첫 주행 전) 못 한다
+        <button type="button" className="btn preview-btn" disabled={!!busy || !course.centerline} onClick={() => void startCoursePreview(course)}>
+          모의주행 (코스 미리 보기)
         </button>
       )}
       {!mode && <NavOpen course={course} />}
