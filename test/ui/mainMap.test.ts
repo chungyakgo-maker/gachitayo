@@ -73,6 +73,9 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
     expect(paths.length).toBeGreaterThanOrEqual(7);
     const labels = [...el.querySelectorAll('.map-label')].map((n) => n.textContent);
     expect(labels).toEqual(expect.arrayContaining(['START', 'FINISH', '나']));
+    // "나"는 점 아래 (출발·도착 핀은 점 위로 서므로 출발점에 서 있어도 겹치지 않게, 사용자 요청): 글자 위쪽이 점에서 12 px 아래
+    const me = [...el.querySelectorAll<HTMLElement>('.map-label.me')][0]!;
+    expect(me.style.marginTop).toBe('12px');
     expect(el.querySelector('path[stroke-dasharray="4 3"]')).not.toBeNull();
     m.destroy();
   });

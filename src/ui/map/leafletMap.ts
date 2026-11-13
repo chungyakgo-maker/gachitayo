@@ -148,7 +148,8 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     if (me.hAcc > 0) L.circle(at, { radius: me.hAcc, color: ACCENT, weight: 1, opacity: 0.35, fillColor: ACCENT, fillOpacity: 0.08, interactive: false }).addTo(meLayer);
     L.circleMarker(at, { radius: 16, stroke: false, fillColor: ACCENT, fillOpacity: 0.16, interactive: false }).addTo(meLayer);
     L.circleMarker(at, { radius: 6.5, color: ACCENT, weight: 3, fillColor: '#eceef0', fillOpacity: 1, interactive: false }).addTo(meLayer);
-    L.marker(at, { icon: L.divIcon({ className: 'map-label me', html: '나', iconSize: [20, 16], iconAnchor: [10, 32] }), interactive: false, keyboard: false }).addTo(meLayer);
+    // "나"는 점 아래 12 px (출발·도착 핀은 점 위로 서므로 겹치지 않게, 사용자 요청)
+    L.marker(at, { icon: L.divIcon({ className: 'map-label me', html: '나', iconSize: [20, 16], iconAnchor: [10, -12] }), interactive: false, keyboard: false }).addTo(meLayer);
   }
 
   function fit(course: Course | null, me: MapFix | null) {

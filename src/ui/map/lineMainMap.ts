@@ -13,6 +13,8 @@ import type { FriendMarker, MainMapApi, MapFix } from './mapTypes';
 const ACCENT = '#aacae6';
 const FRIEND = '#b78cff';
 const STALE_MS = 30_000;
+/** "나" 글자 위쪽이 내 위치 점에서 이만큼 아래 (px) */
+const ME_LABEL_BELOW_PX = 12;
 
 export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?: (shown: boolean) => void): MainMapApi {
   const map = newLineMap(el, cfg);
@@ -107,7 +109,8 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       const e = document.createElement('span');
       e.className = 'map-label me';
       e.textContent = '나';
-      meLabel = new Marker({ element: e, anchor: 'bottom', offset: [0, -16] }).setLngLat([me.lon, me.lat]).addTo(map);
+      // 점 아래 (출발·도착 핀은 점 위로 서므로 출발점에 서 있어도 겹치지 않게, 사용자 요청)
+      meLabel = new Marker({ element: e, anchor: 'top', offset: [0, ME_LABEL_BELOW_PX] }).setLngLat([me.lon, me.lat]).addTo(map);
     } else meLabel.setLngLat([me.lon, me.lat]);
   }
 
