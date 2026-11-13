@@ -10,6 +10,7 @@ import { cancelPrepare, chooseCourse, chooseRef, setDriveMode, startDrive, useDr
 import { useRecording } from '../../app/recording';
 import { MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DriveMode } from '../../app/settings';
 import { Sheet } from '../components/Sheet';
+import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { formatDayKst, formatLapTime, formatLength } from '../format';
 import { IconBack, IconCheck, IconChevron, IconGps, IconPhone, IconPin, IconWarn } from '../icons';
 
@@ -27,7 +28,7 @@ export function PrepareScreen() {
   const acc = useAccount();
   const fr = useFriends();
   const shareOn = acc.status === 'ready' && fr.friends.length > 0;
-  const [sheet, setSheet] = useState<'course' | 'ref' | null>(null);
+  const [sheet, setSheet] = useState<'course' | 'ref' | 'choice' | null>(null);
   const [tips, setTips] = useState(false);
 
   if (d.phase !== 'preparing') {
@@ -85,7 +86,8 @@ export function PrepareScreen() {
       )}
 
       {/* 사용자 요청: 기록 시작 버튼을 맨 위, 준비 상태(GPS·모션·거치 보정)를 그 아래로 */}
-      <button type="button" className="primary-btn record" disabled={rec.phase !== 'recording'} onClick={startDrive}>
+      {/* 위치로 자동 감지된 코스면 기록 시작 때 코스 주행 / 일반 기록 주행을 한 번 묻는다 (사용자 요청). 직접 고른 코스는 바로 */}
+      <button type="button" className="primary-btn record" disabled={rec.phase !== 'recording'} onClick={d.course && !d.courseChosen ? () => setSheet('choice') : startDrive}>
         {rec.phase === 'starting' ? '센서를 켜는 중…' : '기록 시작'}
       </button>
       <div className="card-col" style={{ alignItems: 'center', textAlign: 'center' }}>
@@ -221,6 +223,17 @@ export function PrepareScreen() {
         <IconChevron size={20} color="#9AA1A9" />
       </a>
 
+      {sheet === 'choice' && d.course && (
+        <DriveChoiceSheet
+          course={d.course}
+          onClose={() => setSheet(null)}
+          onChoose={(c) => {
+            setSheet(null);
+            chooseCourse(c);
+            startDrive();
+          }}
+        />
+      )}
       {sheet === 'course' && (
         <Sheet title="코스 고르기" onClose={() => setSheet(null)}>
           <button
