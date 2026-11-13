@@ -135,9 +135,9 @@ export class Recorder {
     return this.chain;
   }
 
-  /** 화면이 가려질 때: pause 이벤트를 남기고 바로 저장한다. */
-  pause(): Promise<void> {
-    this.markEvent('pause');
+  /** 화면이 가려질 때: pause 이벤트를 남기고 바로 저장한다. payload: 아이폰 앱이면 { backgroundGps: true } (위치는 이어진다) */
+  pause(payload: Record<string, unknown> = {}): Promise<void> {
+    this.markEvent('pause', payload);
     return this.flush();
   }
 

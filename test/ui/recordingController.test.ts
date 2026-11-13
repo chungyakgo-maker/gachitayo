@@ -64,6 +64,40 @@ describe('기록 컨트롤러', () => {
     }
   });
 
+  it('아이폰 앱: 화면이 가려지면 남기는 pause에 backgroundGps 표시 (위치는 이어지므로 랩을 무효로 하지 않게, 사양서 13.3)', async () => {
+    vi.doMock('../../src/platform', () => ({ isApp: () => true }));
+    vi.doMock('../../src/sensors/gps', () => ({ startGps: () => () => {} }));
+    try {
+      const c = await load();
+      c.startRecording();
+      await until(c, 'recording');
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      const id = c.getRecordingState().sessionId!;
+      await c.stopRecording();
+      const chunks = await c.getRepo().chunks(id);
+      const pause = chunks.flatMap((k) => k.events).find((e) => e.type === 'pause');
+      expect(pause?.payload).toMatchObject({ backgroundGps: true });
+    } finally {
+      vi.doUnmock('../../src/platform');
+      vi.doUnmock('../../src/sensors/gps');
+    }
+  });
+
+  it('아이폰 앱: 시작할 때 지난번 페이지가 남긴 위치 감시를 먼저 끈다 (사양서 13.3)', async () => {
+    const cleanupNativeGps = vi.fn(async () => {});
+    vi.doMock('../../src/platform', () => ({ isApp: () => true }));
+    vi.doMock('../../src/sensors/nativeGps', async (orig) => ({ ...(await orig<object>()), cleanupNativeGps }));
+    try {
+      await load();
+      expect(cleanupNativeGps).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.doUnmock('../../src/platform');
+      vi.doUnmock('../../src/sensors/nativeGps');
+    }
+  });
+
   it('기록 시작을 두 번 눌러도 세션은 하나만 만든다', async () => {
     const c = await load();
     c.startRecording();

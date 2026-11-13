@@ -9,6 +9,10 @@ describe('약관 페이지 (사양서 13.3)', () => {
     const html = page('privacy.html');
     for (const t of ['닉네임', '익명 계정', '주행 기록', '코스', '친구 목록', '위치 공유', 'Cloudflare', '설정', '계정 삭제', '(출시 전에 채움)']) expect([t, html.includes(t)]).toEqual([t, true]);
     expect(html).toMatch(/<html lang="ko">/);
+    // 검토 지적: 익명 계정이라 앱을 지우거나 폰을 바꾸면 이어 볼 수 없다 (사양서 12). 가입 때 IP는 하루 보관
+    expect(html).not.toMatch(/다시 설치해도|폰을 바꾸거나 다시/);
+    expect(html).toContain('IP 주소');
+    expect(html).toContain('하루');
   });
 
   it('위치정보 이용약관: 수집 목적·보유 기간·친구 제공·이용자 권리', () => {

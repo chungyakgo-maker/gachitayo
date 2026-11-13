@@ -4,6 +4,8 @@ import { useSyncExternalStore } from 'react';
 import { createSessionClock } from '../normalize/sessionClock';
 import { getDeviceInfo } from '../sensors/deviceInfo';
 import { startGps, type GpsErrorKind } from '../sensors/gps';
+import { isApp } from '../platform';
+import { cleanupNativeGps } from '../sensors/nativeGps';
 import { requestMotionPermission, startMotion, type MotionPermission } from '../sensors/motion';
 import { queryLocationPermission, type LocationPermission } from '../sensors/permissions';
 import {
@@ -181,6 +183,8 @@ let initPromise: Promise<void> | undefined;
 export function initRecording(): Promise<void> {
   initPromise ??= (async () => {
     try {
+      // 아이폰 앱: WebView가 다시 열렸으면(메모리 부족 등) 지난번 페이지의 위치 감시가 아직 켜져 있다. 이어서 하기 전에 끈다 (사양서 13.3)
+      if (isApp()) await cleanupNativeGps();
       const r = getRepo();
       const interrupted = await recoverInterrupted(r, isLiveElsewhere);
       const [locationPermission, device, sessions, persisted] = await Promise.all([
@@ -260,7 +264,8 @@ function begin(recorder: Recorder, motionPermission: MotionPermission): void {
   // 화면이 가려지면(앱 전환, 화면 꺼짐, 전화) 바로 저장한다. 강제 종료돼도 잃는 데이터가 적다.
   const onVisibility = () => {
     if (document.visibilityState === 'hidden') {
-      void recorder.pause();
+      // 아이폰 앱은 화면이 가려져도 백그라운드 위치가 이어진다 → 처리할 때 이 구간으로 랩을 무효로 하지 않는다 (사양서 13.3)
+      void recorder.pause(isApp() ? { backgroundGps: true } : {});
       return;
     }
     recorder.unpause();

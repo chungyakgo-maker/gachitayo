@@ -89,12 +89,13 @@ function hAccAt(gps: GpsSample[], t: number, from: { i: number }): number {
   return a.hAcc + (b.hAcc - a.hAcc) * f;
 }
 
-/** 앱이 멈췄던 구간: pause → resume, 또는 강제 종료 뒤 이어서 하기 */
+/** 앱이 멈췄던 구간: pause → resume, 또는 강제 종료 뒤 이어서 하기.
+ *  아이폰 앱의 pause(backgroundGps)는 화면만 가려지고 위치는 이어진 구간이라 빼고, 실제로 위치가 끊겼으면 GPS 끊김 규칙이 잡는다 (사양서 13.3) */
 export function pausesFromEvents(events: SessionEvent[], gps: GpsSample[]): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   let lastPause: number | null = null;
   for (const e of [...events].sort((a, b) => a.t - b.t)) {
-    if (e.type === 'pause') lastPause = e.t;
+    if (e.type === 'pause') lastPause = e.payload?.backgroundGps === true ? null : e.t;
     if (e.type !== 'resume') continue;
     if (lastPause !== null) {
       out.push([lastPause, e.t]);

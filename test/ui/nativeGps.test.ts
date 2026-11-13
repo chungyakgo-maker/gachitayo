@@ -81,19 +81,55 @@ describe('백그라운드 위치 (아이폰 앱, 사양서 13.3)', () => {
     expect(got).toEqual([]);
   });
 
-  it('앱: 주행 기록(background)은 플러그인, 메인 화면 미리보기는 앞에 있을 때만(웹 위치) — 앱을 내려도 GPS가 돌지 않게', async () => {
+  it('앱: 주행 기록(background)은 백그라운드 위치, 메인 화면 미리보기는 앞에 있을 때만(백그라운드 문구 없이, 권한 창 없이) — 앱을 내려도 GPS가 돌지 않게', async () => {
     const { startGps } = await import('../../src/sensors/gps');
     startGps(clock, () => {}, () => {}, { background: true });
-    expect(plugin.addWatcher).toHaveBeenCalledTimes(1);
-    expect(watch).not.toHaveBeenCalled();
+    expect(plugin.addWatcher.mock.calls[0]![0]).toMatchObject({ backgroundMessage: expect.any(String), requestPermissions: true });
     startGps(clock, () => {}, () => {});
-    expect(watch).toHaveBeenCalledTimes(1);
-    expect(plugin.addWatcher).toHaveBeenCalledTimes(1);
+    const fg = plugin.addWatcher.mock.calls[1]![0] as Record<string, unknown>;
+    expect(fg.backgroundMessage).toBeUndefined();
+    expect(fg.requestPermissions).toBe(false);
+    expect(watch).not.toHaveBeenCalled();
   });
 
-  it('앱: 위치 권한 상태는 모름(권한 창은 플러그인이 띄운다), 웹은 브라우저 값', async () => {
+  it('WebView가 다시 열려(메모리 부족 등) 잃어버린 감시는 앱 시작 때 끈다 (백그라운드 위치가 계속 켜지지 않게)', async () => {
+    const { startNativeGps, cleanupNativeGps } = await import('../../src/sensors/nativeGps');
+    localStorage.clear();
+    startNativeGps(clock, () => {}, () => {});
+    resolveAdd!('w9');
+    await flush();
+    // 다시 열린 페이지: 이 감시는 JS가 모른다
+    vi.resetModules();
+    const again = await import('../../src/sensors/nativeGps');
+    await again.cleanupNativeGps();
+    expect(plugin.removeWatcher).toHaveBeenCalledWith({ id: 'w9' });
+    plugin.removeWatcher.mockClear();
+    await cleanupNativeGps();
+    expect(plugin.removeWatcher).not.toHaveBeenCalled();
+  });
+
+  it('제대로 멈춘 감시는 다음 시작 때 다시 끄지 않는다', async () => {
+    const { startNativeGps, cleanupNativeGps } = await import('../../src/sensors/nativeGps');
+    localStorage.clear();
+    const stop = startNativeGps(clock, () => {}, () => {});
+    resolveAdd!('w10');
+    await flush();
+    stop();
+    plugin.removeWatcher.mockClear();
+    await cleanupNativeGps();
+    expect(plugin.removeWatcher).not.toHaveBeenCalled();
+  });
+
+  it('앱: 위치 권한은 위치를 한 번 받기 전에는 모름, 받은 뒤에는 허용(메인 화면 미리보기가 켜진다), 거절되면 다시 모름. 웹은 브라우저 값', async () => {
+    localStorage.clear();
     Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'denied' }) } });
     const { queryLocationPermission } = await import('../../src/sensors/permissions');
+    const { startNativeGps } = await import('../../src/sensors/nativeGps');
+    expect(await queryLocationPermission()).toBe('unknown');
+    startNativeGps(clock, () => {}, () => {});
+    cb!({ latitude: 1, longitude: 2, accuracy: 5, altitude: null, altitudeAccuracy: null, simulated: false, speed: 3, bearing: null, time: 1 });
+    expect(await queryLocationPermission()).toBe('granted');
+    cb!(undefined, { code: 'NOT_AUTHORIZED' });
     expect(await queryLocationPermission()).toBe('unknown');
     app = false;
     expect(await queryLocationPermission()).toBe('denied');
