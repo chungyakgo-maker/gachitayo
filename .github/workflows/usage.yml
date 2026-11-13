@@ -1,0 +1,36 @@
+# 서버 저장 용량 확인 (사용자 질문 "지금 용량 얼만큼 썼냐"): 같이타요의 R2 버킷·D1 데이터베이스 크기를 읽기만 한다.
+# Actions 화면에서 "Run workflow"로 언제든 다시. 결과는 실행 화면의 요약(Summary)에 표로.
+name: 저장 용량 확인
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/usage.yml
+      - .github/scripts/usage.sh
+
+permissions:
+  contents: read
+
+jobs:
+  usage:
+    name: 저장 용량 읽기
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: 설정값 확인
+        if: env.HAS_CLOUDFLARE != 'true'
+        run: echo "::notice::Cloudflare 비밀값이 없어 용량을 읽을 수 없습니다."
+      - uses: actions/checkout@v7
+        if: env.HAS_CLOUDFLARE == 'true'
+      - name: 비밀값 확인
+        if: env.HAS_CLOUDFLARE == 'true'
+        run: bash .github/scripts/cloudflare-secrets.sh
+      - name: 용량 읽기
+        if: env.HAS_CLOUDFLARE == 'true'
+        run: bash .github/scripts/usage.sh
