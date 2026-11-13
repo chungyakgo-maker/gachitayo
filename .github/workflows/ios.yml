@@ -36,8 +36,10 @@ jobs:
         run: |
           url="$VAR_URL"
           if [ -z "$url" ] && [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            sub=$(curl -s --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
-              | python3 -c 'import sys,json; print(((json.load(sys.stdin) or {}).get("result") or {}).get("subdomain",""))' || true)
+            resp=$(curl -s --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" || true)
+            sub=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(((json.load(sys.stdin) or {}).get("result") or {}).get("subdomain",""))' 2>/dev/null || true)
+            # 못 찾으면 이유만 보인다 (열쇠 값은 찍지 않음)
+            if [ -z "$sub" ]; then printf '%s' "$resp" | python3 -c 'import sys,json; d=json.load(sys.stdin); print("Cloudflare 응답:", d.get("success"), [e.get("message") for e in d.get("errors",[])])' 2>/dev/null || echo "Cloudflare 응답을 읽지 못함"; fi
             if [ -n "$sub" ]; then url="https://gachitayo-api.$sub.workers.dev"; fi
           fi
           echo "서버 주소: ${url:-(없음, 폰에만 저장)}"
@@ -69,6 +71,9 @@ jobs:
           xcrun simctl launch "$dev" com.dgo.app
           sleep 15
           xcrun simctl io "$dev" screenshot ios-launch.png
+          # 내려받기가 막힌 곳에서도 볼 수 있게 작게 줄여 로그에 글자로 남긴다
+          sips -Z 700 ios-launch.png --out ios-launch-small.png >/dev/null
+          echo "SCREENSHOT_BASE64_BEGIN"; base64 -i ios-launch-small.png | fold -w 1000; echo "SCREENSHOT_BASE64_END"
       - uses: actions/upload-artifact@v4
         with:
           name: ios-simulator
