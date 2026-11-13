@@ -18,6 +18,7 @@ import { GMeter } from '../components/GMeter';
 import { LongPressButton } from '../components/LongPressButton';
 import { ReplayBar } from '../components/ReplayBar';
 import { PaceNoteTile } from '../components/PaceNoteTile';
+import { OffCoursePanel, OffCourseTile } from '../components/OffCourseTile';
 import { buildGeometry } from '../../engine/course/geometry';
 import { paceNotes, upcomingNote } from '../../engine/course/paceNotes';
 import { OverlayCanvas } from '../components/OverlayCanvas';
@@ -156,6 +157,8 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
         <div className="right" style={{ opacity: up?.note.dir === 'right' ? tintAlpha(tintMode, up.distM) : 0 }} />
       </div>
     ) : null;
+  // 코스 이탈 (시안 B): 랩 안에서 코스를 벗어났을 때만 (엔진이 출발선 전·코스 위면 null)
+  const offM = course && st && !st.onCourse && st.offCourseM != null ? st.offCourseM : null;
   const lapNo = st && st.lapNo > 0 ? st.lapNo : null;
   const lastLap = st?.lastLap ?? null;
   const flash = lastLap && st && st.t - lastLap.t < LAP_FLASH_MS ? lastLap : null;
@@ -178,8 +181,10 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
               <span className="big-num">{formatLapTime(st?.lapElapsedMs ?? null, 1)}</span>
             </div>
           </div>
-          <div className={`minimal-panel delta-panel ${flash ? '' : h.cls}`}>
-            {flash ? (
+          <div className={`minimal-panel delta-panel ${flash || offM !== null ? '' : h.cls}`}>
+            {offM !== null && !flash ? (
+              <OffCoursePanel distM={offM} />
+            ) : flash ? (
               <>
                 <span style={{ fontSize: 18, color: 'var(--fg-2)' }}>랩 {flash.lapNo} 완료</span>
                 <span className="lap-flash">{formatLapTime(flash.timeMs, 3)}</span>
@@ -231,13 +236,17 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
     return (
       <div className="drive mode-dashboard" onPointerDown={onPointerDown} data-testid="drive">
         <div className="drive-pad wide dash">
-          <div className={`dash-delta delta-panel full ${h.cls}`}>
-            <div className="card-col" style={{ gap: 6 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-2)' }}>{h.label}</span>
-              <span className={`delta-word ${h.cls}`} style={{ fontSize: 20, fontWeight: 700 }}>
-                {h.word}
-              </span>
-            </div>
+          <div className={`dash-delta delta-panel full ${offM !== null ? '' : h.cls}`}>
+            {offM !== null ? (
+              <OffCoursePanel distM={offM} />
+            ) : (
+              <div className="card-col" style={{ gap: 6 }}>
+                <span style={{ fontSize: 14, color: 'var(--fg-2)' }}>{h.label}</span>
+                <span className={`delta-word ${h.cls}`} style={{ fontSize: 20, fontWeight: 700 }}>
+                  {h.word}
+                </span>
+              </div>
+            )}
             <span className="delta-text" style={!course ? { color: 'var(--fg)', fontSize: 'min(64px, 16vw)' } : undefined}>
               {h.text}
             </span>
@@ -324,6 +333,11 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
     return <WidgetCanvas key={key} id={id} frame={frame} th={th} />;
   };
   const slots = settings.widgets.map(slotOf);
+  // 코스 이탈: 표지판 칸 자리에 (표지판을 안 골랐으면 칸 3 자리에)
+  if (offM !== null) {
+    const at = settings.widgets.indexOf('pace');
+    slots[at >= 0 ? at : 1] = <OffCourseTile key="off" distM={offM} />;
+  }
   const mapRot = mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
   return (
     // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)

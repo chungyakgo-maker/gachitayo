@@ -382,3 +382,35 @@ describe('GPS 아이콘 (사용자 요청: 아래 상태 줄 대신 색만)', ()
     expect(gpsStateOf(mk(true, 500, true))).toBe('weak');
   });
 });
+
+// 코스 이탈 안내 B (사용자 결정): 랩 안에서 코스를 벗어나면 표지판 자리에 주황 "코스 이탈" + 코스까지 거리
+describe('주행 중 코스 이탈 안내 (시안 B)', () => {
+  const off = (p: Partial<LiveState> = {}) => snap(state({ onCourse: false, offCourseM: 50, delta: null, ...p }));
+
+  it('지도 모드: 커브 표지판 칸 자리에 "코스 이탈"과 코스까지 거리, 이 랩 무효', () => {
+    render(<DriveView {...props({ snap: off(), settings: { ...DEFAULT_SETTINGS, widgets: ['g', 'pace'] } })} />);
+    const tile = screen.getByRole('status', { name: '코스 이탈, 코스까지 50 m, 이 랩 무효' });
+    expect(tile).toHaveTextContent('코스 이탈');
+    expect(tile).toHaveTextContent('50');
+    expect(document.querySelector('.pace-tile')).toBeNull();
+  });
+
+  it('표지판 칸을 안 골랐으면 칸 3(오른쪽) 자리에 띄운다', () => {
+    const r = render(<DriveView {...props({ snap: off(), settings: { ...DEFAULT_SETTINGS, widgets: ['g', 'speed'] } })} />);
+    const row = r.container.querySelector('.widget-row')!;
+    expect(row.lastElementChild).toHaveClass('off-course-tile');
+  });
+
+  it('코스 위이거나 이탈 거리가 없으면(출발선 전) 띄우지 않는다', () => {
+    render(<DriveView {...props({ snap: off({ offCourseM: null }) })} />);
+    expect(screen.queryByText('코스 이탈')).toBeNull();
+  });
+
+  it('미니멀·대시보드: 가운데 칸에 코스 이탈 · 거리 · 이 랩 무효', () => {
+    const m = render(<DriveView {...props({ snap: off(), mode: 'minimal' })} />);
+    expect(screen.getByRole('status', { name: '코스 이탈, 코스까지 50 m, 이 랩 무효' })).toBeInTheDocument();
+    m.unmount();
+    render(<DriveView {...props({ snap: off({ offCourseM: 120 }), mode: 'dashboard' })} />);
+    expect(screen.getByRole('status', { name: '코스 이탈, 코스까지 120 m, 이 랩 무효' })).toBeInTheDocument();
+  });
+});
