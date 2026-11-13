@@ -243,3 +243,12 @@ describe('표 행 만들기 (사양서 6.5)', () => {
     expect(lr[0]).toEqual({ session_id: SID, lap_no: 1, lap_time_ms: 60_000, sector_times_ms: [1000, 2001, null], valid: true, invalid_reason: null, max_speed: 40.12, trace: { stepM: 5, t: [0, 1], v: [1, 2], alt: [null, null] } });
   });
 });
+
+describe('코스 행의 기본 코스 키 (카카오 로그인 5.7-1)', () => {
+  it('기본 코스면 builtin 키를, 아니면 null을 올린다', async () => {
+    const { courseRow } = await import('../../src/sync/rows');
+    const base = { id: 'c', name: '배후령', kind: 'point_to_point' as const, source: 'gpx' as const, origin: { lat: 1, lon: 2 }, startGate: { lat: 1, lon: 2, bearingDeg: 0, widthM: 30 }, finishGate: { lat: 1, lon: 2, bearingDeg: 0, widthM: 30 }, centerline: null, lengthM: null, sectorBoundsM: null, version: 1 };
+    expect(courseRow({ ...base, builtin: 'baehuryeong' }).builtin).toBe('baehuryeong');
+    expect(courseRow(base).builtin).toBeNull();
+  });
+});

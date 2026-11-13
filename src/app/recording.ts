@@ -81,6 +81,8 @@ function subscribe(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
 }
+/** 기록 상태가 바뀔 때 (되살리기가 주행이 끝나기를 기다릴 때) */
+export const subscribeRecording = subscribe;
 
 export const getRecordingState = (): RecordingState => state;
 

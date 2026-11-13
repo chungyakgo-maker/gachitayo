@@ -19,6 +19,7 @@ export function courseRow(c: Course) {
     length_m: c.lengthM,
     sector_bounds_m: c.sectorBoundsM,
     version: c.version,
+    builtin: c.builtin ?? null,
     updated_at: new Date().toISOString(),
   };
 }
