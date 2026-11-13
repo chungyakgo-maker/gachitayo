@@ -1,8 +1,9 @@
 // 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도(통신이 되면 OSM 타일, 안 되면 타일 없이),
 // 위치 공유 켜기/끄기와 공유 중인 친구 (M8: 사용자 요청으로 2단계에서 앞당김). 같이 달리기는 3단계라 넣지 않는다.
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
-import { beginPrepare, loadCourses, useDrive } from '../../app/drive';
+import { beginPrepare, chooseCourse, loadCourses, useDrive } from '../../app/drive';
+import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { updateSettings, useSettings } from '../../app/settings';
 import { useRecording } from '../../app/recording';
 import { useAccount } from '../../app/account';
@@ -46,6 +47,8 @@ export function MainScreen() {
   }, [friendsOn]);
   const near = useMemo(() => (fix ? nearestCourse(drive.courses, fix.lat, fix.lon) : null), [fix, drive.courses]);
   const course = near?.course ?? null;
+  // 근처에 코스가 있으면 주행 시작 때 코스 주행 / 일반 기록 주행을 묻는다 (사용자 요청)
+  const [ask, setAsk] = useState(false);
   const best = useBestTimes(course ? [course] : []);
   const baseRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
@@ -113,7 +116,7 @@ export function MainScreen() {
             업로드 대기 {sync.pending}건 · 통신이 연결되면 자동으로 올라갑니다
           </a>
         )}
-        <button type="button" className="primary-btn start" onClick={beginPrepare}>
+        <button type="button" className="primary-btn start" onClick={course ? () => setAsk(true) : beginPrepare}>
           <span>주행 시작</span>
           <IconArrowRight size={26} />
         </button>
@@ -143,6 +146,18 @@ export function MainScreen() {
         </div>
       </MainMap>
       </div>
+      {ask && course && (
+        <DriveChoiceSheet
+          course={course}
+          onClose={() => setAsk(false)}
+          // 아이폰 모션 권한은 탭 처리 안에서 물어야 하므로 고른 그 탭에서 바로 준비를 시작한다
+          onChoose={(c) => {
+            setAsk(false);
+            beginPrepare();
+            chooseCourse(c);
+          }}
+        />
+      )}
     </Tabbed>
   );
 }
