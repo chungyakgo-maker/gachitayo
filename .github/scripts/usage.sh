@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 서버 저장 용량 확인 (사용자 질문 "지금 용량 얼만큼 썼냐"): 같이타요가 쓰는 Cloudflare 저장소만 읽어서 크기를 알린다.
 # 읽기만 한다 (지우거나 바꾸지 않는다). 이름이 gachitayo로 시작하는 버킷·데이터베이스만 본다 (다른 앱 자원은 보지 않는다).
+# 예전 미국 지도 버킷 gachitayo-map은 2026-11-13에 지웠다 (사용자 요청).
 # 결과는 로그와 Actions 실행 화면의 요약(Summary)에 표로 남는다.
 set -uo pipefail
 export LC_ALL=C.UTF-8
@@ -32,10 +33,9 @@ total=0
   echo "|---|---|---:|---:|"
 } >> "$summary"
 
-for b in gachitayo-map-apac gachitayo-map gachitayo-sessions; do
+for b in gachitayo-map-apac gachitayo-sessions; do
   case "$b" in
     gachitayo-map-apac) what="선 지도 (한국 지도 파일 + 글자 조각, 지금 쓰는 것)" ;;
-    gachitayo-map) what="예전 선 지도 (미국, 지금 안 씀)" ;;
     gachitayo-sessions) what="주행 기록 원본 파일" ;;
   esac
   json=$(s3 "$b")

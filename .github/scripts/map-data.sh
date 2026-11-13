@@ -42,7 +42,7 @@ git clone --depth 1 --filter=blob:none --sparse https://github.com/protomaps/bas
 git -C assets sparse-checkout set "fonts/Noto Sans Regular" "fonts/Noto Sans Medium"
 
 cd worker
-# 한국에서 빨리 읽히게 아시아 지역(apac)에 둔다 (예전 gachitayo-map은 미국에 생겨 느렸다)
+# 한국에서 빨리 읽히게 아시아 지역(apac)에 둔다 (예전 gachitayo-map은 미국에 생겨 느려서 바꿨고, 2026-11-13에 지웠다)
 BUCKET=gachitayo-map-apac
 if npx wrangler r2 bucket list | grep -q "$BUCKET"; then
   echo "R2 버킷 $BUCKET 있음"
