@@ -55,6 +55,8 @@ export interface DriveResult {
   bestLap: DriveLap | null;
   processed: ProcessedTrack;
   fusion: Pick<SessionProcessResult, 'axisSigns' | 'speedQualityLow' | 'gpsOnly' | 'calibration'>;
+  /** 랩 안에서 코스를 벗어나(옆 30 m 넘게) 달린 거리 m (코스 이탈 안내, 벗어난 길 저장) */
+  offCourseM: number;
 }
 
 export interface DriveInput {
@@ -232,7 +234,18 @@ export function processDrive(input: DriveInput): DriveResult {
   }
   p.n = p.t.length;
 
+  // 랩 안에서 코스를 벗어나 달린 거리 (출발선 전·도착 뒤 오가는 길은 빼고)
+  let offCourseM = 0;
+  if (split) {
+    for (let k = 1; k < frames.n; k++) {
+      if (split.frameLap[k]! > 0 && split.frameLap[k - 1]! > 0 && split.offCourse[k] && split.offCourse[k - 1]) {
+        offCourseM += Math.hypot(frames.x[k]! - frames.x[k - 1]!, frames.y[k]! - frames.y[k - 1]!);
+      }
+    }
+  }
+
   return {
+    offCourseM,
     course,
     courseCreated,
     courseUpdated,

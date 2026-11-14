@@ -191,7 +191,7 @@ export function initRecording(): Promise<void> {
   initPromise ??= (async () => {
     try {
       const r = getRepo();
-      const interrupted = await recoverInterrupted(r, isLiveElsewhere);
+      const interrupted = await recoverInterrupted(r, isLiveElsewhere, (id) => getDriveRepo().deleteSession(id));
       const [locationPermission, device, sessions, persisted] = await Promise.all([
         queryLocationPermission(),
         getDeviceInfo(),

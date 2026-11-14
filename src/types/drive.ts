@@ -19,6 +19,10 @@ export interface DriveResultRecord {
   proposedCourse: Course | null;
   /** 이 주행 전의 내 베스트 (개인 기록 갱신 표시용) */
   previousBestMs: number | null;
+  /** 랩 안에서 코스를 벗어나 달린 거리 m (코스 이탈) */
+  offCourseM?: number;
+  /** 코스를 200 m 넘게 벗어났을 때 실제로 달린 길로 만든 코스 (새 코스로 저장 · 덮어쓰기 제안, 저장 전) */
+  detourCourse?: Course | null;
 }
 
 /** 비교 랩 (코스·버전별 유효 랩의 축약 데이터) */

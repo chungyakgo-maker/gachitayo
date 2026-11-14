@@ -6,7 +6,7 @@ import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useFriends } from '../../app/friends';
 import { useAccount } from '../../app/account';
 import { useState } from 'react';
-import { cancelPrepare, chooseCourse, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
+import { cancelPrepare, chooseCourse, chooseFreeDrive, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
 import { MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DriveMode } from '../../app/settings';
 import { Sheet } from '../components/Sheet';
@@ -87,8 +87,9 @@ export function PrepareScreen() {
 
       {/* 사용자 요청: 기록 시작 버튼을 맨 위, 준비 상태(GPS·모션·거치 보정)를 그 아래로 */}
       {/* 위치로 자동 감지된 코스면 기록 시작 때 코스 주행 / 일반 기록 주행을 한 번 묻는다 (사용자 요청). 직접 고른 코스는 바로 */}
+      {d.noRecord && <div className="notice">일반 주행 · 끝나도 기록을 남기지 않아요</div>}
       <button type="button" className="primary-btn record" disabled={rec.phase !== 'recording'} onClick={d.course && !d.courseChosen ? () => setSheet('choice') : startDrive}>
-        {rec.phase === 'starting' ? '센서를 켜는 중…' : '기록 시작'}
+        {rec.phase === 'starting' ? '센서를 켜는 중…' : d.noRecord ? '주행 시작' : '기록 시작'}
       </button>
       <div className="card-col" style={{ alignItems: 'center', textAlign: 'center' }}>
         <span style={{ fontSize: 13 }} className="dim">
@@ -145,6 +146,9 @@ export function PrepareScreen() {
       {shareOn && <ShareToggle variant="card" />}
       {shareOn && <DriveFriendsToggle />}
 
+      {/* 일반 주행(기록 안 남김)은 코스·비교 랩을 고르지 않는다 (코스를 만들지도 않는다) */}
+      {!d.noRecord && (
+        <>
       <section aria-label="코스" className="card card-row">
         <div className="card-col">
           <span className="label-row">
@@ -186,6 +190,8 @@ export function PrepareScreen() {
           </button>
         )}
       </section>
+        </>
+      )}
 
       <section aria-label="화면 모드" className="card-col" style={{ gap: 8 }}>
         <span className="label">화면 모드 · 주행 중 두 번 탭하면 다음 모드</span>
@@ -230,6 +236,11 @@ export function PrepareScreen() {
           onChoose={(c) => {
             setSheet(null);
             chooseCourse(c);
+            startDrive();
+          }}
+          onFree={() => {
+            setSheet(null);
+            chooseFreeDrive();
             startDrive();
           }}
         />

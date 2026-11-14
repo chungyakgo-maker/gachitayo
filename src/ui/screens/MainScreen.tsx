@@ -2,7 +2,7 @@
 // 위치 공유 켜기/끄기와 공유 중인 친구 (M8: 사용자 요청으로 2단계에서 앞당김). 같이 달리기는 3단계라 넣지 않는다.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
-import { beginPrepare, chooseCourse, loadCourses, useDrive } from '../../app/drive';
+import { beginPrepare, chooseCourse, chooseFreeDrive, loadCourses, useDrive } from '../../app/drive';
 import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { updateSettings, useSettings } from '../../app/settings';
 import { useRecording } from '../../app/recording';
@@ -47,7 +47,7 @@ export function MainScreen() {
   }, [friendsOn]);
   const near = useMemo(() => (fix ? nearestCourse(drive.courses, fix.lat, fix.lon) : null), [fix, drive.courses]);
   const course = near?.course ?? null;
-  // 근처에 코스가 있으면 주행 시작 때 코스 주행 / 일반 기록 주행을 묻는다 (사용자 요청)
+  // 주행 시작 때 묻는다 (사용자 요청): 근처에 코스가 있으면 코스 주행, 늘 일반 기록 주행 / 일반 주행(기록 안 남김)
   const [ask, setAsk] = useState(false);
   const best = useBestTimes(course ? [course] : []);
   const baseRef = useRef<HTMLDivElement>(null);
@@ -116,7 +116,7 @@ export function MainScreen() {
             업로드 대기 {sync.pending}건 · 통신이 연결되면 자동으로 올라갑니다
           </a>
         )}
-        <button type="button" className="primary-btn start" onClick={course ? () => setAsk(true) : beginPrepare}>
+        <button type="button" className="primary-btn start" onClick={() => setAsk(true)}>
           <span>주행 시작</span>
           <IconArrowRight size={26} />
         </button>
@@ -146,7 +146,7 @@ export function MainScreen() {
         </div>
       </MainMap>
       </div>
-      {ask && course && (
+      {ask && (
         <DriveChoiceSheet
           course={course}
           onClose={() => setAsk(false)}
@@ -155,6 +155,11 @@ export function MainScreen() {
             setAsk(false);
             beginPrepare();
             chooseCourse(c);
+          }}
+          onFree={() => {
+            setAsk(false);
+            beginPrepare();
+            chooseFreeDrive();
           }}
         />
       )}

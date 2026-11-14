@@ -8,6 +8,8 @@ import { formatDelta, formatLapTime } from '../format';
 export type XY = readonly [number, number];
 
 export interface OverlayFrame {
+  /** 일반 주행 (기록 안 남김): 코스 없이 달릴 때 "일반 주행 · 기록 안 함" */
+  free?: boolean;
   /** 세션 시계 ms */
   t: number;
   /** 위치를 아직 못 받았으면 false (값 대신 —) */
@@ -110,7 +112,7 @@ export function headline(f: OverlayFrame): Headline {
     const word = tone === 'slow' ? '가까움' : tone === 'fast' ? '멂' : '유지';
     return { label, text: formatDelta(d, 1), word, tone, plain: false };
   }
-  if (!f.hasCourse) return { label: '코스 기록 중 · 출발 뒤', text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
+  if (!f.hasCourse) return { label: f.free ? '일반 주행 · 기록 안 함' : '코스 기록 중 · 출발 뒤', text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
   if (!f.hasRef) return { label: '비교 랩 없음', text: '—', word: '', tone: 'none', plain: false };
   if (!f.hasState || f.lapNo === 0) return { label: '출발선을 지나면 시작', text: '—', word: '', tone: 'none', plain: false };
   return { label: '베스트 대비', text: formatDelta(f.delta), word: wordOf(f.delta), tone: toneOf(f.delta), plain: false };
