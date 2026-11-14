@@ -450,3 +450,16 @@ describe('주행 중 칸을 눌러 바꾸기', () => {
     expect(screen.getByRole('img', { name: /^베스트 대비/ })).toBeInTheDocument();
   });
 });
+
+// 일반 주행 (기록 안 남김): "코스 기록 중" 대신 "일반 주행 · 기록 안 함"
+describe('일반 주행 화면', () => {
+  it('지도 모드 칸 1과 미니멀 가운데 칸에 일반 주행 · 기록 안 함', () => {
+    const m = render(<DriveView {...props({ course: null, refLap: null, noRecord: true })} />);
+    expect(screen.getByRole('img', { name: /^일반 주행 · 기록 안 함/ })).toBeInTheDocument();
+    m.unmount();
+    render(<DriveView {...props({ course: null, refLap: null, noRecord: true, mode: 'minimal' })} />);
+    expect(screen.getByText('일반 주행 · 기록 안 함')).toBeInTheDocument();
+    expect(screen.getByText('끝나도 기록을 남기지 않아요')).toBeInTheDocument();
+    expect(screen.queryByText('코스 기록 중')).toBeNull();
+  });
+});

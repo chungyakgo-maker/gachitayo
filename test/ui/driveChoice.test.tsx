@@ -11,6 +11,7 @@ const calls: string[] = [];
 const beginPrepare = vi.fn(() => calls.push('begin'));
 const chooseCourse = vi.fn((c: Course | null) => calls.push(`choose:${c?.id ?? 'none'}`));
 const startDrive = vi.fn(() => calls.push('start'));
+const chooseFreeDrive = vi.fn(() => calls.push('free'));
 let drive: Record<string, unknown> = {};
 let fix: { lat: number; lon: number; hAcc: number } | null = null;
 
@@ -20,6 +21,7 @@ vi.mock('../../src/app/drive', async (orig) => ({
   beginPrepare: () => beginPrepare(),
   chooseCourse: (c: Course | null) => chooseCourse(c),
   startDrive: () => startDrive(),
+  chooseFreeDrive: () => chooseFreeDrive(),
   loadCourses: async () => [],
 }));
 vi.mock('../../src/app/recording', async (orig) => ({
@@ -61,14 +63,37 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
     expect(calls).toEqual(['begin', 'choose:c1']);
   });
 
-  it('메인: 근처에 코스가 없으면 묻지 않고 바로 준비', async () => {
+  it('메인: 근처에 코스가 없어도 기록 주행 / 일반 주행(기록 안 남김)을 묻는다 (사용자 요청 "일반 주행 버튼")', async () => {
     drive = idle();
     fix = null;
     const { MainScreen } = await import('../../src/ui/screens/MainScreen');
     render(<MainScreen />);
     fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
-    expect(calls).toEqual(['begin']);
-    expect(screen.queryByRole('button', { name: /일반 기록 주행/ })).toBeNull();
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('button', { name: /코스 주행/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /일반 기록 주행/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^일반 주행/ }));
+    expect(calls).toEqual(['begin', 'free']);
+  });
+
+  it('메인: 근처에 코스가 있으면 세 가지 (코스 주행 · 일반 기록 주행 · 일반 주행)', async () => {
+    drive = idle();
+    fix = { lat: 37.39, lon: 127.01, hAcc: 5 };
+    const { MainScreen } = await import('../../src/ui/screens/MainScreen');
+    render(<MainScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
+    expect(screen.getByRole('button', { name: /코스 주행 · 하오고개/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /일반 기록 주행/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^일반 주행.*기록을 남기지 않아요/ })).toBeInTheDocument();
+  });
+
+  it('준비: 일반 주행이면 기록 안 남김을 알리고 버튼은 "주행 시작"', async () => {
+    drive = { ...idle(), phase: 'preparing', course: null, courseChosen: true, noRecord: true };
+    const { PrepareScreen } = await import('../../src/ui/screens/PrepareScreen');
+    render(<PrepareScreen />);
+    expect(screen.getByText(/일반 주행 · 끝나도 기록을 남기지 않아요/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '주행 시작' }));
+    expect(calls).toEqual(['start']);
   });
 
   it('준비: 위치로 자동 감지된 코스면 기록 시작을 누를 때 한 번 묻는다. 직접 고른(또는 이미 답한) 코스면 바로 시작', async () => {

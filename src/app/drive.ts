@@ -64,6 +64,8 @@ export interface DriveState {
   ref: RefLapRecord | null;
   mode: DriveMode;
   error: string | null;
+  /** 일반 주행 (기록 안 남김, 사용자 요청): 화면은 똑같이, 끝나면 기록을 지운다 */
+  noRecord: boolean;
 }
 
 let state: DriveState = {
@@ -76,6 +78,7 @@ let state: DriveState = {
   ref: null,
   mode: getSettings().defaultMode,
   error: null,
+  noRecord: false,
 };
 const listeners = new Set<() => void>();
 function set(patch: Partial<DriveState>): void {
@@ -160,7 +163,7 @@ export function beginPrepare(): void {
   }
   startRecording();
   pipeline = new LivePipeline({ course: null, ref: null });
-  set({ phase: 'preparing', replay: null, course: null, courseChosen: false, refs: [], ref: null, mode: getSettings().defaultMode, error: null });
+  set({ phase: 'preparing', replay: null, course: null, courseChosen: false, refs: [], ref: null, mode: getSettings().defaultMode, error: null, noRecord: false });
   publish(null);
   void loadCourses();
   let detecting = false;
@@ -188,6 +191,12 @@ export function beginPrepare(): void {
     stopTicker();
   };
   go('#/prepare');
+}
+
+/** 일반 주행 (사용자 요청 "기록 안 남김"): 코스 없이, 끝나면 기록을 지운다 */
+export function chooseFreeDrive(): void {
+  set({ course: null, courseChosen: true, noRecord: true });
+  void applyCourse(null, true);
 }
 
 export function chooseCourse(course: Course | null): void {
@@ -228,7 +237,7 @@ export function startDrive(): void {
   startLinks();
   markRecordingEvent('drive_start', state.course ? { courseId: state.course.id, courseVersion: state.course.version } : {});
   const id = getRecordingState().sessionId;
-  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null });
+  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null, ...(state.noRecord ? { noRecord: true } : {}) });
   set({ phase: 'driving' });
   go('#/drive');
 }
@@ -258,6 +267,15 @@ export async function endDrive(): Promise<void> {
   stopLiveLinks();
   teardownLive?.();
   teardownLive = null;
+  // 일반 주행: 기록을 남기지 않는다 (지우고 메인으로)
+  if (state.noRecord) {
+    await discardRecording();
+    pipeline = null;
+    publish(null);
+    set({ phase: 'idle', noRecord: false });
+    go('#/');
+    return;
+  }
   const id = await stopRecording();
   if (!id) {
     // 저장 실패: 기록 상태(stopFailed)에 "다시 저장" 안내가 있다

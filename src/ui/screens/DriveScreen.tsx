@@ -52,6 +52,8 @@ export interface DriveViewProps {
   onEnd: () => void;
   /** 주행 중 지도 보기 바꾸기 (사용자 요청). 기본: 설정에 저장 */
   onMapView?: (v: MapViewMode) => void;
+  /** 일반 주행 (기록 안 남김) */
+  noRecord?: boolean;
   /** 칸 1을 눌렀을 때 (기본: 친구 델타 → 베스트 델타 → 표시 안 함) */
   onTop?: () => void;
   /** 칸 2(0)·칸 3(1)을 눌렀을 때 (기본: 다음 값) */
@@ -101,7 +103,7 @@ function WidgetCanvas({ id, frame, th }: { id: Exclude<WidgetId, 'pace' | 'none'
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, replayControls }: DriveViewProps) {
+export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, noRecord = false, replayControls }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   // 지도 모드: 위에 얹은 칸들이 지도를 가리는 높이 (다른 모드에서는 0)
   const mapRef = useRef<HTMLDivElement>(null);
@@ -112,7 +114,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   // 최근 G 궤적 (사용자 요청: 부드럽게 그린다). 스냅숏 시각 순서로 모은다
   const trailBuf = useRef(new GTrailBuffer());
   trailBuf.current.push(snap?.t ?? 0, st?.gx ?? null, st?.gy ?? null);
-  const frame: OverlayFrame = { ...frameFromLive(snap, course !== null, refLap !== null), gap, gMax: settings.gMaxG, gTrail: trailBuf.current.points() };
+  const frame: OverlayFrame = { ...frameFromLive(snap, course !== null, refLap !== null), gap, gMax: settings.gMaxG, gTrail: trailBuf.current.points(), free: noRecord };
   // 칸 1 델타의 기준 (주행 중 칸 1을 눌러 바꾼다): 베스트면 앞 친구가 있어도 베스트 대비
   const frameTop: OverlayFrame = settings.deltaSource === 'best' ? { ...frame, gap: null } : frame;
   const hl = headline(frameTop);
@@ -208,13 +210,13 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
               </>
             ) : !course ? (
               <>
-                <span style={{ fontSize: 16, color: 'var(--fg-2)' }}>코스 기록 중</span>
+                <span style={{ fontSize: 16, color: 'var(--fg-2)' }}>{noRecord ? '일반 주행 · 기록 안 함' : '코스 기록 중'}</span>
                 <span className="delta-text" style={{ color: 'var(--fg)' }}>
                   {kmh(st?.speedKmh ?? null)}
                 </span>
                 <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--fg-dim)' }}>km/h</span>
                 <span style={{ marginTop: 12, fontSize: 13 }} className="dim">
-                  랩은 주행이 끝난 뒤 계산해요
+                  {noRecord ? '끝나도 기록을 남기지 않아요' : '랩은 주행이 끝난 뒤 계산해요'}
                 </span>
               </>
             ) : (
@@ -495,6 +497,7 @@ export function DriveScreen() {
       error={d.error}
       onCycle={cycleDriveMode}
       onEnd={() => void endDrive()}
+      noRecord={d.noRecord}
       replayControls={REPLAY_CONTROLS}
     />
   );
