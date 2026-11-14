@@ -2685,3 +2685,34 @@ button.map-gps:active {
 .off-course-panel .lbl {
   font-size: 16px;
 }
+
+/* 주행 중 칸 터치로 바꾸기 (사용자 요청): 칸을 감싸는 투명 버튼 */
+.slot-btn {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.slot-btn > * {
+  width: 100%;
+}
+.slot-btn:active > * {
+  opacity: 0.8;
+}
+.slot-btn.slot-off {
+  height: 30px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-align: center;
+  background: rgba(0, 0, 0, 0.35);
+}

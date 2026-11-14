@@ -192,7 +192,7 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
   it('상단 칸: 칸 1 델타·칸 2·칸 3 모두 표시 안 함을 고를 수 있고, 고른 자리는 그대로 (사용자 요청)', () => {
     const a = render(<DriveView {...props({ settings: { ...DEFAULT_SETTINGS, topDelta: false, widgets: ['none', 'pace'] } })} />);
     expect(a.container.querySelector('.delta-panel')).toBeNull();
-    const cells = a.container.querySelectorAll('.widget-row > *');
+    const cells = a.container.querySelectorAll('.widget-row > .slot-btn > *');
     expect(cells.length).toBe(2);
     expect(cells[0]).toHaveClass('tile-empty');
     expect(cells[1]).toHaveClass('pace-tile');
@@ -205,7 +205,7 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
   it('표지판 칸은 코스 없이 달리면 비운다 (커브를 알 수 없으므로)', () => {
     const { container } = render(<DriveView {...props({ course: null, refLap: null })} />);
     expect(container.querySelector('.pace-tile')).toBeNull();
-    expect(container.querySelectorAll('.widget-row > *')[1]).toHaveClass('tile-empty');
+    expect(container.querySelectorAll('.widget-row > .slot-btn > *')[1]).toHaveClass('tile-empty');
   });
 
   it('커브 방향 화면 색 D (기본): 다음 커브 쪽 가장자리만, 가까울수록 진하게, 랩 밖이면 없다', () => {
@@ -398,7 +398,7 @@ describe('주행 중 코스 이탈 안내 (시안 B)', () => {
   it('표지판 칸을 안 골랐으면 칸 3(오른쪽) 자리에 띄운다', () => {
     const r = render(<DriveView {...props({ snap: off(), settings: { ...DEFAULT_SETTINGS, widgets: ['g', 'speed'] } })} />);
     const row = r.container.querySelector('.widget-row')!;
-    expect(row.lastElementChild).toHaveClass('off-course-tile');
+    expect(row.lastElementChild!.firstElementChild).toHaveClass('off-course-tile');
   });
 
   it('코스 위이거나 이탈 거리가 없으면(출발선 전) 띄우지 않는다', () => {
@@ -412,5 +412,41 @@ describe('주행 중 코스 이탈 안내 (시안 B)', () => {
     m.unmount();
     render(<DriveView {...props({ snap: off({ offCourseM: 120 }), mode: 'dashboard' })} />);
     expect(screen.getByRole('status', { name: '코스 이탈, 코스까지 120 m, 이 랩 무효' })).toBeInTheDocument();
+  });
+});
+
+// 주행 중 칸 터치로 바꾸기 (사용자 요청): 칸 1·2·3을 누르면 다음 값, 두 번 탭(화면 모드 바꾸기)으로 치지 않는다
+describe('주행 중 칸을 눌러 바꾸기', () => {
+  it('칸 1·2·3을 누르면 각각 바꾸기를 부르고, 화면 모드는 바뀌지 않는다', () => {
+    const onTop = vi.fn();
+    const onSlot = vi.fn();
+    const onCycle = vi.fn();
+    render(<DriveView {...props({ onTop, onSlot, onCycle })} />);
+    const top = screen.getByRole('button', { name: /^칸 1 · .* · 누르면 바꾸기$/ });
+    fireEvent.pointerDown(top);
+    fireEvent.click(top);
+    fireEvent.pointerDown(top);
+    fireEvent.click(top);
+    expect(onTop).toHaveBeenCalledTimes(2);
+    expect(onCycle).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '칸 2 · G미터 · 누르면 바꾸기' }));
+    fireEvent.click(screen.getByRole('button', { name: '칸 3 · 표지판 · 누르면 바꾸기' }));
+    expect(onSlot.mock.calls).toEqual([[0], [1]]);
+  });
+
+  it('표시 안 함인 칸도 눌러서 값을 다시 고를 수 있다', () => {
+    const onSlot = vi.fn();
+    render(<DriveView {...props({ onSlot, settings: { ...DEFAULT_SETTINGS, widgets: ['g', 'none'] } })} />);
+    fireEvent.click(screen.getByRole('button', { name: '칸 3 · 표시 안 함 · 누르면 바꾸기' }));
+    expect(onSlot).toHaveBeenCalledWith(1);
+  });
+
+  it('칸 1이 베스트 기준이면 앞 친구가 있어도 베스트 대비를 보인다', () => {
+    const gap = { nickname: '지훈', targetS: 2, gapS: 1.5, stale: false };
+    const r = render(<DriveView {...props({ gap })} />);
+    expect(screen.getByRole('img', { name: /^Delta \(지훈\)/ })).toBeInTheDocument();
+    r.unmount();
+    render(<DriveView {...props({ gap, settings: { ...DEFAULT_SETTINGS, deltaSource: 'best' } })} />);
+    expect(screen.getByRole('img', { name: /^베스트 대비/ })).toBeInTheDocument();
   });
 });
