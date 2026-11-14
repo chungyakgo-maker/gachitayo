@@ -32,6 +32,8 @@ export const BUILTIN_COURSES: readonly BuiltinCourse[] = [
   { key: 'hambaek-mungok', name: '미륵고개전망대', route: '함백역 → 정선 남면 문곡리' },
   { key: 'maebongsan-baramui-eondeok', name: '매봉산 바람의언덕', route: '태백 적각동 → 매봉산 바람의언덕' },
   { key: 'jeoksangsan-observatory', name: '적상산전망대', route: '무주 적상면 북창리 → 적상산전망대' },
+  // 사용자가 준 카카오맵 GPX (2026-11-14). 이름은 GPX에 적힌 곳 이름 (사용자가 바꾸면 oldNames로 옮긴다)
+  { key: 'sukam-bukpyeong', name: '숙암리–북평리', route: '정선 북평면 숙암리 → 북평리' },
 ];
 
 /** 기본 코스 선 고침 차례. 폰에 기록한 차례보다 크면 앱 시작 때 한 번, 예전 선으로 들어 있는 기본 코스를 새 선으로 바꾼다.
