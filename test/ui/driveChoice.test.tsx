@@ -92,6 +92,9 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
     const { PrepareScreen } = await import('../../src/ui/screens/PrepareScreen');
     render(<PrepareScreen />);
     expect(screen.getByText(/일반 주행 · 끝나도 기록을 남기지 않아요/)).toBeInTheDocument();
+    // 코스·비교 랩 고르기는 숨긴다 (기록을 남기지 않으므로 코스를 만들지도 않는다)
+    expect(screen.queryByText(/근처에 저장된 코스/)).toBeNull();
+    expect(screen.queryByText('비교 랩')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '주행 시작' }));
     expect(calls).toEqual(['start']);
   });

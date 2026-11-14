@@ -146,6 +146,9 @@ export function PrepareScreen() {
       {shareOn && <ShareToggle variant="card" />}
       {shareOn && <DriveFriendsToggle />}
 
+      {/* 일반 주행(기록 안 남김)은 코스·비교 랩을 고르지 않는다 (코스를 만들지도 않는다) */}
+      {!d.noRecord && (
+        <>
       <section aria-label="코스" className="card card-row">
         <div className="card-col">
           <span className="label-row">
@@ -187,6 +190,8 @@ export function PrepareScreen() {
           </button>
         )}
       </section>
+        </>
+      )}
 
       <section aria-label="화면 모드" className="card-col" style={{ gap: 8 }}>
         <span className="label">화면 모드 · 주행 중 두 번 탭하면 다음 모드</span>
