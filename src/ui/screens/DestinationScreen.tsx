@@ -47,7 +47,8 @@ type Search = { status: 'idle' } | { status: 'loading' } | { status: 'done'; pla
 export function DestinationScreen() {
   const drive = useDrive();
   const plan = usePlan();
-  const { fix, permission } = useLocationPreview(true);
+  // 지금 위치가 있어야 경로를 받으므로 허용 전이어도 위치를 켠다 (아이폰은 허용해도 "prompt"로 알려 주는 경우가 많다)
+  const { fix, permission } = useLocationPreview(true, true);
   useEffect(() => {
     void loadCourses();
     // 화면을 떠나면 고르던 것을 지운다 (출발했으면 경로 안내가 따로 들고 있다)
@@ -59,9 +60,17 @@ export function DestinationScreen() {
   // 고를 때마다 최근 목적지가 바뀔 수 있어 계획 상태가 바뀌면 다시 읽는다
   const recent = useMemo(() => recentDestinations(), [plan.status]);
   const courses = useMemo(() => courseDestinations(drive.courses, from), [drive.courses, from]);
+  // 위치를 아직 못 받았으면 고른 곳을 들고 있다가 위치가 오면 바로 경로를 찾는다 (사용자 보고: 검색 결과를 눌러도 반응이 없었다)
+  const [waiting, setWaiting] = useState<Destination | null>(null);
   const pick = (d: Destination) => {
     if (from) void planTo(d, from);
+    else setWaiting(d);
   };
+  useEffect(() => {
+    if (!waiting || !from) return;
+    void planTo(waiting, from);
+    setWaiting(null);
+  }, [waiting, from]);
   // 장소 검색 (늦게 온 결과는 버린다)
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState<Search>({ status: 'idle' });
@@ -97,7 +106,19 @@ export function DestinationScreen() {
   const gps: GpsState = permission === 'denied' ? 'weak' : !fix ? 'none' : fix.hAcc <= 10 ? 'good' : fix.hAcc <= 30 ? 'wait' : 'weak';
 
   let bottom;
-  if (plan.status === 'loading') {
+  if (waiting && plan.status === 'idle') {
+    bottom = (
+      <div className="card card-col dest-card" role="status">
+        <strong className="dest-title">{waiting.name}</strong>
+        <span className="sub">
+          {permission === 'denied' ? '위치 권한이 꺼져 있어요. 설정에서 허용해 주세요' : '현재 위치를 받는 중… 받으면 바로 경로를 찾아요'}
+        </span>
+        <button type="button" className="ghost-btn" onClick={() => setWaiting(null)}>
+          취소
+        </button>
+      </div>
+    );
+  } else if (plan.status === 'loading') {
     bottom = (
       <div className="card card-col dest-card" role="status">
         <strong>경로 찾는 중…</strong>

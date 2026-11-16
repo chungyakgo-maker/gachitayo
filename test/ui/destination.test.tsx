@@ -36,7 +36,13 @@ vi.mock('../../src/app/drive', async (orig) => ({
   useDrive: () => ({ phase: drivePhase, replay: null, courses: [course] }),
   loadCourses: async () => [course],
 }));
-vi.mock('../../src/ui/hooks/useLocationPreview', () => ({ useLocationPreview: () => ({ fix, permission: 'granted' }) }));
+let hookArgs: unknown[] = [];
+vi.mock('../../src/ui/hooks/useLocationPreview', () => ({
+  useLocationPreview: (...args: unknown[]) => {
+    hookArgs = args;
+    return { fix, permission: fix ? 'granted' : 'prompt' };
+  },
+}));
 vi.mock('../../src/ui/components/MainMap', () => ({
   MainMap: (p: Record<string, unknown> & { children?: React.ReactNode }) => {
     mapProps = p;
@@ -108,6 +114,35 @@ describe('목적지 고르기', () => {
     fireEvent.click(screen.getByRole('button', { name: /하오고개 · 출발점/ }));
     (mapProps.onLongPress as (lat: number, lon: number) => void)(37.42, 127.03);
     expect(planTo).not.toHaveBeenCalled();
+  });
+
+  it('asks for location on this screen even before it was granted', () => {
+    render(<DestinationScreen />);
+    expect(hookArgs).toEqual([true, true]);
+  });
+
+  it('picking a search result before location arrives waits, then plans', async () => {
+    fix = null;
+    places = [{ name: '만항재', category: '고개,골짜기', address: '강원특별자치도 정선군 고한읍 고한리 산216-37', lat: 37.1487091, lon: 128.8994813 }];
+    const { rerender } = render(<DestinationScreen />);
+    fireEvent.change(screen.getByRole('searchbox', { name: '장소 검색' }), { target: { value: '만항재' } });
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^만항재 · 고개,골짜기/ }));
+    expect(planTo).not.toHaveBeenCalled();
+    expect(screen.getByText('현재 위치를 받는 중… 받으면 바로 경로를 찾아요')).toBeInTheDocument();
+    expect(screen.getByText('만항재')).toBeInTheDocument();
+    fix = { lat: 37.39, lon: 127, hAcc: 5 };
+    rerender(<DestinationScreen />);
+    expect(planTo).toHaveBeenCalledWith({ lat: 37.1487091, lon: 128.8994813, name: '만항재', kind: 'search' }, { lat: 37.39, lon: 127 });
+  });
+
+  it('waiting for location can be cancelled', async () => {
+    fix = null;
+    render(<DestinationScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /하오고개 · 출발점/ }));
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByText('현재 위치를 받는 중… 받으면 바로 경로를 찾아요')).toBeNull();
+    expect(screen.getByRole('button', { name: /하오고개 · 출발점/ })).toBeInTheDocument();
   });
 
   it('loading shows searching and pin', () => {
