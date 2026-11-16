@@ -2,6 +2,8 @@
 // 키(VITE_KAKAO_JS_KEY)가 없거나 SDK를 못 불러오면 폰 공유 창, 그것도 없으면 링크 복사.
 // 링크는 웹 앱 주소 #/join/{코드} (앱 출시 뒤 유니버설 링크는 따로)
 const SDK_URL = 'https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js';
+/** 받은 파일이 바뀌지 않았는지 (CI 점검 2026-11-16에서 받은 값) */
+const SDK_INTEGRITY = 'sha384-DKYJZ8NLiK8MN4/C5P2dtSmLQ4KwPaoqAfyA/DfmEc1VDxu4yyC7wy6K1Hs90nka';
 
 interface KakaoSdk {
   init: (key: string) => void;
@@ -41,6 +43,7 @@ function loadSdk(): Promise<KakaoSdk | null> {
   loading ??= new Promise<KakaoSdk | null>((resolve) => {
     const s = document.createElement('script');
     s.src = SDK_URL;
+    s.integrity = SDK_INTEGRITY;
     s.crossOrigin = 'anonymous';
     s.async = true;
     const t = setTimeout(() => resolve(null), 8000);
