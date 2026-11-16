@@ -50,7 +50,7 @@ jobs:
   deploy:
     name: GitHub Pages 배포
     needs: [test, worker-test, deploy-worker]
-    # 서버 배포가 실패하거나 건너뛰어도 웹앱은 배포한다 (그때는 폰에만 저장하는 빌드)
+    # 서버 배포가 실패하거나 건너뛰어도 웹앱은 배포한다. 서버 주소는 지금 서버(그대로 돌고 있음)로 (2026-11-16 사고: 주소 없이 배포돼 로그인이 풀렸다)
     if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.worker-test.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -72,10 +72,14 @@ jobs:
           K: ${{ secrets.KAKAO_JS_KEY }}
         run: if [ -n "$K" ]; then echo "KAKAO_JS_KEY 있음 · 카톡 카드로 초대"; else echo "KAKAO_JS_KEY 없음 · 초대는 폰 공유 창·링크 복사"; fi
       - name: 빌드
-        run: npm run build
+        run: |
+          # 서버 주소 없이 만들면 폰에만 저장하는 앱이 되어 모두 로그인이 풀린다. 그럴 때는 배포하지 않는다
+          [ -n "$VITE_API_URL" ] || { echo "::error::서버 주소가 비어 있어 배포하지 않아요"; exit 1; }
+          echo "서버 주소: $VITE_API_URL"
+          npm run build
         env:
           # 방금 배포한 서버(Worker) 주소. 서버 배포를 건너뛰었으면 Actions 변수 VITE_API_URL(있으면), 둘 다 없으면 폰에만 저장
-          VITE_API_URL: ${{ needs.deploy-worker.outputs.api_url || vars.VITE_API_URL }}
+          VITE_API_URL: ${{ needs.deploy-worker.outputs.api_url || vars.VITE_API_URL || 'https://gachitayo-api.chungyakgo.workers.dev' }}
           # 그룹 주행 카톡 초대 카드 (카카오 JavaScript 키, 웹 페이지에 그대로 보이는 공개 키). 없으면 폰 공유 창·링크 복사
           VITE_KAKAO_JS_KEY: ${{ secrets.KAKAO_JS_KEY }}
       - uses: actions/configure-pages@v6
