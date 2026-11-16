@@ -1,0 +1,130 @@
+# 아이폰 앱 디고 TestFlight 올리기 (출시 준비): 맥 서버에서 서명한 Release 빌드를 App Store Connect에 올린다.
+# 애플 키 4개(GitHub 비밀값 APPLE_API_ISSUER_ID · APPLE_API_KEY_ID · APPLE_API_KEY_P8 · APPLE_TEAM_ID)가 있어야 한다. 키 값은 출력하지 않는다.
+# 손으로 실행할 때만(Actions → 아이폰 앱 TestFlight 올리기 → Run workflow). 빌드 번호는 이 작업의 실행 번호(늘 커진다)
+name: 아이폰 앱 TestFlight 올리기
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  api-url:
+    # 서버 주소 찾기 (시뮬레이터 빌드 작업과 같은 방법, 읽기만)
+    name: 서버 주소
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      url: ${{ steps.api.outputs.url }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cloudflare 비밀값 다듬기 (읽기만)
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
+        run: bash .github/scripts/cloudflare-secrets.sh
+      - name: Worker 주소
+        id: api
+        env:
+          VAR_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          url="$VAR_URL"
+          if [ -z "$url" ] && [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            resp=$(curl -s --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" || true)
+            sub=$(printf '%s' "$resp" | jq -r '.result.subdomain // empty' 2>/dev/null || true)
+            if [ -n "$sub" ]; then url="https://gachitayo-api.$sub.workers.dev"; fi
+          fi
+          echo "서버 주소: ${url:-(없음)}"
+          [ -n "$url" ] || { echo "::error::서버 주소를 못 찾았어요 (앱이 서버 없이 만들어지면 안 됨)"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+  upload:
+    name: 서명·빌드·TestFlight 올리기
+    needs: api-url
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      ISSUER_RAW: ${{ secrets.APPLE_API_ISSUER_ID }}
+      KEY_ID_RAW: ${{ secrets.APPLE_API_KEY_ID }}
+      KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      TEAM_RAW: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - name: 애플 키 확인 (값은 출력하지 않음)
+        run: |
+          t() { printf '%s' "$1" | tr -d '[:space:]'; }
+          miss=""
+          [ -n "$(t "$ISSUER_RAW")" ] || miss="$miss APPLE_API_ISSUER_ID"
+          [ -n "$(t "$KEY_ID_RAW")" ] || miss="$miss APPLE_API_KEY_ID"
+          printf '%s' "$KEY_P8" | grep -q 'BEGIN PRIVATE KEY' || miss="$miss APPLE_API_KEY_P8"
+          [ -n "$(t "$TEAM_RAW")" ] || miss="$miss APPLE_TEAM_ID"
+          if [ -n "$miss" ]; then echo "::error::GitHub 비밀값에 애플 키가 없거나 모양이 달라요:$miss"; exit 1; fi
+          {
+            echo "ISSUER=$(t "$ISSUER_RAW")"
+            echo "KEY_ID=$(t "$KEY_ID_RAW")"
+            echo "TEAM=$(t "$TEAM_RAW")"
+          } >> "$GITHUB_ENV"
+          echo "애플 키 4개 있음"
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: 앱 빌드 (dist-app)
+        run: npm run build:app
+        env:
+          VITE_API_URL: ${{ needs.api-url.outputs.url }}
+      - name: iOS 프로젝트에 넣기
+        run: npx cap sync ios
+      - name: Xcode 고르기 (설치된 것 중 가장 새것, 앱스토어는 최신 SDK를 요구)
+        run: |
+          x=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$x"
+          xcodebuild -version
+      - name: 애플 키 파일 (작업이 끝나면 지움)
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$KEY_P8" | tr -d '\r' > "$RUNNER_TEMP/keys/AuthKey_$KEY_ID.p8"
+          echo "KEY_PATH=$RUNNER_TEMP/keys/AuthKey_$KEY_ID.p8" >> "$GITHUB_ENV"
+      - name: 서명해서 묶기 (Release)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER" \
+            DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            archive | tail -80
+      - name: App Store Connect에 올리기
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/export.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER" | tail -80
+          echo "올림: 버전 $(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "$RUNNER_TEMP/App.xcarchive/Info.plist") · 빌드 ${{ github.run_number }}"
+          echo "App Store Connect → 디고 → TestFlight에서 처리(10~30분)가 끝나면 폰의 TestFlight 앱에 뜹니다"
+      - name: 키 파일 지우기
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
