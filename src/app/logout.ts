@@ -4,6 +4,7 @@
 // (account.ts에 두면 recording·restore와 서로 불러오게 되어 따로 둔다)
 import { forgetAccount, friendlyServerError, logoutRemote } from './account';
 import { clearCoursePrefs } from './coursePrefs';
+import { leaveGroupLocal } from './group';
 import { clearLocalData, getQueueRepo, getRecordingState } from './recording';
 import { getRestoreState, localOnlySessions } from './restore';
 
@@ -37,6 +38,8 @@ export async function logout(): Promise<{ ok: true } | { ok: false; error: strin
     return { ok: false, error: e instanceof TypeError ? '통신이 연결돼야 로그아웃할 수 있어요' : friendlyServerError(e) };
   }
   await clearLocalData();
+  // 그룹 주행 방도 이 폰에서 잊는다 (다음 계정으로 옮겨 가지 않게)
+  leaveGroupLocal();
   // 즐겨찾기·분류도 이 폰에서 지운다 (다음 계정으로 옮겨 가지 않게, 검토 지적)
   clearCoursePrefs();
   forgetAccount();

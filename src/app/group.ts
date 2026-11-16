@@ -4,10 +4,10 @@
 import { useSyncExternalStore } from 'react';
 import { ApiError, apiFetch } from '../server/api';
 import { friendlyServerError, getAuth } from './account';
-import { getDriveState } from './drive';
+import { getDriveState, subscribeDrive } from './drive';
 import { keepConnected, type LivePoint } from './liveLink';
 import { subscribeSamples } from './recording';
-import { replaceNavRoute, startNavWithRoute, type RouteData } from './routeNav';
+import { getNavLive, replaceNavRoute, startNavWithRoute, type RouteData } from './routeNav';
 
 /** 들어온 순서로 하나씩 (방 안에서 안 겹침, 서버 색 번호 0~7) */
 export const GROUP_COLORS = ['#5ac8fa', '#ff9f43', '#2ecc71', '#ff6b9a', '#ffd23f', '#c084fc', '#22d3ee', '#a3e635'] as const;
@@ -37,8 +37,6 @@ export interface GroupState {
   room: GroupRoomState | null;
   me: string | null;
   connected: boolean;
-  /** 다른 사람 위치 (최근 3분) */
-  points: Record<string, LivePoint[]>;
   /** 방장이 새로 정한 목적지 (참가자가 아직 안 받음) */
   offer: GroupOffer | null;
   /** "나중에"를 누른 목적지 (대기실에서 다시 받을 수 있다. 같은 판은 다시 묻지 않는다) */
@@ -50,7 +48,9 @@ export interface GroupState {
 
 const ROOM_KEY = 'gachitayo.groupRoom.v1';
 const KEEP_MS = 180_000;
-const EMPTY: GroupState = { room: null, me: null, connected: false, points: {}, offer: null, later: null, acceptedVersion: 0, error: null };
+/** 한 사람 위치를 이만큼까지만 들고 있는다 (1초에 한 번 · 3분) */
+const KEEP_POINTS = 200;
+const EMPTY: GroupState = { room: null, me: null, connected: false, offer: null, later: null, acceptedVersion: 0, error: null };
 
 let state: GroupState = EMPTY;
 const listeners = new Set<() => void>();
@@ -66,6 +66,22 @@ export function useGroup(): GroupState {
   }, getGroup);
 }
 
+// 다른 사람 위치는 따로 둔다 (검토 지적: 위치가 올 때마다 메인·대기실까지 다시 그렸다). 주행 화면만 본다
+export type GroupPoints = Record<string, LivePoint[]>;
+let points: GroupPoints = {};
+const pointListeners = new Set<() => void>();
+function setPoints(p: GroupPoints): void {
+  points = p;
+  pointListeners.forEach((l) => l());
+}
+export const getGroupPoints = (): GroupPoints => points;
+export function useGroupPoints(): GroupPoints {
+  return useSyncExternalStore((cb) => {
+    pointListeners.add(cb);
+    return () => pointListeners.delete(cb);
+  }, getGroupPoints);
+}
+
 export const myMember = (s: GroupState): GroupMember | null => s.room?.members.find((m) => m.userId === s.me) ?? null;
 export const isGroupHost = (s: GroupState): boolean => !!myMember(s)?.host;
 
@@ -77,12 +93,23 @@ export function frontMember(s: GroupState): GroupMember | null {
 }
 
 let link: { send: (s: string) => void; close: () => void } | null = null;
+/** 지금 연결 번호 (닫은 연결이 늦게 알려 오는 것은 무시한다) */
+let linkSeq = 0;
 let unsubGps: (() => void) | null = null;
+let unsubDrive: (() => void) | null = null;
 let lastSent = 0;
+/** 받은(또는 방장이 정한) 경로: 출발할 때마다 이 경로로 안내 (지금 방 판과 같을 때만) */
+let accepted: GroupOffer | null = null;
+/** 방 열기 번호: 늦게 끝난 열기는 버린다 */
+let openSeq = 0;
+/** 만들기·코드 입장이 진행 중 (앱을 열 때 예전 방으로 돌아가기가 끼어들지 않게) */
+let explicitBusy = 0;
+/** 지금 받아 오는 경로 판 */
+let fetching = 0;
 
 /** 방 동작이 안 됐을 때 보여줄 말 (서버가 준 말: "방을 찾지 못했어요", "방이 가득 찼어요" 등) */
 export function groupErrorText(e: unknown): string {
-  if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 429) return e.message;
+  if (e instanceof ApiError && e.status >= 400 && e.status < 500) return e.message;
   return friendlyServerError(e);
 }
 
@@ -90,6 +117,30 @@ function token(): string {
   const auth = getAuth();
   if (!auth) throw new Error('계정이 있어야 그룹 주행을 할 수 있어요');
   return auth.token;
+}
+
+function remember(roomId: string, acceptedVersion: number): void {
+  try {
+    localStorage.setItem(ROOM_KEY, JSON.stringify({ roomId, accepted: acceptedVersion }));
+  } catch {
+    // 저장 못 해도 이번 실행 동안은 방에 있다
+  }
+}
+function remembered(): { roomId: string; accepted: number } | null {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(ROOM_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw) as { roomId?: unknown; accepted?: unknown };
+    if (typeof o.roomId === 'string') return { roomId: o.roomId, accepted: typeof o.accepted === 'number' ? o.accepted : 0 };
+  } catch {
+    // 예전 형식: 방 id 글자 그대로
+  }
+  return { roomId: raw, accepted: 0 };
 }
 
 function onMessage(data: string): void {
@@ -106,34 +157,43 @@ function onMessage(data: string): void {
   } else if (m.type === 'pos' && typeof m.userId === 'string') {
     const p = m as unknown as LivePoint & { userId: string };
     if (!Number.isFinite(p.t) || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return;
-    const pts = (state.points[p.userId] ?? []).filter((q) => q.t > p.t - KEEP_MS && q.t < p.t);
+    const pts = (points[p.userId] ?? []).filter((q) => q.t > p.t - KEEP_MS && q.t < p.t).slice(-(KEEP_POINTS - 1));
     pts.push({ t: p.t, lat: p.lat, lon: p.lon, speed: p.speed ?? null, heading: p.heading ?? null, hAcc: p.hAcc ?? null });
-    set({ points: { ...state.points, [p.userId]: pts } });
+    setPoints({ ...points, [p.userId]: pts });
   }
 }
 
-/** 방장이 목적지를 새로 정했으면 경로를 받아 참가자에게 묻는다 (방장 자신은 바로 받는다) */
+/** 방장이 목적지를 새로 정했으면 경로를 받아 참가자에게 묻는다.
+ *  방장 자신, 또는 이미 받았던 판(앱을 다시 열었을 때)은 묻지 않고 바로 받는다. 같은 판은 한 번만 받아 온다 */
 async function checkRoute(): Promise<void> {
   const room = state.room;
-  if (!room?.dest || room.routeVersion <= state.acceptedVersion || state.offer?.version === room.routeVersion || state.later?.version === room.routeVersion) return;
+  if (!room?.dest) return;
+  const v = room.routeVersion;
+  const settled = () => accepted?.version === v || state.offer?.version === v || state.later?.version === v;
+  if (settled() || fetching === v) return;
+  fetching = v;
   try {
-    const route = await apiFetch<RouteData | null>('GET', `/api/rooms/${room.roomId}/route`, { token: token() });
-    if (!route || state.room?.routeVersion !== room.routeVersion) return;
-    const offer: GroupOffer = { version: room.routeVersion, dest: room.dest, route: { ...route, destName: route.destName ?? null } };
-    if (isGroupHost(state)) applyOffer(offer);
+    const route = await apiFetch<(RouteData & { version?: number }) | null>('GET', `/api/rooms/${room.roomId}/route`, { token: token() });
+    const cur = state.room;
+    // 그사이 방·판이 바뀌었거나 이미 답했으면 버린다 (검토 지적: 받은 뒤 다시 묻는 창이 떴다)
+    if (!route || !cur?.dest || cur.roomId !== room.roomId || cur.routeVersion !== v || (route.version !== undefined && route.version !== v) || settled()) return;
+    const offer: GroupOffer = { version: v, dest: cur.dest, route: { points: route.points, distanceM: route.distanceM, durationS: route.durationS, destName: route.destName ?? null } };
+    if (isGroupHost(state) || v <= state.acceptedVersion) applyOffer(offer);
     else set({ offer, later: null });
   } catch {
     // 다음 상태 때 다시
+  } finally {
+    if (fetching === v) fetching = 0;
   }
 }
 
 function applyOffer(o: GroupOffer): void {
+  accepted = o;
   set({ offer: null, later: null, acceptedVersion: o.version });
-  // 주행 중이면 바로 바꾸고, 아니면 출발 때 켠다 (startGroupDrive)
+  if (state.room) remember(state.room.roomId, o.version);
+  // 주행 중이면 바로 바꾸고, 아니면 출발할 때 켠다 (startGroupNav)
   if (getDriveState().phase !== 'idle') replaceNavRoute(o.route, o.dest);
-  else pendingRoute = o;
 }
-let pendingRoute: GroupOffer | null = null;
 
 export function acceptRouteOffer(): void {
   if (state.offer) applyOffer(state.offer);
@@ -146,12 +206,34 @@ export function reopenRouteOffer(): void {
   if (state.later && state.later.version === state.room?.routeVersion) set({ offer: state.later, later: null });
 }
 /** 출발 때 켤 경로가 있는지 (대기실 안내) */
-export const hasPendingRoute = (): boolean => pendingRoute !== null;
+export const hasPendingRoute = (): boolean => !!accepted && accepted.version === state.room?.routeVersion && getNavLive() === null;
+
+/** 방이 닫혔는지 확인 (연결이 끊겼을 때, 30초에 한 번까지). 닫혔거나 내가 빠졌으면 이 폰에서도 잊는다 */
+let lastVerify = 0;
+async function verifyRoom(): Promise<void> {
+  const room = state.room;
+  if (!room || Date.now() - lastVerify < 30_000) return;
+  lastVerify = Date.now();
+  try {
+    await apiFetch('GET', `/api/rooms/${room.roomId}`, { token: token() });
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 403 || e.status === 404) && state.room?.roomId === room.roomId) leaveGroupLocal();
+  }
+}
 
 function connect(roomId: string): void {
   link?.close();
   unsubGps?.();
-  link = keepConnected(`/group/${roomId}`, onMessage, (c) => set({ connected: c }));
+  const my = ++linkSeq;
+  link = keepConnected(
+    `/group/${roomId}`,
+    (d) => my === linkSeq && onMessage(d),
+    (c) => {
+      if (my !== linkSeq) return;
+      set({ connected: c });
+      if (!c) void verifyRoom();
+    },
+  );
   // 주행 중일 때만 내 GPS를 보낸다 (1초에 한 번쯤)
   unsubGps = subscribeSamples((e) => {
     const ev = e as { kind: string; s: { tFix: number; lat: number; lon: number; speed: number | null; heading: number | null; hAcc: number | null } };
@@ -161,43 +243,68 @@ function connect(roomId: string): void {
     lastSent = g.tFix;
     link?.send(JSON.stringify({ t: g.tFix, lat: g.lat, lon: g.lon, speed: g.speed, heading: g.heading, hAcc: g.hAcc }));
   });
+  // 주행을 어떻게 시작하든 받은 경로가 있으면 안내를 켠다 (검토 지적: 두 번째 출발부터 안내가 없었다)
+  if (!unsubDrive) {
+    let lastPhase = getDriveState().phase;
+    unsubDrive = subscribeDrive(() => {
+      const d = getDriveState();
+      if (lastPhase === 'idle' && d.phase !== 'idle' && !d.replay) startGroupNav();
+      lastPhase = d.phase;
+    });
+  }
 }
 
-async function open(roomId: string): Promise<void> {
+async function open(roomId: string, seq: number, acceptedVersion = 0): Promise<boolean> {
   const room = await apiFetch<GroupRoomState>('GET', `/api/rooms/${roomId}`, { token: token() });
-  try {
-    localStorage.setItem(ROOM_KEY, roomId);
-  } catch {
-    // 저장 못 해도 이번 실행 동안은 방에 있다
-  }
-  set({ ...EMPTY, room: { ...room, roomId }, me: getAuth()?.userId ?? null });
+  if (seq !== openSeq) return false;
+  remember(roomId, acceptedVersion);
+  accepted = null;
+  fetching = 0;
+  setPoints({});
+  set({ ...EMPTY, room: { ...room, roomId }, me: getAuth()?.userId ?? null, acceptedVersion });
   connect(roomId);
   void checkRoute();
+  return true;
 }
 
-export async function createGroupRoom(): Promise<void> {
-  const r = await apiFetch<{ roomId: string; code: string }>('POST', '/api/rooms', { token: token() });
-  await open(r.roomId);
-}
-
-export async function joinGroupRoom(code: string): Promise<void> {
-  const r = await apiFetch<{ roomId: string }>('POST', '/api/rooms/join', { token: token(), body: { code: code.replace(/\D/g, '') } });
-  await open(r.roomId);
-}
-
-/** 앱을 다시 열면 들어가 있던 방으로 (24시간이 지났거나 나갔으면 잊는다) */
-export async function resumeGroupRoom(): Promise<void> {
-  let id: string | null = null;
+async function explicit(f: (seq: number) => Promise<void>): Promise<void> {
+  const seq = ++openSeq;
+  explicitBusy++;
   try {
-    id = localStorage.getItem(ROOM_KEY);
-  } catch {
-    id = null;
+    await f(seq);
+  } finally {
+    explicitBusy--;
   }
-  if (!id || state.room) return;
+}
+
+export function createGroupRoom(): Promise<void> {
+  return explicit(async (seq) => {
+    const r = await apiFetch<{ roomId: string; code: string }>('POST', '/api/rooms', { token: token() });
+    await open(r.roomId, seq);
+  });
+}
+
+export function joinGroupRoom(code: string): Promise<void> {
+  return explicit(async (seq) => {
+    const r = await apiFetch<{ roomId: string }>('POST', '/api/rooms/join', { token: token(), body: { code: code.replace(/\D/g, '') } });
+    const keep = remembered();
+    await open(r.roomId, seq, keep?.roomId === r.roomId ? keep.accepted : 0);
+  });
+}
+
+/** 앱을 다시 열면 들어가 있던 방으로. 방이 닫혔거나(24시간) 내가 빠졌으면 잊고, 통신이 안 되면 기억해 두고 연결되면 다시 */
+export async function resumeGroupRoom(): Promise<void> {
+  const keep = remembered();
+  if (!keep || state.room || explicitBusy > 0) return;
+  const seq = openSeq;
   try {
-    await open(id);
-  } catch {
-    leaveGroupLocal();
+    await open(keep.roomId, seq, keep.accepted);
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 403 || e.status === 404)) {
+      if (seq === openSeq) leaveGroupLocal();
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => void resumeGroupRoom(), { once: true });
+    }
   }
 }
 
@@ -223,25 +330,30 @@ export async function moveGroupMember(userId: string, d: -1 | 1): Promise<void> 
   await setGroupOrder(ms.map((m) => m.userId));
 }
 
-/** 출발: 받은 경로가 있으면 그 경로로 안내를 켠다 (주행 준비는 부른 쪽이 탭 안에서 연다) */
+/** 출발: 받은 경로가 지금 방 판이면 그 경로로 안내를 켠다. 이미 다른 안내 중이면(목적지 화면에서 출발 등) 그대로 둔다 */
 export function startGroupNav(): void {
-  const o = pendingRoute;
-  pendingRoute = null;
-  if (o) startNavWithRoute(o.route, o.dest);
+  const o = accepted;
+  if (!o || !state.room || o.version !== state.room.routeVersion || getNavLive() !== null) return;
+  startNavWithRoute(o.route, o.dest);
 }
 
-/** 서버에 알리지 않고 이 폰에서만 방을 잊는다 */
+/** 서버에 알리지 않고 이 폰에서만 방을 잊는다 (로그아웃, 방이 닫힘) */
 export function leaveGroupLocal(): void {
+  linkSeq++;
   link?.close();
   link = null;
   unsubGps?.();
   unsubGps = null;
-  pendingRoute = null;
+  unsubDrive?.();
+  unsubDrive = null;
+  accepted = null;
+  fetching = 0;
   try {
     localStorage.removeItem(ROOM_KEY);
   } catch {
     // 지울 수 없어도 상태는 비운다
   }
+  setPoints({});
   set(EMPTY);
 }
 
@@ -249,7 +361,7 @@ export async function leaveGroupRoom(): Promise<void> {
   try {
     await post('leave');
   } catch {
-    // 통신이 안 돼도 이 폰에서는 나간다 (24시간 뒤 방이 사라진다)
+    // 통신이 안 돼도 이 폰에서는 나간다 (24시간 뒤 방이 닫힌다)
   }
   leaveGroupLocal();
 }

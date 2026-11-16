@@ -30,15 +30,26 @@ export function inviteLink(code: string): string {
 export const formatRoomCode = (c: string): string => (c.length === 6 ? `${c.slice(0, 3)} ${c.slice(3)}` : c);
 
 let loading: Promise<KakaoSdk | null> | null = null;
+/** 이미 불러온 SDK (없으면 null) */
+function readySdk(): KakaoSdk | null {
+  const key = jsKey();
+  const k = (window as unknown as { Kakao?: KakaoSdk }).Kakao;
+  if (!key || !k) return null;
+  try {
+    if (!k.isInitialized()) k.init(key);
+    return k;
+  } catch {
+    return null;
+  }
+}
+/** 대기실을 열 때 미리 불러 둔다 (누른 순간에 불러오면 아이폰은 공유 허락이 사라진다, 검토 지적) */
+export function preloadKakaoSdk(): void {
+  void loadSdk();
+}
 function loadSdk(): Promise<KakaoSdk | null> {
   const key = jsKey();
   if (!key) return Promise.resolve(null);
-  const ready = (): KakaoSdk | null => {
-    const k = (window as unknown as { Kakao?: KakaoSdk }).Kakao;
-    if (!k) return null;
-    if (!k.isInitialized()) k.init(key);
-    return k;
-  };
+  const ready = readySdk;
   if (ready()) return Promise.resolve(ready());
   loading ??= new Promise<KakaoSdk | null>((resolve) => {
     const s = document.createElement('script');
@@ -79,7 +90,9 @@ export async function shareInvite(o: { code: string; destName: string | null; co
   const url = inviteLink(o.code);
   const title = '같이타요 · 그룹 주행 초대';
   const desc = `방 코드 ${formatRoomCode(o.code)}${o.destName ? ` · ${o.destName}까지 같이 달려요` : ' · 같이 달려요'}\n${o.count}명 참여 중`;
-  const k = await loadSdk();
+  // 미리 불러 둔 SDK만 쓴다. 아직이면 이번에는 폰 공유 창으로 (다음에는 카톡 카드)
+  const k = readySdk();
+  if (!k) preloadKakaoSdk();
   if (k) {
     try {
       const link = { mobileWebUrl: url, webUrl: url };

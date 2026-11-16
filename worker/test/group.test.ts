@@ -1,7 +1,8 @@
 // 그룹 주행 방 (설계 docs/superpowers/specs/2026-11-16-group-drive-design.md): 실제 Workers 런타임의 Durable Object와 웹소켓
-import { env } from 'cloudflare:test';
+import { env, runDurableObjectAlarm } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { handle } from '../src/index';
+import { createRoom, ROOM_CODE_MISSES_PER_HOUR, ROOM_TTL_MS } from '../src/group';
 
 const ORIGIN = 'https://example.github.io';
 let ip = 0;
@@ -103,7 +104,7 @@ describe('그룹 주행 방', () => {
     const s = await state(roomId, a);
     expect(s.dest).toEqual({ name: '만항재', lat: 37.51, lon: 127.01 });
     expect(s.routeVersion).toBe(1);
-    expect(await (await call('GET', `/api/rooms/${roomId}/route`, { token: a.token })).json()).toEqual(route);
+    expect(await (await call('GET', `/api/rooms/${roomId}/route`, { token: a.token })).json()).toEqual({ ...route, version: 1 });
   });
 
   it('positions are relayed to the other members with who sent them', async () => {
@@ -114,7 +115,7 @@ describe('그룹 주행 방', () => {
     const hs = open(await connect(roomId, h.token));
     const as = open(await connect(roomId, a.token));
     await until(() => as.got.some((m) => m.type === 'state'));
-    hs.ws.send(JSON.stringify({ t: 1.8e12, lat: 37.5, lon: 127, speed: 10, heading: 90 }));
+    hs.ws.send(JSON.stringify({ t: Date.now(), lat: 37.5, lon: 127, speed: 10, heading: 90 }));
     await until(() => as.got.some((m) => m.type === 'pos'));
     expect(as.got.find((m) => m.type === 'pos')).toMatchObject({ type: 'pos', userId: h.userId, lat: 37.5, lon: 127, speed: 10 });
     // 보낸 사람에게는 되돌려 보내지 않는다
@@ -148,5 +149,76 @@ describe('그룹 주행 방', () => {
       ['방장', 1],
       ['친구2', 2],
     ]);
+  });
+});
+
+describe('그룹 주행 방 (검토 지적)', () => {
+  it('wrong codes are limited per account per hour', async () => {
+    const u = await user('남');
+    for (let i = 0; i < ROOM_CODE_MISSES_PER_HOUR; i++) {
+      const r = await call('POST', '/api/rooms/join', { token: u.token, body: { code: String(900000 + i) } });
+      expect(r.status).toBe(404);
+    }
+    const h = await user('방장');
+    const { code } = await create(h);
+    // 맞는 코드도 한 시간 동안 막힌다
+    expect((await call('POST', '/api/rooms/join', { token: u.token, body: { code } })).status).toBe(429);
+  });
+
+  it('a room closes 24 hours after it was made: no state, no route, no socket, no join', async () => {
+    const h = await user('방장');
+    const { roomId, code } = await createRoom(env, h.userId, Date.now() - ROOM_TTL_MS - 60_000);
+    expect((await call('GET', `/api/rooms/${roomId}`, { token: h.token })).status).toBe(404);
+    expect((await call('GET', `/api/rooms/${roomId}/route`, { token: h.token })).status).toBe(404);
+    expect((await connect(roomId, h.token)).status).toBe(403);
+    const a = await user('친구');
+    expect((await call('POST', '/api/rooms/join', { token: a.token, body: { code } })).status).toBe(404);
+  });
+
+  it('the closing alarm cuts sockets and deletes the room', async () => {
+    const h = await user('방장');
+    const { roomId } = await create(h);
+    const hs = open(await connect(roomId, h.token));
+    let closed = false;
+    hs.ws.addEventListener('close', () => (closed = true));
+    expect(await runDurableObjectAlarm(env.GROUP.get(env.GROUP.idFromName(roomId)))).toBe(true);
+    await until(() => closed);
+    expect(closed).toBe(true);
+    expect((await call('GET', `/api/rooms/${roomId}`, { token: h.token })).status).toBe(404);
+  });
+
+  it('if nobody is host (the lone host left), the next person to join becomes host', async () => {
+    const h = await user('방장');
+    const { roomId, code } = await create(h);
+    await call('POST', `/api/rooms/${roomId}/leave`, { token: h.token });
+    await call('POST', '/api/rooms/join', { token: h.token, body: { code } });
+    expect((await state(roomId, h)).members).toMatchObject([{ userId: h.userId, host: true }]);
+  });
+
+  it('route comes with its version', async () => {
+    const h = await user('방장');
+    const { roomId } = await create(h);
+    const route = { points: [[37.5, 127], [37.51, 127.01]], distanceM: 1500, durationS: 120 };
+    await call('POST', `/api/rooms/${roomId}/dest`, { token: h.token, body: { name: '만항재', lat: 37.51, lon: 127.01, route } });
+    await call('POST', `/api/rooms/${roomId}/dest`, { token: h.token, body: { name: '두문동재', lat: 37.52, lon: 127.02, route } });
+    expect(await (await call('GET', `/api/rooms/${roomId}/route`, { token: h.token })).json()).toMatchObject({ version: 2, distanceM: 1500 });
+  });
+
+  it('positions: too frequent or wrong clock are dropped', async () => {
+    const h = await user('방장');
+    const { roomId, code } = await create(h);
+    const a = await user('친구');
+    await call('POST', '/api/rooms/join', { token: a.token, body: { code } });
+    const hs = open(await connect(roomId, h.token));
+    const as = open(await connect(roomId, a.token));
+    await until(() => as.got.some((m) => m.type === 'state'));
+    hs.ws.send(JSON.stringify({ t: Date.now() + 10 * 60_000, lat: 37.5, lon: 127 }));
+    hs.ws.send(JSON.stringify({ t: Date.now(), lat: 37.6, lon: 127 }));
+    hs.ws.send(JSON.stringify({ t: Date.now(), lat: 37.7, lon: 127 }));
+    await until(() => as.got.some((m) => m.type === 'pos'));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(as.got.filter((m) => m.type === 'pos').map((m) => m.lat)).toEqual([37.6]);
+    hs.ws.close();
+    as.ws.close();
   });
 });

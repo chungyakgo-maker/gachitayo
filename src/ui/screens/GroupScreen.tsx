@@ -1,7 +1,7 @@
 // 그룹 주행 방 대기실 (설계 docs/superpowers/specs/2026-11-16-group-drive-design.md, 시안 "방장 대기실"):
 // 방 코드·카톡 초대·링크 복사, 주행 순서(방장은 ↑↓), 차 간격(방장은 − +), 목적지(방장은 정하기·바꾸기), 출발 준비, 방 나가기.
 // 주행 중에도 열 수 있다 (방장이 중간에 목적지를 정해 모두에게 보낸다)
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { beginPrepare, chooseCourse, getDriveState, useDrive } from '../../app/drive';
 import {
   groupColor,
@@ -15,7 +15,7 @@ import {
   startGroupNav,
   useGroup,
 } from '../../app/group';
-import { copyInviteLink, formatRoomCode, kakaoShareReady, shareInvite } from '../../app/kakaoShare';
+import { copyInviteLink, formatRoomCode, kakaoShareReady, preloadKakaoSdk, shareInvite } from '../../app/kakaoShare';
 import { GroupSheet } from '../components/GroupSheet';
 import { IconBack } from '../icons';
 
@@ -31,6 +31,9 @@ export function GroupScreen() {
   const [sheet, setSheet] = useState(false);
   const room = g.room;
   const driving = drive.phase !== 'idle' && !drive.replay;
+  useEffect(() => {
+    if (kakaoShareReady()) preloadKakaoSdk();
+  }, []);
   const back = driving ? (drive.phase === 'preparing' ? '#/prepare' : '#/drive') : '#/';
 
   if (!room) {

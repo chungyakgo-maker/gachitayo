@@ -76,6 +76,8 @@ export function JoinScreen({ code }: { code: string }) {
             className="primary-btn"
             disabled={busy}
             onClick={() => {
+              // 나간 뒤 화면이 저절로 한 번 더 들어가지 않게 (검토 지적: 두 번 들어갔다)
+              tried.current = true;
               setBusy(true);
               void leaveGroupRoom().then(join);
             }}

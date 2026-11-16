@@ -109,7 +109,8 @@ export function DestinationScreen({ forRoom = false }: { forRoom?: boolean } = {
     setSending({ busy: true, error: null });
     shareGroupDestination({ name: dest.name, lat: dest.lat, lon: dest.lon }, route).then(
       () => {
-        window.location.hash = busy ? '#/drive' : '#/group';
+        // 주행 준비 중이면 준비 화면으로 (검토 지적: 시작 버튼 없는 주행 화면으로 갔다)
+        window.location.hash = drive.phase === 'preparing' ? '#/prepare' : busy ? '#/drive' : '#/group';
       },
       (e: unknown) => setSending({ busy: false, error: groupErrorText(e) }),
     );

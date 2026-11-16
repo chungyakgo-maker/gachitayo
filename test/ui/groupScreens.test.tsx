@@ -16,7 +16,7 @@ const ROOM = (over: Partial<NonNullable<GroupState['room']>> = {}): NonNullable<
   routeVersion: 0,
   ...over,
 });
-const base = (over: Partial<GroupState> = {}): GroupState => ({ room: ROOM(), me: 'u1', connected: true, points: {}, offer: null, later: null, acceptedVersion: 0, error: null, ...over });
+const base = (over: Partial<GroupState> = {}): GroupState => ({ room: ROOM(), me: 'u1', connected: true, offer: null, later: null, acceptedVersion: 0, error: null, ...over });
 let gs: GroupState = base();
 const h = vi.hoisted(() => ({
   calls: [] as string[],
@@ -220,29 +220,29 @@ describe('목적지 받기 창', () => {
 describe('주행 지도 입력', () => {
   it('front car = the one right before me; others as colored numbered dots; order strip', () => {
     const now = Date.now();
-    gs = base({
-      me: 'u2',
-      points: {
-        u1: [{ t: now, lat: 37.001, lon: 127, speed: 20, heading: 0, hAcc: 5 }],
-        u3: [{ t: now, lat: 36.999, lon: 127, speed: 20, heading: 0, hAcc: 5 }],
-      },
-    });
-    const r = groupDriveInputs(gs, { lat: 37, lon: 127 })!;
+    gs = base({ me: 'u2' });
+    const pts = {
+      u1: [{ t: now, lat: 37.001, lon: 127, speed: 20, heading: 0, hAcc: 5 }],
+      u3: [{ t: now, lat: 36.999, lon: 127, speed: 20, heading: 0, hAcc: 5 }],
+    };
+    const r = groupDriveInputs(gs, pts, { lat: 37, lon: 127 })!;
     expect(r.follow.friendId).toBe('group:u1');
     expect(r.follow.points).toHaveLength(1);
     expect(r.frontStyle).toEqual({ color: '#5ac8fa', no: 1, title: '앞 차 · 1 나' });
     expect(r.cars).toHaveLength(1);
     expect(r.cars[0]).toMatchObject({ label: '친구3', color: '#2ecc71', no: 3 });
     expect(r.cars[0]!.y).toBeLessThan(0);
+    // 앞 차 마지막 위치도 따로 (간격 계산이 신호 없음이면 이 점을 그린다)
+    expect(r.frontCar).toMatchObject({ label: '나', no: 1, color: '#5ac8fa' });
     expect(r.order.map((m) => `${m.no}${m.label}${m.me ? '*' : ''}`)).toEqual(['1나', '2나*', '3친구3']);
   });
 
   it('first car has no front car; stale positions are not drawn', () => {
-    gs = base({ points: { u3: [{ t: Date.now() - 120_000, lat: 37, lon: 127, speed: null, heading: null, hAcc: null }] } });
-    const r = groupDriveInputs(gs, { lat: 37, lon: 127 })!;
+    gs = base();
+    const r = groupDriveInputs(gs, { u3: [{ t: Date.now() - 120_000, lat: 37, lon: 127, speed: null, heading: null, hAcc: null }] }, { lat: 37, lon: 127 })!;
     expect(r.follow.friendId).toBeNull();
     expect(r.frontStyle).toBeNull();
     expect(r.cars).toHaveLength(0);
-    expect(groupDriveInputs(base({ room: null }), null)).toBeNull();
+    expect(groupDriveInputs(base({ room: null }), {}, null)).toBeNull();
   });
 });

@@ -31,7 +31,7 @@ import { formatDelta, formatLapTime } from '../format';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
 import { mapModel, routeMapModel, type MapPerson } from '../overlay/minimap';
-import { frontMember, groupColor, useGroup, type GroupState } from '../../app/group';
+import { frontMember, groupColor, useGroup, useGroupPoints, type GroupPoints, type GroupState } from '../../app/group';
 import { useNavLive, type NavLive } from '../../app/routeNav';
 import { useSmoothAngle } from '../hooks/useSmoothView';
 import { overlayTheme, type OverlayTheme } from '../overlay/theme';
@@ -534,30 +534,40 @@ function GroupOrderStrip({ order }: { order: NonNullable<DriveViewProps['groupOr
 }
 
 /** 그룹 주행 (설계 2026-11-16 group-drive): 앞 차 = 순서상 바로 앞 사람, 목표 간격 = 방 차 간격, 다른 사람들은 색 번호 점 */
-export function groupDriveInputs(g: GroupState, origin: { lat: number; lon: number } | null | undefined): {
+export function groupDriveInputs(
+  g: GroupState,
+  pts: GroupPoints,
+  origin: { lat: number; lon: number } | null | undefined,
+): {
   follow: FollowState;
   frontStyle: { color: string; no: number; title: string } | null;
   cars: MapPerson[];
+  /** 앞 차의 마지막 위치 (간격 계산이 신호 없음일 때 점이라도 그리려고) */
+  frontCar: MapPerson | null;
   order: NonNullable<DriveViewProps['groupOrder']>;
 } | null {
   const room = g.room;
   if (!room) return null;
   const fm = frontMember(g);
-  const follow: FollowState = { friendId: fm ? `group:${fm.userId}` : null, nickname: fm?.nickname ?? null, connected: g.connected, points: fm ? (g.points[fm.userId] ?? []) : [] };
+  const follow: FollowState = { friendId: fm ? `group:${fm.userId}` : null, nickname: fm?.nickname ?? null, connected: g.connected, points: fm ? (pts[fm.userId] ?? []) : [] };
   const sorted = [...room.members].sort((a, b) => a.order - b.order);
   const cars: MapPerson[] = [];
+  let frontCar: MapPerson | null = null;
   if (origin)
     for (const m of sorted) {
-      if (m.userId === g.me || m.userId === fm?.userId) continue;
-      const last = g.points[m.userId]?.at(-1);
+      if (m.userId === g.me) continue;
+      const last = pts[m.userId]?.at(-1);
       // 1분 넘게 안 온 위치는 그리지 않는다
       if (!last || Date.now() - last.t > 60_000) continue;
-      cars.push({ ...toLocal(origin, last.lat, last.lon), label: m.nickname, color: groupColor(m.color), no: m.order });
+      const car = { ...toLocal(origin, last.lat, last.lon), label: m.nickname, color: groupColor(m.color), no: m.order };
+      if (m.userId === fm?.userId) frontCar = car;
+      else cars.push(car);
     }
   return {
     follow,
     frontStyle: fm ? { color: groupColor(fm.color), no: fm.order, title: `앞 차 · ${fm.order} ${fm.nickname}` } : null,
     cars,
+    frontCar,
     order: sorted.map((m) => ({ no: m.order, label: m.userId === g.me ? '나' : m.nickname, color: groupColor(m.color), me: m.userId === g.me })),
   };
 }
@@ -584,7 +594,8 @@ export function DriveScreen() {
   const useGap = !d.replay || virtual;
   // 그룹 주행 중이면 앞 차·간격·지도 사람들을 방에서 (친구 위치 공유·앞 친구 대신)
   const group = useGroup();
-  const gd = d.replay ? null : groupDriveInputs(group, snap?.origin);
+  const groupPts = useGroupPoints();
+  const gd = d.replay ? null : groupDriveInputs(group, groupPts, snap?.origin);
   const fg = useFrontGap(
     gd ? snap : useGap ? snap : null,
     gd ? gd.follow : useGap ? follow : { ...follow, friendId: null },
@@ -594,7 +605,8 @@ export function DriveScreen() {
   const gap = gd?.frontStyle && fg.gap ? { ...fg.gap, title: gd.frontStyle.title } : fg.gap;
   const front = gd?.frontStyle && fg.front ? { ...fg.front, color: gd.frontStyle.color, no: gd.frontStyle.no } : fg.front;
   const shared = useDriveFriends(d.replay || gd ? null : snap, follow.friendId);
-  const friends = gd ? gd.cars : shared;
+  // 앞 차는 간격 계산 점(예측)으로 그리고, 신호가 잠깐 끊기면 마지막 위치 점으로 (검토 지적: 앞 차가 지도에서 사라졌다)
+  const friends = gd ? (front || !gd.frontCar ? gd.cars : [...gd.cars, gd.frontCar]) : shared;
   const nav = useNavLive();
   if (d.phase === 'idle' && !d.replay) {
     return (

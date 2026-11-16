@@ -3,13 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   phase: 'idle',
+  nav: null as unknown,
+  driveCb: null as null | (() => void),
   sampleCb: null as null | ((e: unknown) => void),
   navRoutes: [] as Array<{ route: unknown; dest: unknown }>,
 }));
 vi.mock('../../src/app/account', () => ({ getAuth: () => ({ userId: 'me', token: 'tok' }) }));
 vi.mock('../../src/app/drive', () => ({
   getDriveState: () => ({ phase: h.phase }),
-  subscribeDrive: () => () => {},
+  subscribeDrive: (cb: () => void) => {
+    h.driveCb = cb;
+    return () => {
+      h.driveCb = null;
+    };
+  },
   beginPrepare: vi.fn(),
   chooseCourse: vi.fn(),
   chooseFreeDrive: vi.fn(),
@@ -25,7 +32,7 @@ vi.mock('../../src/app/recording', () => ({
 vi.mock('../../src/app/routeNav', () => ({
   startNavWithRoute: (route: unknown, dest: unknown) => h.navRoutes.push({ route, dest }),
   replaceNavRoute: (route: unknown, dest: unknown) => h.navRoutes.push({ route, dest }),
-  getNavLive: () => null,
+  getNavLive: () => h.nav,
 }));
 vi.mock('../../src/server/config', () => ({ serverConfig: { apiUrl: 'https://api.test' } }));
 
@@ -63,6 +70,10 @@ const ROOM = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const ROUTE = { points: [[37.5, 127], [37.51, 127.01]], distanceM: 1500, durationS: 120 };
+let routeStatus = 200;
+let roomStatus = 200;
+let routeVersion = 1;
+let fetchRoom: ReturnType<typeof ROOM> | null = null;
 
 const group = await import('../../src/app/group');
 const { setWebSocketFactoryForTest } = await import('../../src/app/liveLink');
@@ -72,7 +83,12 @@ beforeEach(() => {
   socks.length = 0;
   calls.length = 0;
   h.phase = 'idle';
+  h.nav = null;
   h.navRoutes.length = 0;
+  routeVersion = 1;
+  fetchRoom = null;
+  routeStatus = 200;
+  roomStatus = 200;
   vi.stubGlobal('localStorage', storage);
   setWebSocketFactoryForTest((url) => {
     const s: Sock = { url, sent: [], onopen: null, onmessage: null, onclose: null, onerror: null, readyState: 1, send: (m) => s.sent.push(m), close: () => {} };
@@ -86,8 +102,11 @@ beforeEach(() => {
       calls.push({ method: init.method ?? 'GET', url, body });
       if (url.endsWith('/api/rooms') && init.method === 'POST') return json(200, { roomId: ROOM().roomId, code: '482917' });
       if (url.endsWith('/api/rooms/join')) return json(200, { roomId: ROOM().roomId });
-      if (url.endsWith('/route')) return json(200, ROUTE);
-      if (/\/api\/rooms\/[0-9a-f-]+$/.test(url)) return json(200, ROOM());
+      if (url.endsWith('/route')) return json(routeStatus, { ...ROUTE, version: routeVersion });
+      if (/\/api\/rooms\/[0-9a-f-]+$/.test(url)) {
+        if (roomStatus === 0) throw new TypeError('Failed to fetch');
+        return roomStatus === 200 ? json(200, fetchRoom ?? ROOM()) : json(roomStatus, { error: '방을 찾지 못했어요' });
+      }
       return json(200, ROOM());
     }),
   );
@@ -101,7 +120,7 @@ describe('그룹 주행 상태', () => {
     await group.joinGroupRoom('482917');
     expect(calls[0]).toEqual({ method: 'POST', url: 'https://api.test/api/rooms/join', body: { code: '482917' } });
     expect(group.getGroup().room!.code).toBe('482917');
-    expect(storage.getItem('gachitayo.groupRoom.v1')).toBe(ROOM().roomId);
+    expect(JSON.parse(storage.getItem('gachitayo.groupRoom.v1')!)).toEqual({ roomId: ROOM().roomId, accepted: 0 });
     expect(socks[0]!.url).toBe(`wss://api.test/group/${ROOM().roomId}`);
   });
 
@@ -116,7 +135,7 @@ describe('그룹 주행 상태', () => {
     await group.joinGroupRoom('482917');
     msg({ type: 'pos', userId: 'host', t: 1.8e12, lat: 37.5, lon: 127, speed: 10, heading: 90, hAcc: 5 });
     msg({ type: 'pos', userId: 'host', t: 1.8e12 + 1000, lat: 37.5001, lon: 127, speed: 10, heading: 90, hAcc: 5 });
-    expect(group.getGroup().points.host).toHaveLength(2);
+    expect(group.getGroupPoints().host).toHaveLength(2);
   });
 
   it('a new destination is offered to members; accepting starts the route', async () => {
@@ -139,6 +158,7 @@ describe('그룹 주행 상태', () => {
   it('a destination changed while driving replaces the route right away', async () => {
     await group.joinGroupRoom('482917');
     h.phase = 'driving';
+    routeVersion = 2;
     msg({ type: 'state', ...ROOM({ dest: { name: '만항재', lat: 37.51, lon: 127.01 }, routeVersion: 2 }) });
     await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
     group.acceptRouteOffer();
@@ -178,5 +198,106 @@ describe('그룹 주행 상태', () => {
 
   it('colors: 8 distinct', () => {
     expect(new Set(group.GROUP_COLORS).size).toBe(8);
+  });
+});
+
+describe('그룹 주행 상태 (검토 지적)', () => {
+  const D = { name: '만항재', lat: 37.51, lon: 127.01 };
+  const routeGets = () => calls.filter((c) => c.url.endsWith('/route')).length;
+
+  it('accepted route guides every drive start, not just the first', async () => {
+    await group.joinGroupRoom('482917');
+    msg({ type: 'state', ...ROOM({ dest: D, routeVersion: 1 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    group.acceptRouteOffer();
+    for (let i = 0; i < 2; i++) {
+      h.phase = 'preparing';
+      h.driveCb!();
+      h.phase = 'idle';
+      h.driveCb!();
+    }
+    expect(h.navRoutes).toHaveLength(2);
+    // 이미 다른 안내 중이면(목적지 화면에서 출발) 건드리지 않는다
+    h.nav = { route: 'other' };
+    h.phase = 'preparing';
+    h.driveCb!();
+    expect(h.navRoutes).toHaveLength(2);
+  });
+
+  it('an accepted route that the host has since replaced is not used', async () => {
+    await group.joinGroupRoom('482917');
+    msg({ type: 'state', ...ROOM({ dest: D, routeVersion: 1 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    group.acceptRouteOffer();
+    routeVersion = 2;
+    msg({ type: 'state', ...ROOM({ dest: { ...D, name: '두문동재' }, routeVersion: 2 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer?.version).toBe(2));
+    group.dismissRouteOffer();
+    group.startGroupNav();
+    expect(h.navRoutes).toHaveLength(0);
+  });
+
+  it('the same version is fetched once and not offered again after answering', async () => {
+    await group.joinGroupRoom('482917');
+    msg({ type: 'state', ...ROOM({ dest: D, routeVersion: 1 }) });
+    msg({ type: 'state', ...ROOM({ dest: D, routeVersion: 1 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    group.acceptRouteOffer();
+    msg({ type: 'state', ...ROOM({ dest: D, routeVersion: 1 }) });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(routeGets()).toBe(1);
+    expect(group.getGroup().offer).toBeNull();
+  });
+
+  it('a route of another version is ignored', async () => {
+    await group.joinGroupRoom('482917');
+    routeVersion = 3;
+    msg({ type: 'state', ...ROOM({ dest: D, routeVersion: 1 }) });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(group.getGroup().offer).toBeNull();
+  });
+
+  it('reopening the app keeps an accepted destination without asking again', async () => {
+    await group.joinGroupRoom('482917');
+    msg({ type: 'state', ...ROOM({ dest: D, routeVersion: 1 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    group.acceptRouteOffer();
+    const saved = storage.getItem('gachitayo.groupRoom.v1');
+    group.leaveGroupLocal();
+    storage.setItem('gachitayo.groupRoom.v1', saved!);
+    fetchRoom = ROOM({ dest: D, routeVersion: 1 });
+    await group.resumeGroupRoom();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(group.getGroup().offer).toBeNull();
+    expect(group.hasPendingRoute()).toBe(true);
+  });
+
+  it('resume keeps the room when offline, forgets it when the room is gone', async () => {
+    storage.setItem('gachitayo.groupRoom.v1', JSON.stringify({ roomId: ROOM().roomId, accepted: 0 }));
+    roomStatus = 0;
+    await group.resumeGroupRoom();
+    expect(storage.getItem('gachitayo.groupRoom.v1')).not.toBeNull();
+    roomStatus = 404;
+    await group.resumeGroupRoom();
+    expect(storage.getItem('gachitayo.groupRoom.v1')).toBeNull();
+    expect(group.getGroup().room).toBeNull();
+  });
+
+  it('an invite join started while resuming wins', async () => {
+    storage.setItem('gachitayo.groupRoom.v1', JSON.stringify({ roomId: 'old-room', accepted: 0 }));
+    const resume = group.resumeGroupRoom();
+    await group.joinGroupRoom('482917');
+    await resume;
+    expect(group.getGroup().room!.roomId).toBe(ROOM().roomId);
+    expect(socks.at(-1)!.url).toContain(ROOM().roomId);
+  });
+
+  it('a late close from an old connection does not mark the new one disconnected', async () => {
+    await group.joinGroupRoom('482917');
+    const old = socks.at(-1)!;
+    await group.joinGroupRoom('482917');
+    socks.at(-1)!.onopen?.();
+    old.onclose?.();
+    expect(group.getGroup().connected).not.toBe(false);
   });
 });

@@ -67,6 +67,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: 카카오 초대 키 확인 (값은 출력하지 않음)
+        env:
+          K: ${{ secrets.KAKAO_JS_KEY }}
+        run: if [ -n "$K" ]; then echo "KAKAO_JS_KEY 있음 · 카톡 카드로 초대"; else echo "KAKAO_JS_KEY 없음 · 초대는 폰 공유 창·링크 복사"; fi
       - name: 빌드
         run: npm run build
         env:
