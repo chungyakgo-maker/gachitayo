@@ -86,6 +86,13 @@ function set(patch: Partial<DriveState>): void {
   listeners.forEach((l) => l());
 }
 export const getDriveState = (): DriveState => state;
+/** 주행 상태가 바뀔 때 (React 밖에서, 경로 안내가 주행 끝을 알아채려고) */
+export function subscribeDrive(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
 export function useDrive(): DriveState {
   return useSyncExternalStore((cb) => {
     listeners.add(cb);
@@ -102,6 +109,14 @@ function publish(s: LiveSnapshot | null): void {
   liveListeners.forEach((l) => l());
 }
 export const getLiveSnapshot = (): LiveSnapshot | null => live;
+/** 화면 스냅숏(10 Hz)을 React 밖에서 받는다 (경로 안내) */
+export function subscribeLive(cb: (s: LiveSnapshot | null) => void): () => void {
+  const l = () => cb(live);
+  liveListeners.add(l);
+  return () => {
+    liveListeners.delete(l);
+  };
+}
 export function useLiveSnapshot(): LiveSnapshot | null {
   return useSyncExternalStore((cb) => {
     liveListeners.add(cb);
