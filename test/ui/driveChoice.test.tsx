@@ -84,7 +84,7 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
     render(<MainScreen />);
     fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
     const item = screen.getByRole('button', { name: /목적지로 주행/ });
-    expect(item).toHaveTextContent('지도에서 목적지를 찍으면 카카오 경로로 커브 표지판을 띄워요');
+    expect(item).toHaveTextContent('장소를 찾거나 지도에서 찍으면 그 길로 커브 표지판을 띄워요');
     fireEvent.click(item);
     expect(window.location.hash).toBe('#/destination');
     expect(calls).toEqual([]);

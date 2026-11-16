@@ -14,6 +14,11 @@ const planTo = vi.fn(async (_d: Destination, _f: { lat: number; lon: number }) =
 const startRouteDrive = vi.fn();
 const setRecord = vi.fn();
 const clearPlan = vi.fn();
+let places: Array<{ name: string; category: string; address: string; lat: number; lon: number }> | Error = [];
+const findPlaces = vi.fn(async (_q: string) => {
+  if (places instanceof Error) throw places;
+  return places;
+});
 let mapProps: Record<string, unknown> = {};
 let drivePhase = 'idle';
 
@@ -24,6 +29,7 @@ vi.mock('../../src/app/routeNav', async (orig) => ({
   startRouteDrive: () => startRouteDrive(),
   setRecord: (on: boolean) => setRecord(on),
   clearPlan: () => clearPlan(),
+  findPlaces: (q: string) => findPlaces(q),
 }));
 vi.mock('../../src/app/drive', async (orig) => ({
   ...(await orig<typeof import('../../src/app/drive')>()),
@@ -50,6 +56,8 @@ beforeEach(() => {
   startRouteDrive.mockClear();
   setRecord.mockClear();
   clearPlan.mockClear();
+  findPlaces.mockClear();
+  places = [];
   mapProps = {};
   drivePhase = 'idle';
 });
@@ -75,7 +83,7 @@ describe('목적지 고르기', () => {
     rememberDestination({ lat: 37.5, lon: 127.1, name: '집 근처', kind: 'map' });
     render(<DestinationScreen />);
     expect(screen.getByText('목적지 고르기')).toBeInTheDocument();
-    expect(screen.getByText('지도를 길게 눌러 목적지를 찍어요')).toBeInTheDocument();
+    expect(screen.getByText('장소를 검색하거나 지도를 길게 눌러 찍어요')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /집 근처/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /하오고개 · 출발점 · 1\.1km/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /하오고개 · 도착점 · 2\.2km/ })).toBeInTheDocument();
@@ -155,6 +163,47 @@ describe('목적지 고르기', () => {
     render(<DestinationScreen />);
     expect(screen.getByRole('link', { name: /진행 중인 주행이 있어요/ })).toHaveAttribute('href', '#/drive');
     expect(screen.getByRole('button', { name: '이 경로로 출발' })).toBeDisabled();
+  });
+
+  it('search shows places and picking one plans route', async () => {
+    places = [
+      { name: '만항재', category: '고개,골짜기', address: '강원특별자치도 정선군 고한읍 고한리 산216-37', lat: 37.1487091, lon: 128.8994813 },
+      { name: '만항재쉼터', category: '음식점>한식', address: '강원특별자치도 정선군 고한읍 함백산로 865', lat: 37.14859, lon: 128.8990109 },
+    ];
+    render(<DestinationScreen />);
+    fireEvent.change(screen.getByRole('searchbox', { name: '장소 검색' }), { target: { value: '만항재' } });
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
+    expect(findPlaces).toHaveBeenCalledWith('만항재');
+    const item = await screen.findByRole('button', { name: /^만항재 · 고개,골짜기/ });
+    expect(screen.getByText('검색 결과')).toBeInTheDocument();
+    // 검색 중에는 최근·코스 목록 대신 결과
+    expect(screen.queryByRole('button', { name: /하오고개 · 출발점/ })).toBeNull();
+    fireEvent.click(item);
+    expect(planTo).toHaveBeenCalledWith({ lat: 37.1487091, lon: 128.8994813, name: '만항재', kind: 'search' }, { lat: 37.39, lon: 127 });
+  });
+
+  it('search with no results says so and can be cleared', async () => {
+    places = [];
+    render(<DestinationScreen />);
+    fireEvent.change(screen.getByRole('searchbox', { name: '장소 검색' }), { target: { value: '없는곳' } });
+    fireEvent.submit(screen.getByRole('searchbox', { name: '장소 검색' }));
+    expect(await screen.findByText('검색 결과가 없어요')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '검색 지우기' }));
+    expect(screen.getByRole('button', { name: /하오고개 · 출발점/ })).toBeInTheDocument();
+  });
+
+  it('search error shows message', async () => {
+    places = new Error('오늘 장소 검색을 너무 많이 했어요. 내일 다시 해 주세요');
+    render(<DestinationScreen />);
+    fireEvent.change(screen.getByRole('searchbox', { name: '장소 검색' }), { target: { value: '만항재' } });
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
+    expect(await screen.findByText('오늘 장소 검색을 너무 많이 했어요. 내일 다시 해 주세요')).toBeInTheDocument();
+  });
+
+  it('empty search does nothing', () => {
+    render(<DestinationScreen />);
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
+    expect(findPlaces).not.toHaveBeenCalled();
   });
 
   it('back goes home and clears plan', () => {

@@ -94,7 +94,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(
       (url: string, init: RequestInit) =>
-        new Promise<Response>((resolve, reject) => pending.push({ url, body: JSON.parse(String(init.body)), auth: new Headers(init.headers).get('Authorization'), signal: init.signal ?? null, resolve, reject })),
+        new Promise<Response>((resolve, reject) => pending.push({ url, body: init.body ? JSON.parse(String(init.body)) : null, auth: new Headers(init.headers).get('Authorization'), signal: init.signal ?? null, resolve, reject })),
     ),
   );
 });
@@ -175,6 +175,29 @@ describe('목적지 계획', () => {
     await p;
     expect(nav.getPlan().status).toBe('error');
     expect(nav.getPlan().error).toBe('통신이 안 돼요. 잠시 뒤 다시 해 주세요');
+  });
+});
+
+describe('장소 검색', () => {
+  it('finds places with the account token', async () => {
+    const p = nav.findPlaces(' 만항재 ');
+    expect(pending[0]!.url).toMatch(/\/api\/places\?q=%EB%A7%8C%ED%95%AD%EC%9E%AC$/);
+    expect(pending[0]!.auth).toBe('Bearer tok');
+    expect(pending[0]!.signal).toBeInstanceOf(AbortSignal);
+    pending[0]!.resolve(json(200, [{ name: '만항재', category: '고개,골짜기', address: '강원특별자치도 정선군 고한읍 고한리 산216-37', lat: 37.1487091, lon: 128.8994813 }]));
+    expect(await p).toEqual([{ name: '만항재', category: '고개,골짜기', address: '강원특별자치도 정선군 고한읍 고한리 산216-37', lat: 37.1487091, lon: 128.8994813 }]);
+  });
+
+  it('server error message is passed on', async () => {
+    const p = nav.findPlaces('만항재');
+    pending[0]!.resolve(json(429, { error: '오늘 장소 검색을 너무 많이 했어요. 내일 다시 해 주세요' }));
+    await expect(p).rejects.toThrow('오늘 장소 검색을 너무 많이 했어요. 내일 다시 해 주세요');
+  });
+
+  it('network failure says no connection', async () => {
+    const p = nav.findPlaces('만항재');
+    pending[0]!.reject(new TypeError('Failed to fetch'));
+    await expect(p).rejects.toThrow('통신이 안 돼요. 잠시 뒤 다시 해 주세요');
   });
 });
 

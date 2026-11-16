@@ -30,7 +30,7 @@
 
 ## 3. 확인한 사실 (2026-11-16 서버 점검, 일회용 갈래 kakao-check)
 
-- 카카오모빌리티 자동차 길찾기 `GET https://apis-navi.kakaomobility.com/v1/directions`, 머리 `Authorization: KakaoAK {디고 REST 키}` → 신청 없이 HTTP 200
+- (처음 설계 · 6절에서 네이버로 바뀜) 카카오모빌리티 자동차 길찾기 `GET https://apis-navi.kakaomobility.com/v1/directions`, 머리 `Authorization: KakaoAK {디고 REST 키}` → 신청 없이 HTTP 200
 - 응답: `routes[0].result_code` (0 = 길찾기 성공), `result_msg`(한국어), `summary.distance`(m)·`duration`(초),
   `sections[].roads[]`에 `name`, `distance`, `vertexes`([경도, 위도, 경도, 위도, …])
 - `origin=경도,위도,angle=도` 로 진행 방향을 주면 그 방향에 맞는 경로가 나온다 (angle 90 / 270에서 서로 다른 경로)
@@ -110,3 +110,19 @@
 - 목적지 화면 카드 모양·글자 크기는 기존 메인 화면 카드(`card`, `sheet-item`)를 따른다
 - 길게 누르기 시간 550 ms, 움직임 10 px 넘으면 취소 (제 판단)
 - 테스트: Worker(카카오 가짜 응답), 엔진(직선+커브 경로), 앱(재탐색 간격·최근 목적지), 화면(시트·목적지 화면·주행 화면)
+
+## 6. 변경 (2026-11-16): 네이버 길찾기 + 장소 검색
+
+사용자 결정 "카카오 길찾기를 뭐하러해 그냥 네이버 쓰는김에 네이버 길찾기 쓰면 되잖아, '만항재' 검색하면 나와야 한다고".
+
+- 길찾기: 네이버 클라우드 Maps **Directions 15** (`https://maps.apigw.ntruss.com/map-direction-15/v1/driving?start=경도,위도&goal=경도,위도`,
+  머리 `X-NCP-APIGW-API-KEY-ID`·`X-NCP-APIGW-API-KEY`). 응답 `code` 0 = 성공, 아니면 `message`(한국어)를 그대로 404로.
+  `route.traoptimal[0].path` = [경도, 위도] 점들, `summary.distance`(m)·`duration`(ms), `section[].name` = 도로 이름.
+  출발 진행 방향 칸이 없어 다시 찾기 때 방향은 보내지 않는다(앱은 그대로 보내고 서버가 버림).
+  사용자가 등록한 앱은 Directions 15 (Directions 5는 구독 안 됨, 서버 점검 결과).
+- 장소 검색: 네이버 클라우드 **NAVER API HUB 지역 검색** (`https://naverapihub.apigw.ntruss.com/search/v1/local?query=…&display=5`, 같은 머리).
+  `mapx`·`mapy` = WGS84 도 × 10⁷. 제목의 `<b>`·HTML 기호를 걷어 낸다. 서버 `GET /api/places?q=` → `[{name, category, address, lat, lon}]` 최대 5개.
+  계정당 하루 500번 (D1 `search_usage`, 검색어는 저장하지 않음). 2026-11-16 점검: "만항재" → 만항재(고개,골짜기), 만항재(자연명소), 만항재(등산코스), 만항재쉼터, 야생화탐방로.
+- 목적지 화면: 위 카드 아래에 검색창(입력칸 16px). 검색하면 아래 카드가 "검색 결과"(이름 · 분류 · 주소 · 거리), "검색 지우기"로 최근·코스 목록으로 돌아간다.
+- 키: GitHub Secrets `NCP_MAP_CLIENT_ID`·`NCP_MAP_CLIENT_SECRET`(Maps), `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`(API HUB) → CI가 있는 것만 Worker 비밀값으로.
+- 개인정보: 길찾기·검색 때 지금 위치·목적지·검색어가 네이버 클라우드로 간다 (ios 갈래 privacy.html).

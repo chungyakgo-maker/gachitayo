@@ -1,4 +1,4 @@
-// 목적지로 주행 (설계 docs/superpowers/specs/2026-11-16-destination-route-design.md 5.3, 사용자 요청 "카카오로 경로검색 및 설정후 표지판 주행"):
+// 목적지로 주행 (설계 docs/superpowers/specs/2026-11-16-destination-route-design.md 5.3·6, 사용자 요청 "경로검색 및 설정후 표지판 주행", "'만항재' 검색하면 나와야"):
 // 목적지 화면의 계획(목적지·경로·기록 남기기)과 주행 중 경로 안내(RouteGuide, 다시 찾기, 도착), 최근 목적지.
 // 일반 주행 위에 얹는다: 코스·랩 엔진은 그대로이고, 주행 화면은 코스가 없을 때 이 안내로 표지판·경로 선을 그린다.
 import { useSyncExternalStore } from 'react';
@@ -14,7 +14,7 @@ export interface Destination {
   lat: number;
   lon: number;
   name: string;
-  kind: 'map' | 'course-start' | 'course-finish' | 'recent';
+  kind: 'map' | 'search' | 'course-start' | 'course-finish' | 'recent';
 }
 
 export interface RouteData {
@@ -65,6 +65,26 @@ async function requestRoute(from: LatLon, to: LatLon, headingDeg?: number): Prom
   if (!auth) throw new ApiError(401, NO_ACCOUNT);
   const body = { from: { lat: from.lat, lon: from.lon }, to: { lat: to.lat, lon: to.lon }, ...(headingDeg === undefined ? {} : { headingDeg }) };
   return apiFetch<RouteData>('POST', '/api/route', { token: auth.token, body, signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) });
+}
+
+/** 장소 검색 결과 (네이버 지역 검색, 서버 /api/places) */
+export interface Place {
+  name: string;
+  category: string;
+  address: string;
+  lat: number;
+  lon: number;
+}
+
+/** 장소 이름·주소로 찾는다 (최대 5개). 실패하면 화면에 보일 글로 던진다 */
+export async function findPlaces(q: string): Promise<Place[]> {
+  const auth = getAuth();
+  if (!auth) throw new Error(NO_ACCOUNT);
+  try {
+    return await apiFetch<Place[]>('GET', `/api/places?q=${encodeURIComponent(q.trim())}`, { token: auth.token, signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) });
+  } catch (e) {
+    throw new Error(errText(e));
+  }
 }
 
 // ── 목적지 화면의 계획 ─────────────────────────────────

@@ -1,10 +1,10 @@
 // 목적지 고르기 (설계 docs/superpowers/specs/2026-11-16-destination-route-design.md 5.4, 사용자 결정 "지도 찍기 + 코스 목록"):
-// 지도 전체 + 위·아래 얹은 카드. 지도를 길게 눌러 찍거나, 최근 목적지·코스 출발점/도착점(가까운 순)을 고르면 카카오 길찾기 경로를 받는다.
+// 지도 전체 + 위·아래 얹은 카드. 장소 이름·주소를 검색하거나(네이버 지역 검색, 사용자 요청 "'만항재' 검색하면 나와야"), 지도를 길게 눌러 찍거나,
+// 최근 목적지·코스 출발점/도착점(가까운 순)을 고르면 네이버 길찾기 경로를 받는다.
 // 경로를 받으면 길이·시간·커브 수를 보여 주고 "이 경로로 출발" (그 탭에서 주행 준비를 연다: 아이폰 모션 권한).
-// 장소 이름 검색은 없다 (카카오 로컬은 디고 앱에서 유료라 쓰지 않는다).
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { loadCourses, useDrive } from '../../app/drive';
-import { clearPlan, courseDestinations, MAP_PICK_NAME, planTo, recentDestinations, setRecord, startRouteDrive, usePlan, type Destination } from '../../app/routeNav';
+import { clearPlan, courseDestinations, findPlaces, MAP_PICK_NAME, planTo, recentDestinations, setRecord, startRouteDrive, usePlan, type Destination, type Place } from '../../app/routeNav';
 import { toLocal } from '../../engine/geo';
 import { RouteGuide } from '../../engine/route/routeGuide';
 import type { GpsState } from '../components/GpsIcon';
@@ -29,15 +29,20 @@ const distFrom = (from: { lat: number; lon: number } | null, d: { lat: number; l
   return Math.hypot(p.x, p.y);
 };
 
-function PlaceButton({ d, distanceM, onPick }: { d: Destination; distanceM: number | null; onPick: (d: Destination) => void }) {
+function PlaceButton({ d, distanceM, detail, onPick }: { d: Destination; distanceM: number | null; detail?: string; onPick: (d: Destination) => void }) {
   const dist = distanceM === null ? '' : formatLength(distanceM);
   return (
-    <button type="button" className="sheet-item" aria-label={dist ? `${d.name} · ${dist}` : d.name} onClick={() => onPick(d)}>
-      <strong className="dest-name">{d.name}</strong>
+    <button type="button" className="sheet-item" aria-label={[d.name, detail, dist].filter(Boolean).join(' · ')} onClick={() => onPick(d)}>
+      <span className="card-col dest-name">
+        <strong className="dest-name">{d.name}</strong>
+        {detail && <span className="sub dest-name">{detail}</span>}
+      </span>
       {dist && <span className="sub mono">{dist}</span>}
     </button>
   );
 }
+
+type Search = { status: 'idle' } | { status: 'loading' } | { status: 'done'; places: Place[] } | { status: 'error'; error: string };
 
 export function DestinationScreen() {
   const drive = useDrive();
@@ -56,6 +61,26 @@ export function DestinationScreen() {
   const courses = useMemo(() => courseDestinations(drive.courses, from), [drive.courses, from]);
   const pick = (d: Destination) => {
     if (from) void planTo(d, from);
+  };
+  // 장소 검색 (늦게 온 결과는 버린다)
+  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState<Search>({ status: 'idle' });
+  const searchSeq = useRef(0);
+  const onSearch = (e?: FormEvent) => {
+    e?.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    const seq = ++searchSeq.current;
+    setSearch({ status: 'loading' });
+    findPlaces(q).then(
+      (places) => seq === searchSeq.current && setSearch({ status: 'done', places }),
+      (err: unknown) => seq === searchSeq.current && setSearch({ status: 'error', error: err instanceof Error ? err.message : String(err) }),
+    );
+  };
+  const clearSearch = () => {
+    searchSeq.current++;
+    setQuery('');
+    setSearch({ status: 'idle' });
   };
   const route = plan.status === 'ready' ? plan.route : null;
   const curves = useMemo(() => (route && route.points.length >= 2 ? new RouteGuide(route.points, { lat: route.points[0]![0], lon: route.points[0]![1] }).notes.length : 0), [route]);
@@ -116,6 +141,31 @@ export function DestinationScreen() {
         </div>
       </div>
     );
+  } else if (search.status !== 'idle') {
+    bottom = (
+      <div className="card card-col dest-card dest-list">
+        <div className="card-row">
+          <span className="label">검색 결과</span>
+          <button type="button" className="link-btn" onClick={clearSearch}>
+            검색 지우기
+          </button>
+        </div>
+        {!from && <span className="sub">{permission === 'denied' ? '위치 권한이 꺼져 있어요. 설정에서 허용해 주세요' : '위치 확인 중'}</span>}
+        {search.status === 'loading' && <span className="sub" role="status">찾는 중…</span>}
+        {search.status === 'error' && <span className="notice warn">{search.error}</span>}
+        {search.status === 'done' && search.places.length === 0 && <span className="sub">검색 결과가 없어요</span>}
+        {search.status === 'done' &&
+          search.places.map((p, i) => (
+            <PlaceButton
+              key={`s${i}`}
+              d={{ lat: p.lat, lon: p.lon, name: p.name, kind: 'search' }}
+              detail={[p.category, p.address].filter(Boolean).join(' · ')}
+              distanceM={distFrom(from, p)}
+              onPick={pick}
+            />
+          ))}
+      </div>
+    );
   } else {
     bottom = (
       <div className="card card-col dest-card dest-list">
@@ -150,9 +200,24 @@ export function DestinationScreen() {
             </a>
             <div className="card-col" style={{ flex: 1, minWidth: 0 }}>
               <span className="title">목적지 고르기</span>
-              <span className="sub">지도를 길게 눌러 목적지를 찍어요</span>
+              <span className="sub">장소를 검색하거나 지도를 길게 눌러 찍어요</span>
             </div>
           </div>
+          <form className="card card-row dest-search" role="search" onSubmit={onSearch}>
+            <input
+              className="text-input"
+              type="search"
+              aria-label="장소 검색"
+              placeholder="장소·주소 (예: 만항재)"
+              enterKeyHint="search"
+              maxLength={60}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button type="submit" className="primary-btn dest-search-btn">
+              검색
+            </button>
+          </form>
           {busy && (
             <a className="notice warn" href={drive.phase === 'preparing' ? '#/prepare' : '#/drive'} style={{ textDecoration: 'none' }}>
               진행 중인 주행이 있어요 · 돌아가기
