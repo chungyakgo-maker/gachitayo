@@ -25,6 +25,12 @@ export interface MainMapProps {
   /** 오른쪽 위 GPS 아이콘 색 (사용자 요청). 누르면 내 위치로 (아래쪽 "내 위치" 버튼 대신, 사용자 요청) */
   gps?: GpsState;
   gpsAcc?: number | null;
+  /** 목적지 경로 [위도, 경도] (목적지 고르기). 하늘색 선, 바뀌면 경로에 맞춰 화면을 옮긴다 */
+  route?: ReadonlyArray<readonly [number, number]> | null;
+  /** 목적지 핀 */
+  dest?: { lat: number; lon: number } | null;
+  /** 지도를 길게 누르면 그 자리 (목적지 고르기) */
+  onLongPress?: (lat: number, lon: number) => void;
   children?: ReactNode;
 }
 
@@ -34,7 +40,10 @@ const insetVars = (t: number, b: number) => ({ '--inset-t': `${t}px`, '--inset-b
 
 const NO_COURSES: Course[] = [];
 
-export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, label, friends = [], insetTop = 0, insetBottom = 0, gps, gpsAcc, children }: MainMapProps) {
+export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, label, friends = [], insetTop = 0, insetBottom = 0, gps, gpsAcc, route = null, dest = null, onLongPress, children }: MainMapProps) {
+  const press = useRef(onLongPress);
+  press.current = onLongPress;
+  const wantPress = onLongPress !== undefined;
   const el = useRef<HTMLDivElement>(null);
   const ctl = useRef<MainMapApi | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -91,6 +100,14 @@ export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, 
   useEffect(() => {
     if (state === 'ready') ctl.current?.setShowCourses(showCourses);
   }, [state, showCourses]);
+  useEffect(() => {
+    if (state === 'ready') ctl.current?.setRoute(route, dest);
+  }, [state, route, dest]);
+  useEffect(() => {
+    if (state !== 'ready') return;
+    ctl.current?.onLongPress(wantPress ? (lat, lon) => press.current?.(lat, lon) : null);
+    return () => ctl.current?.onLongPress(null);
+  }, [state, wantPress]);
 
   if (state === 'failed') {
     const local = me ? toLocal(course?.origin ?? { lat: me.lat, lon: me.lon }, me.lat, me.lon) : null;

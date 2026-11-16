@@ -7,6 +7,7 @@ import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 import { COURSE_STYLE, PIN_LABEL, PIN_TOP_PX, pinElement, sectorLabelElement, type GateWhich, type PickMapController } from './courseStyle';
+import { attachLongPress } from './longPress';
 import { FOLLOW_ZOOM, type AnalysisMapController, type FriendMarker, type MainMapApi, type MapFix, type ReplayMapController } from './mapTypes';
 
 export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -61,6 +62,10 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
   // 다른 코스는 감지된 코스 아래에 깔리게 먼저 (사용자 요청: 메인 지도에 코스 다 보이게)
   const otherLayer = L.layerGroup().addTo(map);
   const courseLayer = L.layerGroup().addTo(map);
+  // 목적지 경로 (목적지 고르기): 하늘색 선 + FINISH 핀
+  const routeLayer = L.layerGroup().addTo(map);
+  let routeKey = '';
+  let detachPress: (() => void) | null = null;
   const friendLayer = L.layerGroup().addTo(map);
   let others: Course[] = [];
   let show = true;
@@ -193,6 +198,42 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       others = list;
       drawOthers();
     },
+    setRoute(points, dest) {
+      routeLayer.clearLayers();
+      const pts = points && points.length >= 2 ? points.map(([lat, lon]) => L.latLng(lat, lon)) : null;
+      if (pts) {
+        const o = { lineJoin: 'round', lineCap: 'round', interactive: false } as const;
+        L.polyline(pts, { ...o, color: ACCENT, opacity: 0.25, weight: 12, className: 'dest-route-glow' }).addTo(routeLayer);
+        L.polyline(pts, { ...o, color: ACCENT, opacity: 1, weight: 5, className: 'dest-route' }).addTo(routeLayer);
+      }
+      if (dest)
+        L.marker([dest.lat, dest.lon], {
+          icon: L.divIcon({ className: 'map-pin finish dest', html: pinElement('finish', PIN_LABEL.finish), iconSize: [26, 36], iconAnchor: [13, 36] }),
+          interactive: false,
+          keyboard: false,
+          zIndexOffset: 600,
+        }).addTo(routeLayer);
+      const key = pts ? `${pts.length}:${pts[0]!.lat},${pts[0]!.lng}:${pts[pts.length - 1]!.lat},${pts[pts.length - 1]!.lng}` : '';
+      if (pts && key !== routeKey) {
+        // 경로가 다 보이게, 그 뒤로는 내 위치를 따라가지 않는다 (GPS 아이콘을 누르면 다시)
+        userMoved = true;
+        move(() =>
+          map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(44, 44 + inset.top + PIN_TOP_PX), paddingBottomRight: L.point(44, 44 + inset.bottom), maxZoom: 17, animate: false }),
+        );
+      }
+      routeKey = key;
+    },
+    onLongPress(cb) {
+      detachPress?.();
+      detachPress = null;
+      if (!cb) return;
+      const c = map.getContainer();
+      detachPress = attachLongPress(c, (x, y) => {
+        const r = c.getBoundingClientRect();
+        const ll = map.containerPointToLatLng([x - r.left, y - r.top]);
+        cb(ll.lat, ll.lng);
+      });
+    },
     setShowCourses(on) {
       if (on === show) return;
       show = on;
@@ -236,6 +277,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     tilesShown: () => shown,
     map,
     destroy() {
+      detachPress?.();
       map.remove();
     },
   };

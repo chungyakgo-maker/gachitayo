@@ -31,6 +31,10 @@ export interface MainMapApi {
   fitFriends(me: MapFix | null): void;
   /** 지도 위에 얹은 칸이 가리는 높이 (px). 내 위치·맞추기는 가려지지 않은 영역 기준 (사용자 요청) */
   setInsets(top: number, bottom: number): void;
+  /** 목적지 경로 선(하늘색)과 목적지 핀 (목적지 고르기). 경로가 바뀌면 경로에 맞춰 화면을 옮기고 내 위치 따라가기를 멈춘다. null이면 지운다 */
+  setRoute(points: ReadonlyArray<readonly [number, number]> | null, dest: { lat: number; lon: number } | null): void;
+  /** 길게 눌러 고르기 (목적지 고르기). null이면 끈다 */
+  onLongPress(cb: ((lat: number, lon: number) => void) | null): void;
   destroy(): void;
 }
 

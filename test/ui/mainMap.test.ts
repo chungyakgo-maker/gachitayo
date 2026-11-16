@@ -171,6 +171,61 @@ describe('메인 지도 (사양서 8.2: 통신이 되면 OSM 타일, 안 되면 
 });
 
 describe('가려지지 않은 영역 가운데 (사용자 요청: 지도는 화면 전체, 칸들은 위에 얹는다)', () => {
+  it('목적지 경로: 하늘색 경로 선과 FINISH 핀을 그리고 경로에 맞춰 화면을 옮긴다, 지우면 사라진다', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    m.update(null, { lat: 37.2, lon: 127.1, hAcc: 5 });
+    const pts: Array<[number, number]> = [
+      [37.2, 127.1],
+      [37.21, 127.1],
+      [37.21, 127.12],
+    ];
+    m.setRoute(pts, { lat: 37.21, lon: 127.12 });
+    expect(el.querySelector('path[stroke="#aacae6"].dest-route')).not.toBeNull();
+    expect(el.querySelector('.map-pin.finish.dest')!.querySelector('.map-label.big')!.textContent).toBe('FINISH');
+    const b = m.map.getBounds();
+    for (const p of pts) expect(b.contains(p)).toBe(true);
+    // 내 위치가 와도 경로 화면을 그대로 둔다
+    const c = m.map.getCenter();
+    m.update(null, { lat: 37.2001, lon: 127.1001, hAcc: 5 });
+    expect(m.map.getCenter()).toEqual(c);
+    m.setRoute(null, null);
+    expect(el.querySelector('.dest-route')).toBeNull();
+    expect(el.querySelector('.map-pin.dest')).toBeNull();
+    m.destroy();
+  });
+
+  it('목적지 핀만 (경로 받기 전): 핀만 그리고 화면은 그대로', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    m.update(null, { lat: 37.2, lon: 127.1, hAcc: 5 });
+    const c = m.map.getCenter();
+    m.setRoute(null, { lat: 37.201, lon: 127.101 });
+    expect(el.querySelector('.map-pin.dest')).not.toBeNull();
+    expect(m.map.getCenter()).toEqual(c);
+    m.destroy();
+  });
+
+  it('길게 누르면 그 자리의 위경도를 알려 준다 (끄면 안 알림)', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    m.update(null, { lat: 37.2, lon: 127.1, hAcc: 5 });
+    const got: Array<[number, number]> = [];
+    m.onLongPress((lat, lon) => got.push([lat, lon]));
+    el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 60 }));
+    expect(got).toHaveLength(1);
+    const want = m.map.containerPointToLatLng([50, 60]);
+    expect(got[0]![0]).toBeCloseTo(want.lat, 9);
+    expect(got[0]![1]).toBeCloseTo(want.lng, 9);
+    m.onLongPress(null);
+    el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 60 }));
+    expect(got).toHaveLength(1);
+    m.destroy();
+  });
+
   it('메인 지도: 위 카드 190 px, 아래 탭 70 px이면 내 위치는 (190 + 430) / 2 = 310 px 높이에', async () => {
     const { createMainMap } = await import('../../src/ui/map/leafletMap');
     const el = host();

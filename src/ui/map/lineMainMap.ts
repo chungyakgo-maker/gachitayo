@@ -3,7 +3,8 @@
 // 사용자가 지도를 옮기면 멈춘다 (GPS 아이콘을 누르면 다시). 내 위치는 위·아래 칸에 가려지지 않은 영역의 가운데.
 import { Marker } from 'maplibre-gl';
 import type { Course } from '../../types/course';
-import { COURSE_STYLE, PIN_TOP_PX } from './courseStyle';
+import { COURSE_STYLE, PIN_LABEL, PIN_TOP_PX, pinElement } from './courseStyle';
+import { attachLongPress } from './longPress';
 import { LINE_MAP_FONTS } from './lineStyle';
 import { addCourseLayers, boundsOf, emptyFC, newLineMap, setData, type CourseLayers } from './lineMap';
 import { circlePolygon, lineZoom, mainCourseShapes } from './lineShapes';
@@ -31,6 +32,12 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
   let userMoved = false;
   let meLabel: Marker | null = null;
   let friendLabels: Marker[] = [];
+  // 목적지 경로 (목적지 고르기): 하늘색 선 + FINISH 핀
+  let routePts: ReadonlyArray<readonly [number, number]> | null = null;
+  let routeDest: { lat: number; lon: number } | null = null;
+  let routeKey = '';
+  let destMarker: Marker | null = null;
+  let detachPress: (() => void) | null = null;
 
   // 손으로 옮기거나 확대하면 따라가기를 멈춘다 (코드로 옮길 때는 originalEvent가 없다)
   map.on('dragstart', () => {
@@ -58,6 +65,9 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       paint: { 'text-color': '#eceef0', 'text-halo-color': '#0b0c0e', 'text-halo-width': 1.6 },
     });
     course = addCourseLayers(map);
+    map.addSource('dest-route', { type: 'geojson', data: emptyFC() });
+    map.addLayer({ id: 'dest-route-glow', type: 'line', source: 'dest-route', layout: round, paint: { 'line-color': ACCENT, 'line-width': 12, 'line-opacity': 0.25, 'line-blur': 3 } });
+    map.addLayer({ id: 'dest-route', type: 'line', source: 'dest-route', layout: round, paint: { 'line-color': ACCENT, 'line-width': 5 } });
     // 내 위치: 오차 원, 둘레 빛, 점
     map.addSource('me-acc', { type: 'geojson', data: emptyFC() });
     map.addSource('me', { type: 'geojson', data: emptyFC() });
@@ -72,8 +82,36 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
     drawCourse(lastCourse);
     drawMe(lastMe);
     drawFriends();
-    if (lastCourse || lastMe) fit(lastCourse, lastMe);
+    drawRoute();
+    if (routePts && routePts.length >= 2) fitRoute();
+    else if (lastCourse || lastMe) fit(lastCourse, lastMe);
   });
+
+  function drawRoute() {
+    if (!loaded) return;
+    setData(
+      map,
+      'dest-route',
+      routePts && routePts.length >= 2 ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: routePts.map(([lat, lon]) => [lon, lat]) } } : emptyFC(),
+    );
+    destMarker?.remove();
+    destMarker = null;
+    if (routeDest) {
+      const e = pinElement('finish', PIN_LABEL.finish);
+      e.className = 'map-pin finish dest';
+      e.style.width = '26px';
+      e.style.height = '36px';
+      destMarker = new Marker({ element: e, anchor: 'bottom' }).setLngLat([routeDest.lon, routeDest.lat]).addTo(map);
+    }
+  }
+
+  function fitRoute() {
+    if (!routePts || routePts.length < 2) return;
+    // 경로가 다 보이게, 그 뒤로는 내 위치를 따라가지 않는다 (GPS 아이콘을 누르면 다시)
+    userMoved = true;
+    map.resize();
+    map.fitBounds(boundsOf(routePts.map(([lat, lon]) => [lat, lon] as [number, number])), { padding: pad(44, PIN_TOP_PX), maxZoom: lineZoom(17), duration: 0 });
+  }
 
   function drawCourse(c: Course | null) {
     if (!course) return;
@@ -200,7 +238,28 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       // 사용자가 지도를 옮기지 않았으면 새 영역에 맞춰 다시
       if (!userMoved && (lastCourse || lastMe)) fit(lastCourse, lastMe);
     },
+    setRoute(points, dest) {
+      routePts = points;
+      routeDest = dest;
+      drawRoute();
+      const key = points && points.length >= 2 ? `${points.length}:${points[0]!.join(',')}:${points[points.length - 1]!.join(',')}` : '';
+      if (key && key !== routeKey && loaded) fitRoute();
+      routeKey = key;
+    },
+    onLongPress(cb) {
+      detachPress?.();
+      detachPress = null;
+      if (!cb) return;
+      const c = map.getCanvasContainer();
+      detachPress = attachLongPress(c, (x, y) => {
+        const r = c.getBoundingClientRect();
+        const ll = map.unproject([x - r.left, y - r.top]);
+        cb(ll.lat, ll.lng);
+      });
+    },
     destroy() {
+      detachPress?.();
+      destMarker?.remove();
       course?.remove();
       meLabel?.remove();
       for (const m of friendLabels) m.remove();
