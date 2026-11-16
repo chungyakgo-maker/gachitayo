@@ -30,7 +30,8 @@ import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
-import { mapModel } from '../overlay/minimap';
+import { mapModel, routeMapModel } from '../overlay/minimap';
+import { useNavLive, type NavLive } from '../../app/routeNav';
 import { useSmoothAngle } from '../hooks/useSmoothView';
 import { overlayTheme, type OverlayTheme } from '../overlay/theme';
 
@@ -54,6 +55,8 @@ export interface DriveViewProps {
   onMapView?: (v: MapViewMode) => void;
   /** 일반 주행 (기록 안 남김) */
   noRecord?: boolean;
+  /** 목적지로 주행 (코스 없이 카카오 경로): 표지판·경로 선·남은 거리 */
+  nav?: NavLive | null;
   /** 칸 1을 눌렀을 때 (기본: 친구 델타 → 베스트 델타 → 표시 안 함) */
   onTop?: () => void;
   /** 칸 2(0)·칸 3(1)을 눌렀을 때 (기본: 다음 값) */
@@ -103,7 +106,7 @@ function WidgetCanvas({ id, frame, th }: { id: Exclude<WidgetId, 'pace' | 'none'
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, noRecord = false, replayControls }: DriveViewProps) {
+export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, noRecord = false, nav = null, replayControls }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   // 지도 모드: 위에 얹은 칸들이 지도를 가리는 높이 (다른 모드에서는 0)
   const mapRef = useRef<HTMLDivElement>(null);
@@ -114,7 +117,16 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   // 최근 G 궤적 (사용자 요청: 부드럽게 그린다). 스냅숏 시각 순서로 모은다
   const trailBuf = useRef(new GTrailBuffer());
   trailBuf.current.push(snap?.t ?? 0, st?.gx ?? null, st?.gy ?? null);
-  const frame: OverlayFrame = { ...frameFromLive(snap, course !== null, refLap !== null), gap, gMax: settings.gMaxG, gTrail: trailBuf.current.points(), free: noRecord };
+  // 목적지 경로는 코스가 없을 때만 (코스 주행은 그대로)
+  const route = course ? null : nav;
+  const frame: OverlayFrame = {
+    ...frameFromLive(snap, course !== null, refLap !== null),
+    gap,
+    gMax: settings.gMaxG,
+    gTrail: trailBuf.current.points(),
+    free: noRecord,
+    nav: route ? { remainingM: route.step?.remainingM ?? route.guide.lengthM, status: route.status } : null,
+  };
   // 칸 1 델타의 기준 (주행 중 칸 1을 눌러 바꾼다): 베스트면 앞 친구가 있어도 베스트 대비
   const frameTop: OverlayFrame = settings.deltaSource === 'best' ? { ...frame, gap: null } : frame;
   const hl = headline(frameTop);
@@ -123,10 +135,13 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   // 나침반 바늘용 진행 방향 (지도 자체는 LiveMap이 매 프레임 부드럽게 돌린다. 훅은 모드와 관계없이 늘 부른다)
   const headSm = useSmoothAngle(snap?.pos?.psi);
   // 커브 표지판 (사양서 8.4): 코스 선에서 한 번 계산해 두고, 지금 코스 위치로 다음 커브를 고른다
+  // 목적지로 주행이면 경로 안내가 미리 계산해 둔 커브 목록
+  const routeGuide = route?.guide ?? null;
   const pace = useMemo(() => {
+    if (!course && routeGuide) return { notes: routeGuide.notes, lengthM: routeGuide.lengthM, loop: false };
     const cl = course?.centerline ? buildGeometry(course).centerline : null;
     return cl ? { notes: paceNotes(cl), lengthM: cl.length, loop: course!.kind === 'loop' } : null;
-  }, [course]);
+  }, [course, routeGuide]);
 
   // 주행 중 칸 터치로 바꾸기 (사용자 요청)
   const tapTop = onTop ?? (() => updateSettings(nextTop(settings, gap !== null)));
@@ -160,7 +175,17 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
     </>
   );
   // 다음 커브 (표지판·화면 색): 랩 안에서 코스 위에 있을 때만 (출발선 전·돌아오는 길·코스 밖에서는 지나온 커브를 가리키게 되므로)
-  const up = pace && st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop }) : null;
+  // 목적지 경로: 경로 위에서 안내 중일 때만 (벗어남·다시 찾는 중·도착이면 숨김)
+  const routeS = route && route.status === 'guiding' && route.step?.onRoute && route.step.s !== null ? route.step.s : null;
+  const up = !pace
+    ? null
+    : route
+      ? routeS !== null
+        ? upcomingNote(pace.notes, routeS, { lengthM: pace.lengthM, loop: false })
+        : null
+      : st && typeof st.s === 'number' && st.onCourse && st.lapElapsedMs !== null
+        ? upcomingNote(pace.notes, st.s, { lengthM: pace.lengthM, loop: pace.loop })
+        : null;
   // 커브 방향 화면 색 (사용자 요청 시안 A·B·C·D 중 설정에서 고름, 기본 D): 세 모드 모두 (사용자 요청 "미니멀 대시보드 다 넣어라")
   const tintMode = settings.curveTint;
   const tint =
@@ -210,7 +235,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
               </>
             ) : !course ? (
               <>
-                <span style={{ fontSize: 16, color: 'var(--fg-2)' }}>{noRecord ? '일반 주행 · 기록 안 함' : '코스 기록 중'}</span>
+                <span style={{ fontSize: 16, color: 'var(--fg-2)' }}>{route ? h.label : noRecord ? '일반 주행 · 기록 안 함' : '코스 기록 중'}</span>
                 <span className="delta-text" style={{ color: 'var(--fg)' }}>
                   {kmh(st?.speedKmh ?? null)}
                 </span>
@@ -333,8 +358,8 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   // 지도 모드: 델타·고른 값·미니맵은 캔버스 (겉모습은 시안 그대로)
   const lapText = lapNo ? `랩 ${lapNo}` : '랩';
   const deltaLabel = `${h.label}${h.word ? ` · ${h.word}` : ''} ${h.text}${course ? `, ${lapText} ${formatLapTime(st?.lapElapsedMs ?? null, 1)}` : ''}`;
-  const model = mapModel(course);
-  const mapLabel = frame.ghost ? '코스 지도: 내 위치와 베스트 고스트' : '코스 지도: 내 위치';
+  const model = route ? routeMapModel(route.guide) : mapModel(course);
+  const mapLabel = route ? '경로 지도: 내 위치와 목적지 경로' : frame.ghost ? '코스 지도: 내 위치와 베스트 고스트' : '코스 지도: 내 위치';
   const me = frame.me;
   const mapView = settings.mapView;
   const headPsi = headSm ?? me?.psi ?? null;
@@ -473,6 +498,7 @@ export function DriveScreen() {
   const useGap = !d.replay || virtual;
   const { gap, front } = useFrontGap(useGap ? snap : null, useGap ? follow : { ...follow, friendId: null }, virtual ? VIRTUAL_FRIEND.targetS : settings.gap.targetS, d.course);
   const friends = useDriveFriends(d.replay ? null : snap, follow.friendId);
+  const nav = useNavLive();
   if (d.phase === 'idle' && !d.replay) {
     return (
       <main className="page page-full">
@@ -498,6 +524,7 @@ export function DriveScreen() {
       onCycle={cycleDriveMode}
       onEnd={() => void endDrive()}
       noRecord={d.noRecord}
+      nav={d.replay ? null : nav}
       replayControls={REPLAY_CONTROLS}
     />
   );

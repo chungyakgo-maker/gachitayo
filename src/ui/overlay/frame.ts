@@ -3,7 +3,7 @@
 import type { WidgetId } from '../../app/settings';
 import { WIDGET_LABEL } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
-import { formatDelta, formatLapTime } from '../format';
+import { formatDelta, formatLapTime, formatLength } from '../format';
 
 export type XY = readonly [number, number];
 
@@ -44,6 +44,8 @@ export interface OverlayFrame {
   courseS?: number | null;
   /** 앞 친구 간격 (M9). 앞 친구를 고르지 않았으면 없음 */
   gap?: GapInfo | null;
+  /** 목적지로 주행 (코스 없이 카카오 경로를 따라갈 때): 칸 1 제목에 남은 거리·상태 */
+  nav?: { remainingM: number | null; status: 'guiding' | 'off' | 'rerouting' | 'arrived' } | null;
 }
 
 export interface GapInfo {
@@ -111,6 +113,11 @@ export function headline(f: OverlayFrame): Headline {
     const tone: Tone = d < -GAP_HOLD_S ? 'slow' : d > GAP_HOLD_S ? 'fast' : 'none';
     const word = tone === 'slow' ? '가까움' : tone === 'fast' ? '멂' : '유지';
     return { label, text: formatDelta(d, 1), word, tone, plain: false };
+  }
+  if (!f.hasCourse && f.nav) {
+    const n = f.nav;
+    const base = n.status === 'arrived' ? '도착했어요' : n.status === 'rerouting' ? '새 경로 찾는 중…' : n.status === 'off' ? '경로를 벗어났어요' : `목적지까지 ${formatLength(n.remainingM)}`;
+    return { label: f.free ? `${base} · 기록 안 함` : base, text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
   }
   if (!f.hasCourse) return { label: f.free ? '일반 주행 · 기록 안 함' : '코스 기록 중 · 출발 뒤', text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
   if (!f.hasRef) return { label: '비교 랩 없음', text: '—', word: '', tone: 'none', plain: false };

@@ -1,7 +1,8 @@
 // 미니맵 (사양서 8.4 지도 모드, 13.1 오버레이의 미니맵): 지도 타일 없이 코스 선, 출발선(편도면 도착선),
 // 내 위치 화살표, 베스트 고스트(점선 원), 지나온 경로.
 // 보기 (사용자 요청): 전체 코스(한 화면에, 북쪽 위) / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼 지도가 돈다).
-import { gateSegment } from '../../engine/course/geometry';
+import { gateFromPoint, gateSegment } from '../../engine/course/geometry';
+import type { RouteGuide } from '../../engine/route/routeGuide';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 import { roundRect, type Ctx } from './draw';
@@ -34,6 +35,22 @@ export function mapModel(course: Course | null): MapModel {
     finish: course.kind === 'point_to_point' ? gateSegment(course.finishGate, course.origin) : null,
   };
   cache.set(course, m);
+  return m;
+}
+
+const routeCache = new WeakMap<RouteGuide, MapModel>();
+
+/** 목적지 경로 → 그리기용 (코스 선과 같은 그림, 목적지에 도착선). 경로 안내의 평면(스냅숏 원점) 그대로 */
+export function routeMapModel(guide: RouteGuide): MapModel {
+  const hit = routeCache.get(guide);
+  if (hit) return hit;
+  const { x, y } = guide.line;
+  const n = x.length;
+  const line: XY[] = [];
+  for (let i = 0; i < n; i++) line.push([x[i]!, y[i]!] as const);
+  const finish = n >= 2 ? gateSegment(gateFromPoint(x[n - 1]!, y[n - 1]!, Math.atan2(y[n - 1]! - y[n - 2]!, x[n - 1]! - x[n - 2]!), guide.origin), guide.origin) : null;
+  const m: MapModel = { line, loop: false, start: null, finish };
+  routeCache.set(guide, m);
   return m;
 }
 
