@@ -89,6 +89,51 @@ describe('coursePrefs', () => {
     expect(p.tagsOf(mine)).toEqual(['coast']);
   });
 
+  it('account change keeps both: local and server favorites are merged and uploaded', async () => {
+    const p = await load();
+    p.toggleFavorite(mine);
+    await vi.advanceTimersByTimeAsync(1000);
+    serverPrefs = { favorites: ['b:haogogae'], tags: { 'b:haogogae': ['coast'] } };
+    calls.length = 0;
+    await p.syncCoursePrefs({ accountChanged: true });
+    expect(p.isFavorite(mine)).toBe(true);
+    expect(p.isFavorite(builtin)).toBe(true);
+    expect(p.tagsOf(builtin)).toEqual(['coast']);
+    expect(calls.at(-1)).toEqual({ method: 'PUT', url: expect.stringMatching(/\/api\/prefs$/), body: { favorites: ['b:haogogae', 'c-123'], tags: { 'b:haogogae': ['coast'] } } });
+  });
+
+  it('only one upload at a time; the newest copy wins', async () => {
+    const p = await load();
+    let release: (() => void) | null = null;
+    const order: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_u: string, init: RequestInit) => {
+        order.push(JSON.parse(String(init.body)).favorites);
+        if (!release) await new Promise<void>((r) => (release = r));
+        return json(200, {});
+      }),
+    );
+    p.toggleFavorite(mine);
+    await vi.advanceTimersByTimeAsync(1000);
+    p.toggleFavorite(builtin);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(order).toEqual([['c-123']]);
+    release!();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(order).toEqual([['c-123'], ['c-123', 'b:haogogae']]);
+  });
+
+  it('clearCoursePrefs forgets this phone copy (logout)', async () => {
+    const p = await load();
+    p.toggleFavorite(mine);
+    p.clearCoursePrefs();
+    expect(p.isFavorite(mine)).toBe(false);
+    expect(storage.getItem('gachitayo.coursePrefs.v1')).toBeNull();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(calls).toHaveLength(0);
+  });
+
   it('sync uploads changes made while offline', async () => {
     h.auth = null;
     const p = await load();

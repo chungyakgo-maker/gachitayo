@@ -3,6 +3,7 @@
 // 폰 저장소(기록·원본·결과·코스·비교 랩·대기열)와 계정 정보를 지운 뒤 첫 화면으로 간다. 설정은 남긴다.
 // (account.ts에 두면 recording·restore와 서로 불러오게 되어 따로 둔다)
 import { forgetAccount, friendlyServerError, logoutRemote } from './account';
+import { clearCoursePrefs } from './coursePrefs';
 import { clearLocalData, getQueueRepo, getRecordingState } from './recording';
 import { getRestoreState, localOnlySessions } from './restore';
 
@@ -36,6 +37,8 @@ export async function logout(): Promise<{ ok: true } | { ok: false; error: strin
     return { ok: false, error: e instanceof TypeError ? '통신이 연결돼야 로그아웃할 수 있어요' : friendlyServerError(e) };
   }
   await clearLocalData();
+  // 즐겨찾기·분류도 이 폰에서 지운다 (다음 계정으로 옮겨 가지 않게, 검토 지적)
+  clearCoursePrefs();
   forgetAccount();
   logoutNav.reload();
   return { ok: true };

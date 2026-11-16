@@ -95,9 +95,20 @@ describe('인기 도로 /api/popular', () => {
     expect(live).toEqual([{ builtin: key, drivers: 1 }]);
   });
 
+  it('old driving signals are removed', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    await call('POST', '/api/driving', { token: a.token, body: { builtin: 'old' } });
+    await env.DB.prepare('UPDATE driving_now SET at = ? WHERE user_id = ?').bind(Date.now() - 11 * 60_000, a.userId).run();
+    await call('POST', '/api/driving', { token: b.token, body: { builtin: 'new' } });
+    const left = await env.DB.prepare('SELECT user_id FROM driving_now WHERE user_id = ?').bind(a.userId).first();
+    expect(left).toBeNull();
+  });
+
   it('bad period is 400', async () => {
     const a = await newUser();
     expect((await call('GET', '/api/popular?period=year', { token: a.token })).status).toBe(400);
+    expect((await call('GET', '/api/popular?period=constructor', { token: a.token })).status).toBe(400);
   });
 
   it('driving signal needs a built-in key', async () => {

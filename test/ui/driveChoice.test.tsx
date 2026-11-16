@@ -8,7 +8,12 @@ const gate = { lat: 37.39, lon: 127.01, bearingDeg: 90, widthM: 30 };
 const course: Course = { id: 'c1', name: '하오고개', kind: 'point_to_point', source: 'gpx', origin: { lat: 37.39, lon: 127.01 }, startGate: gate, finishGate: { ...gate, lat: 37.4 }, centerline: null, lengthM: 3200, sectorBoundsM: null, version: 1 };
 
 const calls: string[] = [];
-const beginPrepare = vi.fn(() => calls.push('begin'));
+// 실제 beginPrepare처럼: 주행이 없으면 준비 단계로 (이미 주행 중이면 그대로)
+let drivePhase = 'idle';
+const beginPrepare = vi.fn(() => {
+  calls.push('begin');
+  if (drivePhase === 'idle') drivePhase = 'preparing';
+});
 const chooseCourse = vi.fn((c: Course | null) => calls.push(`choose:${c?.id ?? 'none'}`));
 const startDrive = vi.fn(() => calls.push('start'));
 const chooseFreeDrive = vi.fn(() => calls.push('free'));
@@ -19,6 +24,7 @@ vi.mock('../../src/app/drive', async (orig) => ({
   ...(await orig<typeof import('../../src/app/drive')>()),
   useDrive: () => drive,
   beginPrepare: () => beginPrepare(),
+  getDriveState: () => ({ ...drive, phase: drivePhase }),
   chooseCourse: (c: Course | null) => chooseCourse(c),
   startDrive: () => startDrive(),
   chooseFreeDrive: () => chooseFreeDrive(),
@@ -36,6 +42,7 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
   beforeEach(() => {
     cleanup();
     calls.length = 0;
+    drivePhase = 'idle';
     beginPrepare.mockClear();
     chooseCourse.mockClear();
     startDrive.mockClear();
@@ -74,6 +81,17 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
     expect(screen.getByRole('button', { name: /일반 기록 주행/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^일반 주행/ }));
     expect(calls).toEqual(['begin', 'free']);
+  });
+
+  it('메인: 이미 주행 중이면 고르기 창에서 골라도 진행 중인 주행의 코스를 바꾸지 않는다 (검토 지적)', async () => {
+    drive = idle();
+    fix = { lat: 37.39, lon: 127.01, hAcc: 5 };
+    const { MainScreen } = await import('../../src/ui/screens/MainScreen');
+    render(<MainScreen />);
+    drivePhase = 'driving';
+    fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
+    fireEvent.click(screen.getByRole('button', { name: /코스 주행 · 하오고개/ }));
+    expect(calls).toEqual(['begin']);
   });
 
   it('메인: 목적지로 주행을 고르면 목적지 고르기 화면으로 (아직 준비를 열지 않는다)', async () => {

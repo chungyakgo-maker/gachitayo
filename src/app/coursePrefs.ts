@@ -53,32 +53,79 @@ function set(next: CoursePrefs, changedHere: boolean): void {
   }
 }
 
-async function upload(): Promise<void> {
-  const auth = getAuth();
-  if (!auth || !dirty) return;
-  const sent = prefs;
-  try {
-    await apiFetch('PUT', '/api/prefs', { token: auth.token, body: sent });
-    if (sent === prefs) {
-      dirty = false;
-      saveLocal();
-    }
-  } catch {
-    // 다음 변경이나 다음 맞추기 때 다시 올린다
+/** 한 번에 하나만 올린다 (늦게 도착한 예전 것이 새것을 덮지 않게, 검토 지적). 올리는 중에 또 바뀌면 끝난 뒤 한 번 더 */
+let uploading: Promise<void> | null = null;
+let again = false;
+
+function upload(): Promise<void> {
+  if (uploading) {
+    again = true;
+    return uploading;
   }
+  uploading = (async () => {
+    do {
+      again = false;
+      const auth = getAuth();
+      if (!auth || !dirty) break;
+      const sent = prefs;
+      try {
+        await apiFetch('PUT', '/api/prefs', { token: auth.token, body: sent });
+        if (sent === prefs) {
+          dirty = false;
+          saveLocal();
+        }
+      } catch {
+        // 다음 변경이나 다음 맞추기 때 다시 올린다
+        break;
+      }
+    } while (again);
+  })().finally(() => {
+    uploading = null;
+  });
+  return uploading;
 }
 
-/** 계정과 맞춘다: 여기서 바꾼 게 남아 있으면 올리고, 아니면 서버 것을 받는다 (앱 시작·계정 바뀜) */
-export async function syncCoursePrefs(): Promise<void> {
+const union = <T,>(a: T[], b: T[]): T[] => [...a, ...b.filter((x) => !a.includes(x))];
+
+/**
+ * 계정과 맞춘다 (앱 시작·계정 바뀜). 여기서 바꾼 게 남아 있으면 올리고, 아니면 서버 것을 받는다.
+ * 계정이 바뀌었으면(카카오 로그인·계정 합치기) 둘 다 살린다: 서버 것과 이 폰 것을 합쳐 올린다 (검토 지적: 별이 사라졌다)
+ */
+export async function syncCoursePrefs(opts: { accountChanged?: boolean } = {}): Promise<void> {
   const auth = getAuth();
   if (!auth) return;
-  if (dirty) return upload();
+  if (dirty && !opts.accountChanged) return upload();
   try {
     const p = await apiFetch<CoursePrefs>('GET', '/api/prefs', { token: auth.token });
-    if (!dirty) set({ favorites: p.favorites ?? [], tags: p.tags ?? {} }, false);
+    const server: CoursePrefs = { favorites: p.favorites ?? [], tags: p.tags ?? {} };
+    if (opts.accountChanged) {
+      const merged: CoursePrefs = { favorites: union(server.favorites, prefs.favorites), tags: { ...prefs.tags, ...server.tags } };
+      const same = merged.favorites.length === server.favorites.length && Object.keys(merged.tags).length === Object.keys(server.tags).length;
+      set(merged, !same);
+      if (!same) {
+        if (timer) clearTimeout(timer);
+        await upload();
+      }
+      return;
+    }
+    if (!dirty) set(server, false);
   } catch {
     // 통신이 안 되면 폰에 있는 것으로
   }
+}
+
+/** 이 폰에 둔 것을 지운다 (로그아웃: 다음 계정으로 옮겨 가지 않게) */
+export function clearCoursePrefs(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  prefs = { favorites: [], tags: {} };
+  dirty = false;
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // 지울 수 없어도 이번 실행에서는 비었다
+  }
+  listeners.forEach((l) => l());
 }
 
 export const getCoursePrefs = (): CoursePrefs => prefs;

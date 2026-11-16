@@ -66,7 +66,7 @@ export async function popular(env: Cloudflare.Env, period: string | null, now = 
   if (period === '7d' || period === '30d') {
     where = 'AND s.started_at >= ?';
     binds.push(new Date(now - (period === '7d' ? 7 : 30) * DAY).toISOString());
-  } else if (period && SEASON[period]) {
+  } else if (period && Object.hasOwn(SEASON, period)) {
     // 한국 시각 달
     where = `AND CAST(strftime('%m', s.started_at, '+9 hours') AS INTEGER) IN (${SEASON[period]!.join(',')})`;
   } else if (period !== 'all') throw new HttpError(400, '모르는 기간');
@@ -81,8 +81,10 @@ export async function popular(env: Cloudflare.Env, period: string | null, now = 
 
 export async function drivingNow(env: Cloudflare.Env, userId: string, body: unknown, now = Date.now()): Promise<{ ok: true }> {
   const builtin = key((body as { builtin?: unknown } | null)?.builtin);
-  await env.DB.prepare('INSERT INTO driving_now (user_id, builtin, at) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET builtin = excluded.builtin, at = excluded.at')
-    .bind(userId, builtin, now)
-    .run();
+  // 10분 지난 신호는 지운다 (실시간에 세지 않으므로 남겨 둘 까닭이 없다, 검토 지적)
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM driving_now WHERE at < ?').bind(now - LIVE_MS),
+    env.DB.prepare('INSERT INTO driving_now (user_id, builtin, at) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET builtin = excluded.builtin, at = excluded.at').bind(userId, builtin, now),
+  ]);
   return { ok: true };
 }

@@ -39,8 +39,9 @@ void finishFromHash(window.location.hash)
     subscribeAccount(() => {
       const u = getAccountState().userId;
       if (u !== lastUser) {
+        const changed = lastUser !== null && u !== null;
         lastUser = u;
-        void syncCoursePrefs();
+        void syncCoursePrefs({ accountChanged: changed });
       }
     });
   });

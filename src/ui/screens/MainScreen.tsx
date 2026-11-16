@@ -2,7 +2,7 @@
 // 위치 공유 켜기/끄기와 공유 중인 친구 (M8: 사용자 요청으로 2단계에서 앞당김). 같이 달리기는 3단계라 넣지 않는다.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
-import { beginPrepare, chooseCourse, chooseFreeDrive, loadCourses, useDrive } from '../../app/drive';
+import { beginPrepare, chooseCourse, chooseFreeDrive, getDriveState, loadCourses, prepareWithCourse, useDrive } from '../../app/drive';
 import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { updateSettings, useSettings } from '../../app/settings';
 import { useRecording } from '../../app/recording';
@@ -158,10 +158,10 @@ export function MainScreen() {
             window.location.hash = '#/destination';
           }}
           // 아이폰 모션 권한은 탭 처리 안에서 물어야 하므로 이 탭에서 바로 준비를 시작한다
+          // 이미 주행 중이면 코스를 바꾸지 않고 준비 화면으로만 (검토 지적: 진행 중인 주행의 코스가 바뀌었다)
           onDrive={() => {
             setSheetId(null);
-            beginPrepare();
-            chooseCourse(sheetCourse);
+            prepareWithCourse(sheetCourse);
           }}
         />
       )}
@@ -173,12 +173,12 @@ export function MainScreen() {
           onChoose={(c) => {
             setAsk(false);
             beginPrepare();
-            chooseCourse(c);
+            if (getDriveState().phase === 'preparing') chooseCourse(c);
           }}
           onFree={() => {
             setAsk(false);
             beginPrepare();
-            chooseFreeDrive();
+            if (getDriveState().phase === 'preparing') chooseFreeDrive();
           }}
           // 목적지로 주행: 목적지를 고른 뒤 "이 경로로 출발"을 누르는 탭에서 준비를 연다
           onDestination={() => {

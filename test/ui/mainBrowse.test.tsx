@@ -18,6 +18,7 @@ vi.mock('../../src/app/drive', async (orig) => ({
   loadCourses: async () => [hao, mine],
   beginPrepare: () => calls.push('begin'),
   chooseCourse: (c: Course | null) => calls.push(`choose:${c?.id ?? 'none'}`),
+  prepareWithCourse: (c: Course) => calls.push(`prepare:${c.id}`),
 }));
 vi.mock('../../src/ui/hooks/useLocationPreview', () => ({ useLocationPreview: () => ({ fix, permission: fix ? 'granted' : 'prompt' }) }));
 vi.mock('../../src/ui/components/MainMap', () => ({
@@ -104,6 +105,7 @@ describe('메인 둘러보기', () => {
     render(<MainScreen />);
     act(() => (mapProps.onCourseTap as (id: string) => void)('hao'));
     fireEvent.click(screen.getByRole('button', { name: '이 코스로 주행' }));
-    expect(calls).toEqual(['begin', 'choose:hao']);
+    // 이미 주행 중이면 코스를 바꾸지 않는 길로 (검토 지적: 진행 중인 주행의 코스가 바뀌었다)
+    expect(calls).toEqual(['prepare:hao']);
   });
 });
