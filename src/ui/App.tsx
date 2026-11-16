@@ -6,6 +6,7 @@ import { useAccount } from '../app/account';
 import { InterruptedPrompt } from './components/InterruptedPrompt';
 import { useHashPath } from './router';
 import { CoursesScreen } from './screens/CoursesScreen';
+import { DestinationScreen } from './screens/DestinationScreen';
 import { DriveScreen } from './screens/DriveScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { MainScreen } from './screens/MainScreen';
@@ -45,6 +46,8 @@ function route(path: string): ReactElement {
       return <WidgetsScreen back="#/prepare" />;
     case '/drive':
       return <DriveScreen />;
+    case '/destination':
+      return <DestinationScreen />;
     case '/auth/kakao':
       return <KakaoAuthScreen />;
     case '/dev/recorder':

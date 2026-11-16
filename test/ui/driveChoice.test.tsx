@@ -76,6 +76,21 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
     expect(calls).toEqual(['begin', 'free']);
   });
 
+  it('메인: 목적지로 주행을 고르면 목적지 고르기 화면으로 (아직 준비를 열지 않는다)', async () => {
+    drive = idle();
+    fix = null;
+    window.location.hash = '#/';
+    const { MainScreen } = await import('../../src/ui/screens/MainScreen');
+    render(<MainScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
+    const item = screen.getByRole('button', { name: /목적지로 주행/ });
+    expect(item).toHaveTextContent('지도에서 목적지를 찍으면 카카오 경로로 커브 표지판을 띄워요');
+    fireEvent.click(item);
+    expect(window.location.hash).toBe('#/destination');
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('button', { name: /목적지로 주행/ })).toBeNull();
+  });
+
   it('메인: 근처에 코스가 있으면 세 가지 (코스 주행 · 일반 기록 주행 · 일반 주행)', async () => {
     drive = idle();
     fix = { lat: 37.39, lon: 127.01, hAcc: 5 };

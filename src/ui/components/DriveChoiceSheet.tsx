@@ -1,5 +1,6 @@
 // 주행 시작 때 묻기 (사용자 요청 "근처에 코스가 있어도 코스 주행만 되면 안 된다. 혼자 달리고 싶을 수 있으니 물어",
 // "기록 주행 말고도 그냥 일반 주행 모드 버튼"): 코스 주행(근처 코스가 있을 때) / 일반 기록 주행 / 일반 주행(기록 안 남김)
+// / 목적지로 주행 (메인에서만, 사용자 요청 "카카오로 경로검색 및 설정후 표지판 주행")
 import type { Course } from '../../types/course';
 import { Sheet } from './Sheet';
 
@@ -7,11 +8,14 @@ export function DriveChoiceSheet({
   course,
   onChoose,
   onFree,
+  onDestination,
   onClose,
 }: {
   course: Course | null;
   onChoose: (c: Course | null) => void;
   onFree: () => void;
+  /** 있으면 "목적지로 주행" (목적지 고르기 화면으로) */
+  onDestination?: () => void;
   onClose: () => void;
 }) {
   return (
@@ -36,6 +40,14 @@ export function DriveChoiceSheet({
           <span className="sub">기록을 남기지 않아요 · 화면만 보며 달려요</span>
         </span>
       </button>
+      {onDestination && (
+        <button type="button" className="sheet-item" onClick={onDestination}>
+          <span className="card-col">
+            <strong>목적지로 주행</strong>
+            <span className="sub">지도에서 목적지를 찍으면 카카오 경로로 커브 표지판을 띄워요</span>
+          </span>
+        </button>
+      )}
     </Sheet>
   );
 }

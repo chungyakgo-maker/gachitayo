@@ -161,6 +161,11 @@ export function MainScreen() {
             beginPrepare();
             chooseFreeDrive();
           }}
+          // 목적지로 주행: 목적지를 고른 뒤 "이 경로로 출발"을 누르는 탭에서 준비를 연다
+          onDestination={() => {
+            setAsk(false);
+            window.location.hash = '#/destination';
+          }}
         />
       )}
     </Tabbed>
