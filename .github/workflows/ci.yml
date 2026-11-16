@@ -163,19 +163,32 @@ jobs:
         working-directory: worker
         env:
           OWNER: ${{ github.repository_owner }}
-          # 카카오 로그인 (설계 5.5): 둘 다 있으면 Worker 비밀값으로 넣는다. 값은 출력하지 않는다
+          # Worker 비밀값 (있는 것만 넣는다. 값은 출력하지 않고 이름만):
+          # 카카오 로그인 (설계 5.5), 네이버 클라우드 길찾기·장소 검색 (목적지로 주행 설계 6)
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          NCP_MAP_CLIENT_ID: ${{ secrets.NCP_MAP_CLIENT_ID }}
+          NCP_MAP_CLIENT_SECRET: ${{ secrets.NCP_MAP_CLIENT_SECRET }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
         run: |
-          secrets="$RUNNER_TEMP/kakao-secrets.json"
-          if [ -n "$KAKAO_REST_API_KEY" ] && [ -n "$KAKAO_CLIENT_SECRET" ]; then
-            (umask 077; node -e 'const e = process.env; require("fs").writeFileSync(process.argv[1], JSON.stringify({ KAKAO_REST_API_KEY: e.KAKAO_REST_API_KEY.trim(), KAKAO_CLIENT_SECRET: e.KAKAO_CLIENT_SECRET.trim() }))' "$secrets")
+          secrets="$RUNNER_TEMP/worker-secrets.json"
+          (umask 077; node -e '
+            const e = process.env;
+            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"];
+            const o = {};
+            for (const n of names) if ((e[n] || "").trim()) o[n] = e[n].trim();
+            require("fs").writeFileSync(process.argv[1], JSON.stringify(o));
+            console.log("Worker 비밀값: " + (Object.keys(o).join(", ") || "없음"));
+          ' "$secrets")
+          if [ -z "$KAKAO_REST_API_KEY" ] || [ -z "$KAKAO_CLIENT_SECRET" ]; then echo "::notice::카카오 비밀값이 없어 카카오 로그인은 꺼진 채로 배포합니다"; fi
+          if [ -z "$NCP_MAP_CLIENT_ID" ] || [ -z "$NAVER_CLIENT_ID" ]; then echo "::notice::네이버 클라우드 비밀값이 없어 목적지 길찾기·장소 검색은 꺼진 채로 배포합니다"; fi
+          if [ "$(cat "$secrets")" != "{}" ]; then
             npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" --secrets-file "$secrets" | tee deploy.log
-            rm -f "$secrets"
           else
-            echo "::notice::카카오 비밀값(KAKAO_REST_API_KEY, KAKAO_CLIENT_SECRET)이 없어 카카오 로그인은 꺼진 채로 배포합니다"
             npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" | tee deploy.log
           fi
+          rm -f "$secrets"
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
           if [ -z "$url" ]; then echo "::error::Worker 주소(workers.dev)를 찾지 못했습니다. Cloudflare에서 workers.dev 하위 주소를 정했는지 확인해 주세요"; exit 1; fi
           echo "서버 주소: $url"

@@ -15,6 +15,12 @@ declare namespace Cloudflare {
     KAKAO_REST_API_KEY?: string;
     /** 카카오 로그인 클라이언트 시크릿 */
     KAKAO_CLIENT_SECRET?: string;
+    /** 네이버 클라우드 Maps 길찾기(Directions 15) Client ID·Secret (목적지로 주행). 없으면 길찾기를 끈다 */
+    NCP_MAP_CLIENT_ID?: string;
+    NCP_MAP_CLIENT_SECRET?: string;
+    /** 네이버 클라우드 NAVER API HUB 지역 검색 Client ID·Secret (장소 검색). 없으면 검색을 끈다 */
+    NAVER_CLIENT_ID?: string;
+    NAVER_CLIENT_SECRET?: string;
     /** 테스트에서만: 적용할 D1 마이그레이션 */
     TEST_MIGRATIONS?: import('cloudflare:test').D1Migration[];
   }

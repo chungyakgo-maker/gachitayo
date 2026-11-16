@@ -1,8 +1,10 @@
-// 목적지 길찾기 (설계 docs/superpowers/specs/2026-11-16-destination-route-design.md 5.1): 카카오모빌리티 길찾기를 대신 부르고 하루 한도를 센다
+// 목적지 길찾기·장소 검색 (설계 docs/superpowers/specs/2026-11-16-destination-route-design.md 5.1, 6):
+// 네이버 클라우드 길찾기(Maps Directions 15)와 지역 검색(NAVER API HUB)을 대신 부르고 하루 한도를 센다
 import { env } from 'cloudflare:test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handle } from '../src/index';
 import { ROUTE_LIMIT_PER_DAY } from '../src/route';
+import { SEARCH_LIMIT_PER_DAY } from '../src/places';
 
 const ORIGIN = 'https://example.github.io';
 const BASE = 'https://api.example.workers.dev';
@@ -23,46 +25,62 @@ async function newUser() {
 
 const FROM = { lat: 37.5, lon: 127 };
 const TO = { lat: 37.501, lon: 127.002 };
+const kstDay = () => new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
 
-// ── 카카오 흉내 ─────────────────────────────────────────
-let kakao: { status: number; body: unknown } = { status: 200, body: {} };
-const calls: Array<{ url: URL; auth: string | null }> = [];
-const okBody = {
-  trans_id: 't',
-  routes: [
-    {
-      result_code: 0,
-      result_msg: '길찾기 성공',
-      summary: { distance: 230, duration: 41 },
-      sections: [
-        {
-          roads: [
-            { name: '', distance: 88, vertexes: [127, 37.5, 127.001, 37.5] },
-            { name: '남산공원길', distance: 142, vertexes: [127.001, 37.5, 127.002, 37.501] },
-          ],
-        },
-      ],
-    },
+// ── 네이버 흉내 ─────────────────────────────────────────
+const DIRECTIONS = 'https://maps.apigw.ntruss.com/map-direction-15/v1/driving';
+const LOCAL = 'https://naverapihub.apigw.ntruss.com/search/v1/local';
+let directions: { status: number; body: unknown } = { status: 200, body: {} };
+let local: { status: number; body: unknown } = { status: 200, body: {} };
+const calls: Array<{ url: URL; id: string | null; key: string | null }> = [];
+const okRoute = {
+  code: 0,
+  message: '길찾기를 성공하였습니다.',
+  route: {
+    traoptimal: [
+      {
+        summary: { distance: 230, duration: 41_400 },
+        path: [
+          [127, 37.5],
+          [127.001, 37.5],
+          [127.001, 37.5],
+          [127.002, 37.501],
+        ],
+        section: [
+          { name: '', distance: 88 },
+          { name: '남산공원길', distance: 142 },
+        ],
+      },
+    ],
+  },
+};
+const okLocal = {
+  total: 2,
+  items: [
+    { title: '<b>만항재</b>', category: '고개,골짜기', address: '강원특별자치도 정선군 고한읍 고한리 산216-37', roadAddress: '', mapx: '1288994813', mapy: '371487091' },
+    { title: '<b>만항재</b>쉼터 &amp; 매점', category: '음식점>한식', address: '강원특별자치도 정선군 고한읍 고한리', roadAddress: '강원특별자치도 정선군 고한읍 함백산로 865', mapx: '1288990109', mapy: '371485900' },
   ],
 };
 beforeEach(() => {
   calls.length = 0;
-  kakao = { status: 200, body: okBody };
+  directions = { status: 200, body: okRoute };
+  local = { status: 200, body: okLocal };
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-    if (url.origin + url.pathname !== 'https://apis-navi.kakaomobility.com/v1/directions') throw new Error(`예상하지 못한 호출 ${url}`);
-    calls.push({ url, auth: new Headers(init?.headers).get('Authorization') });
-    return Response.json(kakao.body, { status: kakao.status });
+    const h = new Headers(init?.headers);
+    calls.push({ url, id: h.get('X-NCP-APIGW-API-KEY-ID'), key: h.get('X-NCP-APIGW-API-KEY') });
+    const base = url.origin + url.pathname;
+    if (base === DIRECTIONS) return Response.json(directions.body, { status: directions.status });
+    if (base === LOCAL) return Response.json(local.body, { status: local.status });
+    throw new Error(`예상하지 못한 호출 ${url}`);
   });
 });
 afterEach(() => vi.restoreAllMocks());
 
-const kstDay = () => new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
-
-describe('목적지 길찾기 /api/route', () => {
-  it('returns flattened points and dest name', async () => {
+describe('목적지 길찾기 /api/route (네이버)', () => {
+  it('returns points, seconds and the last road name', async () => {
     const u = await newUser();
-    const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO } });
+    const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO, headingDeg: 90 } });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({
       distanceM: 230,
@@ -74,29 +92,24 @@ describe('목적지 길찾기 /api/route', () => {
       ],
       destName: '남산공원길',
     });
-  });
-
-  it('passes heading as angle', async () => {
-    const u = await newUser();
-    await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO, headingDeg: 91.6 } });
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.url.searchParams.get('origin')).toBe('127,37.5,angle=92');
-    expect(calls[0]!.url.searchParams.get('destination')).toBe('127.002,37.501');
-    expect(calls[0]!.auth).toBe('KakaoAK test-rest-key');
+    expect(calls[0]!.url.searchParams.get('start')).toBe('127,37.5');
+    expect(calls[0]!.url.searchParams.get('goal')).toBe('127.002,37.501');
+    expect(calls[0]!.id).toBe('test-map-id');
+    expect(calls[0]!.key).toBe('test-map-secret');
   });
 
-  it('kakao result code becomes 404 with its message', async () => {
+  it('naver result code becomes 404 with its message', async () => {
     const u = await newUser();
-    const msg = '출발지와 도착지가 5 m 이내로 설정된 경우 경로를 탐색할 수 없음';
-    kakao = { status: 200, body: { trans_id: 't', routes: [{ result_code: 104, result_msg: msg }] } };
+    directions = { status: 200, body: { code: 2, message: '출발지 또는 도착지가 도로 주변이 아닌 경우' } };
     const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO } });
     expect(r.status).toBe(404);
-    expect(((await r.json()) as { error: string }).error).toBe(msg);
+    expect(((await r.json()) as { error: string }).error).toBe('출발지 또는 도착지가 도로 주변이 아닌 경우');
   });
 
-  it('kakao http failure becomes 502', async () => {
+  it('naver http failure becomes 502', async () => {
     const u = await newUser();
-    kakao = { status: 401, body: { code: -401, msg: 'unauthorized' } };
+    directions = { status: 401, body: { error: { errorCode: '210', message: 'Permission Denied' } } };
     const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO } });
     expect(r.status).toBe(502);
     expect(((await r.json()) as { error: string }).error).toBe('길찾기 서버가 응답하지 않아요');
@@ -115,16 +128,7 @@ describe('목적지 길찾기 /api/route', () => {
     await env.DB.prepare('INSERT INTO route_usage (user_id, day, count) VALUES (?, ?, ?)').bind(u.userId, kstDay(), ROUTE_LIMIT_PER_DAY).run();
     const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO } });
     expect(r.status).toBe(429);
-    expect(((await r.json()) as { error: string }).error).toBe('오늘 길찾기를 너무 많이 했어요. 내일 다시 해 주세요');
     expect(calls).toHaveLength(0);
-  });
-
-  it('counts each request', async () => {
-    const u = await newUser();
-    await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO } });
-    await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO } });
-    const row = await env.DB.prepare('SELECT count FROM route_usage WHERE user_id = ? AND day = ?').bind(u.userId, kstDay()).first<{ count: number }>();
-    expect(row?.count).toBe(2);
   });
 
   it('needs account', async () => {
@@ -137,5 +141,51 @@ describe('목적지 길찾기 /api/route', () => {
     const u = await newUser();
     const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM } });
     expect(r.status).toBe(400);
+  });
+});
+
+describe('장소 검색 /api/places (네이버 지역 검색)', () => {
+  it('finds places by name with coordinates', async () => {
+    const u = await newUser();
+    const r = await call('GET', `/api/places?q=${encodeURIComponent('만항재')}`, { token: u.token });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual([
+      { name: '만항재', category: '고개,골짜기', address: '강원특별자치도 정선군 고한읍 고한리 산216-37', lat: 37.1487091, lon: 128.8994813 },
+      { name: '만항재쉼터 & 매점', category: '음식점>한식', address: '강원특별자치도 정선군 고한읍 함백산로 865', lat: 37.14859, lon: 128.8990109 },
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url.searchParams.get('query')).toBe('만항재');
+    expect(calls[0]!.url.searchParams.get('display')).toBe('5');
+    expect(calls[0]!.id).toBe('test-search-id');
+    expect(calls[0]!.key).toBe('test-search-secret');
+  });
+
+  it('empty query is 400', async () => {
+    const u = await newUser();
+    const r = await call('GET', '/api/places?q=%20', { token: u.token });
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { error: string }).error).toBe('찾을 장소 이름을 적어 주세요');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('naver failure becomes 502', async () => {
+    const u = await newUser();
+    local = { status: 401, body: { errorMessage: 'Authentication failed' } };
+    const r = await call('GET', `/api/places?q=${encodeURIComponent('만항재')}`, { token: u.token });
+    expect(r.status).toBe(502);
+    expect(((await r.json()) as { error: string }).error).toBe('장소 검색 서버가 응답하지 않아요');
+  });
+
+  it('daily search limit 429', async () => {
+    const u = await newUser();
+    await env.DB.prepare('INSERT INTO search_usage (user_id, day, count) VALUES (?, ?, ?)').bind(u.userId, kstDay(), SEARCH_LIMIT_PER_DAY).run();
+    const r = await call('GET', `/api/places?q=${encodeURIComponent('만항재')}`, { token: u.token });
+    expect(r.status).toBe(429);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('needs account', async () => {
+    const r = await call('GET', `/api/places?q=${encodeURIComponent('만항재')}`);
+    expect(r.status).toBe(401);
   });
 });

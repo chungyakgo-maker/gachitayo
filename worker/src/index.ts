@@ -18,7 +18,8 @@
 //   GET /api/friends/presence            위치 공유 중인 친구의 위치 (2분 안에 받은 것만)
 //   PUT /api/presence {lat, lon, …}      내 위치 공유 (마지막 하나만 저장)
 //   DELETE /api/presence                 공유 끄기 (지운다)
-//   POST /api/route {from, to, headingDeg?} 목적지 길찾기 (카카오모빌리티, 계정당 하루 300번)
+//   POST /api/route {from, to, headingDeg?} 목적지 길찾기 (네이버 클라우드 Directions 15, 계정당 하루 300번)
+//   GET /api/places?q=                   장소 검색 (네이버 지역 검색, 최대 5개, 계정당 하루 500번)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
@@ -28,6 +29,7 @@ import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
+import { searchPlaces } from './places';
 import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 
@@ -108,6 +110,12 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
   if (path === '/auth/kakao/finish') {
     if (method !== 'POST') throw new HttpError(405);
     return json(200, headers, await finishKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+
+  if (path === '/api/places') {
+    if (method !== 'GET') throw new HttpError(405);
+    const userId = await authenticate(req, env);
+    return json(200, headers, await searchPlaces(env, userId, new URL(req.url).searchParams.get('q')));
   }
 
   if (path === '/api/route') {
