@@ -99,6 +99,15 @@ const screenDir = (v: MapView, dx: number, dy: number): [number, number] => {
   return [dx * c - dy * s, -(dx * s + dy * c)];
 };
 
+/** 지도에 그릴 다른 사람. 그룹 주행이면 사람마다 색과 순서 번호 (사용자 요청 "컬러도 모두 다르게", "모두 지도에 표시") */
+export interface MapPerson {
+  x: number;
+  y: number;
+  label: string;
+  color?: string;
+  no?: number;
+}
+
 export interface MiniMapOpts {
   /** 아래쪽을 가리는 띠 높이 (px) */
   insetBottom?: number;
@@ -110,9 +119,9 @@ export interface MiniMapOpts {
   /** 바깥에서 정한 좌표 변환 (재생 모드에서 지도 타일 위에 그릴 때) */
   view?: MapView;
   /** 함께 그릴 앞 친구 위치 (같은 평면 좌표) */
-  friend?: { x: number; y: number; label: string } | null;
+  friend?: MapPerson | null;
   /** 위치를 공유 중인 다른 친구들 (주행 중, 사용자 요청) */
-  friends?: ReadonlyArray<{ x: number; y: number; label: string }>;
+  friends?: ReadonlyArray<MapPerson>;
   /** 돌린 지도에서 왼쪽 위 작은 나침반 (주행 화면은 나침반 버튼이 대신하므로 끈다) */
   north?: boolean;
 }
@@ -297,19 +306,34 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
 
   for (const fp of [...(opts.friends ?? []), ...(opts.friend ? [opts.friend] : [])]) {
     const [x, y] = v.P(fp.x, fp.y);
+    const col = fp.color ?? th.friend;
+    const no = fp.no;
     ctx.setLineDash([]);
     ctx.beginPath();
-    ctx.arc(x, y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = th.friend;
+    ctx.arc(x, y, no ? 11 : 7, 0, Math.PI * 2);
+    ctx.fillStyle = col;
     ctx.fill();
     ctx.strokeStyle = '#0d0e10';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = no ? 2.5 : 2;
     ctx.stroke();
-    ctx.font = `700 12px ${th.sans}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = th.friend;
-    ctx.fillText(fp.label, x, y - 16);
+    if (no) {
+      ctx.font = `800 12px ${th.sans}`;
+      ctx.fillStyle = '#0d0e10';
+      ctx.fillText(String(no), x, y + 0.5);
+      // 그룹 이름표는 지도 위에서도 읽히게 테두리
+      ctx.font = `700 13px ${th.sans}`;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#0b0c0e';
+      ctx.strokeText(fp.label, x, y - 21);
+      ctx.fillStyle = col;
+      ctx.fillText(fp.label, x, y - 21);
+    } else {
+      ctx.font = `700 12px ${th.sans}`;
+      ctx.fillStyle = col;
+      ctx.fillText(fp.label, x, y - 16);
+    }
   }
 
   if (v.rot !== 0 && opts.north !== false) drawNorth(ctx, w, opts.top ?? 24, v, th);

@@ -50,6 +50,8 @@ export interface OverlayFrame {
 
 export interface GapInfo {
   nickname: string;
+  /** 칸 1 제목을 바꿀 때 (그룹 주행: "앞 차 · 2 친구2") */
+  title?: string;
   /** 목표 간격 초 */
   targetS: number;
   /** 지금 간격 초 (모르면 null) */
@@ -105,7 +107,7 @@ export function headline(f: OverlayFrame): Headline {
   if (f.gap) {
     const g = f.gap;
     // 델타 칸 = 친구와의 델타, 제목 "Delta (친구이름)" (사용자 요청). 목표 간격은 오른쪽에 작게
-    const label = `Delta (${g.nickname})`;
+    const label = g.title ?? `Delta (${g.nickname})`;
     if (g.stale) return { label: `${label} · 신호 없음`, text: '—', word: '', tone: 'none', plain: false };
     if (g.gapS === null) return { label, text: '—', word: '', tone: 'none', plain: false };
     const d = g.gapS - g.targetS;

@@ -30,7 +30,8 @@ import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
-import { mapModel, routeMapModel } from '../overlay/minimap';
+import { mapModel, routeMapModel, type MapPerson } from '../overlay/minimap';
+import { frontMember, groupColor, useGroup, type GroupState } from '../../app/group';
 import { useNavLive, type NavLive } from '../../app/routeNav';
 import { useSmoothAngle } from '../hooks/useSmoothView';
 import { overlayTheme, type OverlayTheme } from '../overlay/theme';
@@ -40,9 +41,11 @@ export interface DriveViewProps {
   /** 앞 친구 간격 (M9). 없으면 끔 */
   gap?: GapInfo | null;
   /** 앞 친구 위치 (같은 평면 좌표) */
-  front?: { x: number; y: number; label: string } | null;
-  /** 위치를 공유 중인 다른 친구들 (같은 평면 좌표, 사용자 요청 "주행 중에도 위치 공유") */
-  friends?: ReadonlyArray<{ x: number; y: number; label: string }>;
+  front?: MapPerson | null;
+  /** 위치를 공유 중인 다른 친구들 (같은 평면 좌표, 사용자 요청 "주행 중에도 위치 공유"). 그룹 주행이면 방 사람들 */
+  friends?: ReadonlyArray<MapPerson>;
+  /** 그룹 주행 순서 줄 (사용자 요청 "모두 지도에 표시") */
+  groupOrder?: ReadonlyArray<{ no: number; label: string; color: string; me: boolean }> | null;
   course: Course | null;
   refLap: RefLapRecord | null;
   mode: DriveMode;
@@ -106,7 +109,7 @@ function WidgetCanvas({ id, frame, th }: { id: Exclude<WidgetId, 'pace' | 'none'
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, gap = null, front = null, friends = [], course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, noRecord = false, nav = null, replayControls }: DriveViewProps) {
+export function DriveView({ snap, gap = null, front = null, friends = [], groupOrder = null, course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, noRecord = false, nav = null, replayControls }: DriveViewProps) {
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   // 지도 모드: 위에 얹은 칸들이 지도를 가리는 높이 (다른 모드에서는 0)
   const mapRef = useRef<HTMLDivElement>(null);
@@ -172,7 +175,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
 
   const onPointerDown = (e: React.PointerEvent) => {
     // 칸 터치·버튼은 두 번 탭(화면 모드 바꾸기)으로 치지 않는다
-    if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .replay-bar, .slot-btn, .map-zoom')) return;
+    if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .replay-bar, .slot-btn, .map-zoom, .map-group')) return;
     const now = Date.now();
     const prev = lastTap.current;
     if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 40) {
@@ -432,6 +435,12 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
             −
           </button>
         </div>
+        {/* 그룹 주행 방 (방장은 주행 중에도 목적지를 정해 모두에게 보낸다) */}
+        {groupOrder && (
+          <a className="map-group" href="#/group" style={{ top: ins.top + 62 }} aria-label="그룹 주행 방 열기">
+            방
+          </a>
+        )}
         {/* 속도: 일반 내비처럼 오른쪽 아래, 칸 없이 숫자만 (사용자 요청 시안) */}
         <div className="map-speed" style={{ bottom: ins.bottom + 30 }} role="img" aria-label={`속도 ${kmh(st?.speedKmh ?? null)} km/h`}>
           {kmh(st?.speedKmh ?? null)}
@@ -464,6 +473,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
             ))}
           </div>
         )}
+        {groupOrder && groupOrder.length > 0 && <GroupOrderStrip order={groupOrder} />}
       </div>
       {tint}
     </div>
@@ -509,6 +519,49 @@ export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targ
   return { gap: { nickname, targetS, gapS: r.gapS, stale: r.stale }, front: f ? { x: f.x, y: f.y, label: nickname } : null };
 }
 
+/** 그룹 주행 순서 줄: 번호·이름·색, 나는 밝게 */
+function GroupOrderStrip({ order }: { order: NonNullable<DriveViewProps['groupOrder']> }) {
+  return (
+    <div className="group-order" role="list" aria-label="그룹 주행 순서">
+      {order.map((m) => (
+        <span key={m.no} role="listitem" className={`group-car${m.me ? ' me' : ''}`} style={{ borderColor: m.color }}>
+          <i style={{ background: m.color }}>{m.no}</i>
+          {m.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 그룹 주행 (설계 2026-11-16 group-drive): 앞 차 = 순서상 바로 앞 사람, 목표 간격 = 방 차 간격, 다른 사람들은 색 번호 점 */
+export function groupDriveInputs(g: GroupState, origin: { lat: number; lon: number } | null | undefined): {
+  follow: FollowState;
+  frontStyle: { color: string; no: number; title: string } | null;
+  cars: MapPerson[];
+  order: NonNullable<DriveViewProps['groupOrder']>;
+} | null {
+  const room = g.room;
+  if (!room) return null;
+  const fm = frontMember(g);
+  const follow: FollowState = { friendId: fm ? `group:${fm.userId}` : null, nickname: fm?.nickname ?? null, connected: g.connected, points: fm ? (g.points[fm.userId] ?? []) : [] };
+  const sorted = [...room.members].sort((a, b) => a.order - b.order);
+  const cars: MapPerson[] = [];
+  if (origin)
+    for (const m of sorted) {
+      if (m.userId === g.me || m.userId === fm?.userId) continue;
+      const last = g.points[m.userId]?.at(-1);
+      // 1분 넘게 안 온 위치는 그리지 않는다
+      if (!last || Date.now() - last.t > 60_000) continue;
+      cars.push({ ...toLocal(origin, last.lat, last.lon), label: m.nickname, color: groupColor(m.color), no: m.order });
+    }
+  return {
+    follow,
+    frontStyle: fm ? { color: groupColor(fm.color), no: fm.order, title: `앞 차 · ${fm.order} ${fm.nickname}` } : null,
+    cars,
+    order: sorted.map((m) => ({ no: m.order, label: m.userId === g.me ? '나' : m.nickname, color: groupColor(m.color), me: m.userId === g.me })),
+  };
+}
+
 /** 주행 중 위치를 공유 중인 친구들 (사용자 요청): 5초마다 받아 와 주행 지도 평면으로. 앞 친구(간격)는 따로 그리므로 뺀다 */
 export function useDriveFriends(snap: LiveSnapshot | null, frontId: string | null): Array<{ x: number; y: number; label: string }> {
   const acc = useAccount();
@@ -529,8 +582,19 @@ export function DriveScreen() {
   // 재생 중에는 앞 친구 간격을 쓰지 않는다. 다만 재생 모드의 가상 친구 따라가기는 예외 (목표 2.0초)
   const virtual = follow.friendId === VIRTUAL_FRIEND.id;
   const useGap = !d.replay || virtual;
-  const { gap, front } = useFrontGap(useGap ? snap : null, useGap ? follow : { ...follow, friendId: null }, virtual ? VIRTUAL_FRIEND.targetS : settings.gap.targetS, d.course);
-  const friends = useDriveFriends(d.replay ? null : snap, follow.friendId);
+  // 그룹 주행 중이면 앞 차·간격·지도 사람들을 방에서 (친구 위치 공유·앞 친구 대신)
+  const group = useGroup();
+  const gd = d.replay ? null : groupDriveInputs(group, snap?.origin);
+  const fg = useFrontGap(
+    gd ? snap : useGap ? snap : null,
+    gd ? gd.follow : useGap ? follow : { ...follow, friendId: null },
+    gd ? group.room!.gapS : virtual ? VIRTUAL_FRIEND.targetS : settings.gap.targetS,
+    d.course,
+  );
+  const gap = gd?.frontStyle && fg.gap ? { ...fg.gap, title: gd.frontStyle.title } : fg.gap;
+  const front = gd?.frontStyle && fg.front ? { ...fg.front, color: gd.frontStyle.color, no: gd.frontStyle.no } : fg.front;
+  const shared = useDriveFriends(d.replay || gd ? null : snap, follow.friendId);
+  const friends = gd ? gd.cars : shared;
   const nav = useNavLive();
   if (d.phase === 'idle' && !d.replay) {
     return (
@@ -548,6 +612,7 @@ export function DriveScreen() {
       gap={gap}
       front={front}
       friends={friends}
+      groupOrder={gd?.order ?? null}
       course={d.course}
       refLap={d.ref}
       mode={d.mode}

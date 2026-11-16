@@ -222,7 +222,7 @@ export function LiveMap(props: LiveMapProps) {
       top: ins.top + 20,
       margin: 28,
       view: mapView,
-      friend: friend && p.friend ? { x: friend.x, y: friend.y, label: p.friend.label } : null,
+      friend: friend && p.friend ? { ...p.friend, x: friend.x, y: friend.y } : null,
       friends: p.friends,
       north: false,
     });

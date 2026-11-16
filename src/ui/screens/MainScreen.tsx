@@ -25,6 +25,8 @@ import { filterCourses } from '../../app/courseFilter';
 import { isFavorite, tagsOf, useCoursePrefs } from '../../app/coursePrefs';
 import { usePopular } from '../../app/popular';
 import { handOffDestination } from '../../app/routeNav';
+import { useGroup } from '../../app/group';
+import { GroupSheet } from '../components/GroupSheet';
 
 export function MainScreen() {
   const { needRefresh, update } = usePwaUpdate();
@@ -69,6 +71,9 @@ export function MainScreen() {
   const [sheetId, setSheetId] = useState<string | null>(null);
   const sheetCourse = sheetId ? (drive.courses.find((c) => c.id === sheetId) ?? null) : null;
   const [searching, setSearching] = useState(false);
+  // 그룹 주행: 방에 들어가 있으면 맨 위에 방 바로 가기
+  const group = useGroup();
+  const [groupSheet, setGroupSheet] = useState(false);
   const from = fix ? { lat: fix.lat, lon: fix.lon } : null;
 
   // 지도가 화면 전체, 위 카드·아래 탭은 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
@@ -96,6 +101,11 @@ export function MainScreen() {
             window.location.hash = '#/destination';
           }}
         />
+        {group.room && (
+          <a className="notice" href="#/group" style={{ textDecoration: 'none' }}>
+            그룹 주행 방 · {group.room.members.length}명 · 열기
+          </a>
+        )}
         {permission === 'denied' && <span className="notice">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>}
         {acc.status === 'none' && acc.lost && (
           <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>
@@ -185,8 +195,14 @@ export function MainScreen() {
             setAsk(false);
             window.location.hash = '#/destination';
           }}
+          onGroup={() => {
+            setAsk(false);
+            if (group.room) window.location.hash = '#/group';
+            else setGroupSheet(true);
+          }}
         />
       )}
+      {groupSheet && <GroupSheet onClose={() => setGroupSheet(false)} />}
     </Tabbed>
   );
 }

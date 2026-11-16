@@ -2977,3 +2977,199 @@ button.map-gps:active {
 .main-top.overlay > * {
   pointer-events: auto;
 }
+
+/* ── 그룹 주행 (설계 2026-11-16 group-drive, 시안: 시작 창·대기실·참가자 목적지 받기·주행 지도) ── */
+.map-group {
+  position: absolute;
+  left: calc(12px + var(--safe-l, 0px));
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 15, 18, 0.84);
+  color: #eceef0;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.group-order {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+  pointer-events: none;
+}
+
+.group-car {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 4px;
+  border-radius: 15px;
+  border: 2px solid;
+  font-size: 13px;
+  font-weight: 700;
+  color: #eceef0;
+  background: rgba(14, 15, 18, 0.84);
+  max-width: 132px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.group-car.me {
+  background: rgba(170, 202, 230, 0.22);
+}
+
+.group-car i,
+.group-num {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  color: #0d0e10;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.group-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  font-size: 14px;
+}
+
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 5px 8px 5px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--card-line);
+}
+
+.group-member.me {
+  border-color: #aacae6;
+  background: rgba(170, 202, 230, 0.08);
+}
+
+.group-member .name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-badge {
+  flex: none;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 178, 36, 0.18);
+  color: #ffd27a;
+  font-weight: 700;
+}
+
+.group-arrows {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.group-arrows button {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--fg);
+  font-size: 18px;
+}
+
+.group-arrows button:disabled {
+  color: var(--fg-off);
+  border-color: var(--card-line);
+}
+
+.group-code {
+  font-family: var(--mono, monospace);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  text-align: center;
+  color: var(--fg);
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kakao-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  border-radius: 14px;
+  background: #fee500;
+  color: #191919;
+  font-size: 17px;
+  font-weight: 800;
+  border: 0;
+  font-family: inherit;
+}
+
+.group-stepper {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-stepper button {
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--fg);
+  font-size: 26px;
+}
+
+.group-stepper button:disabled {
+  color: var(--fg-off);
+}
+
+.group-stepper .v {
+  text-align: center;
+  font-family: var(--mono, monospace);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.group-code-input {
+  flex: 1;
+  letter-spacing: 4px;
+  font-family: var(--mono, monospace);
+}
+
+.group-bottom {
+  padding: 4px 0 calc(16px + var(--safe-b, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

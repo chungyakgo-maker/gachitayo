@@ -9,6 +9,7 @@ import { initFriends } from './app/friends';
 import { seedBuiltinCourses } from './app/courses';
 import { syncCoursePrefs } from './app/coursePrefs';
 import { startDrivingSignal } from './app/drivingSignal';
+import { resumeGroupRoom } from './app/group';
 import { subscribeAccount } from './app/account';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
@@ -35,6 +36,8 @@ void finishFromHash(window.location.hash)
   .then(initSync)
   .then(() => {
     if (getAccountState().kakao) void startRestore();
+    // 들어가 있던 그룹 주행 방으로 다시 (24시간이 지났거나 나갔으면 잊는다)
+    void resumeGroupRoom();
     // 즐겨찾기·분류를 계정과 맞춘다 (카카오 로그인으로 계정이 바뀌어도 다시)
     void syncCoursePrefs();
     let lastUser = getAccountState().userId;

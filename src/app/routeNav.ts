@@ -32,8 +32,6 @@ export interface RoutePlan {
   error: string | null;
   /** 기록 남기기 (기본 켬): 켜면 일반 기록 주행, 끄면 일반 주행(기록 안 남김) */
   record: boolean;
-  /** 그룹 주행 방장이 방 목적지를 고르는 중 (출발 대신 "모두에게 정하기") */
-  forRoom: boolean;
 }
 
 export interface NavLive {
@@ -91,7 +89,7 @@ export async function findPlaces(q: string): Promise<Place[]> {
 
 // ── 목적지 화면의 계획 ─────────────────────────────────
 
-let plan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true, forRoom: false };
+let plan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true };
 const planListeners = new Set<() => void>();
 function setPlan(patch: Partial<RoutePlan>): void {
   plan = { ...plan, ...patch };
@@ -126,15 +124,9 @@ export function setRecord(on: boolean): void {
   setPlan({ record: on });
 }
 
-/** full: 화면을 떠날 때 (그룹 방 목적지 고르기도 끝낸다) */
-export function clearPlan(full = false): void {
+export function clearPlan(): void {
   planSeq++;
-  setPlan({ dest: null, route: null, status: 'idle', error: null, record: true, ...(full ? { forRoom: false } : {}) });
-}
-
-/** 그룹 주행 방장이 방 목적지를 고르러 목적지 화면으로 갈 때 */
-export function setPlanForRoom(on: boolean): void {
-  setPlan({ forRoom: on });
+  setPlan({ dest: null, route: null, status: 'idle', error: null, record: true });
 }
 
 // ── 다른 화면에서 고른 목적지 넘기기 (메인 검색 결과, 코스 창의 "출발점으로 길찾기") ──

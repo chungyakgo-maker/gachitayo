@@ -21,6 +21,10 @@ import { NewCourseScreen } from './screens/NewCourseScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { KakaoAuthScreen } from './screens/KakaoAuthScreen';
+import { GroupScreen } from './screens/GroupScreen';
+import { JoinScreen } from './screens/JoinScreen';
+import { RouteOfferSheet } from './components/RouteOfferSheet';
+import { rememberPendingJoin, takePendingJoin } from '../app/pendingJoin';
 
 /** 경로 → 화면 */
 function route(path: string): ReactElement {
@@ -31,6 +35,8 @@ function route(path: string): ReactElement {
   const course = /^\/course\/([^/]+)$/.exec(path);
   if (course) return <CourseDetailScreen courseId={decodeURIComponent(course[1]!)} />;
   if (path === '/course-new') return <NewCourseScreen />;
+  const join = /^\/join\/([^/]+)$/.exec(path);
+  if (join) return <JoinScreen code={decodeURIComponent(join[1]!)} />;
   switch (path) {
     case '/courses':
       return <CoursesScreen />;
@@ -48,6 +54,10 @@ function route(path: string): ReactElement {
       return <DriveScreen />;
     case '/destination':
       return <DestinationScreen />;
+    case '/group':
+      return <GroupScreen />;
+    case '/group/destination':
+      return <DestinationScreen forRoom />;
     case '/auth/kakao':
       return <KakaoAuthScreen />;
     case '/dev/recorder':
@@ -70,12 +80,22 @@ export function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('palette-blue-orange', deltaPalette === 'blue-orange');
   }, [deltaPalette]);
+  // 카톡 초대 링크로 처음 열었으면 첫 실행 안내(또는 카카오 로그인)를 마친 뒤 그 방으로 (설계 2026-11-16 group-drive)
+  useEffect(() => {
+    const m = /^\/join\/(\d{6})$/.exec(path);
+    if (m && !onboarded) rememberPendingJoin(m[1]!);
+    if (onboarded && path === '/') {
+      const code = takePendingJoin();
+      if (code) window.location.hash = `#/join/${code}`;
+    }
+  }, [path, onboarded]);
   // 사양서 9장: 다시 열면 중단된 기록을 이어서 할지 묻는다.
   const pending = phase === 'idle' ? interrupted[0] : undefined;
   return (
     <>
       {/* 첫 실행 안내 (사양서 8.1). 개발자 메뉴와 카카오 로그인에서 돌아온 화면은 그대로 연다 */}
       {!onboarded && !path.startsWith('/dev/') && !path.startsWith('/auth/') ? <WelcomeScreen /> : route(path)}
+      {onboarded && <RouteOfferSheet />}
       {pending && (
         <InterruptedPrompt
           startedAt={pending.startedAt}

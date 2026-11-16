@@ -9,19 +9,13 @@ import { toLocal } from '../../engine/geo';
 import { RouteGuide } from '../../engine/route/routeGuide';
 import type { GpsState } from '../components/GpsIcon';
 import { MainMap } from '../components/MainMap';
-import { formatLength } from '../format';
+import { formatLength, formatTravelTime } from '../format';
 import { useLocationPreview } from '../hooks/useLocationPreview';
 import { useOverlayInsets } from '../hooks/useOverlayInsets';
 import { IconBack } from '../icons';
+import { groupErrorText, shareGroupDestination } from '../../app/group';
 
-/** 걸리는 시간: 1시간 미만은 분, 넘으면 시간·분 */
-function travelTime(s: number): string {
-  const min = Math.max(1, Math.round(s / 60));
-  if (min < 60) return `${min}분`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m ? `${h}시간 ${m}분` : `${h}시간`;
-}
+const travelTime = formatTravelTime;
 
 const distFrom = (from: { lat: number; lon: number } | null, d: { lat: number; lon: number }) => {
   if (!from) return null;
@@ -44,7 +38,8 @@ function PlaceButton({ d, distanceM, detail, onPick }: { d: Destination; distanc
 
 type Search = { status: 'idle' } | { status: 'loading' } | { status: 'done'; places: Place[] } | { status: 'error'; error: string };
 
-export function DestinationScreen() {
+/** forRoom: 그룹 주행 방장이 방 목적지를 고른다 (#/group/destination). 출발 대신 모두에게 보낸다 */
+export function DestinationScreen({ forRoom = false }: { forRoom?: boolean } = {}) {
   const drive = useDrive();
   const plan = usePlan();
   // 지금 위치가 있어야 경로를 받으므로 허용 전이어도 위치를 켠다 (아이폰은 허용해도 "prompt"로 알려 주는 경우가 많다)
@@ -52,7 +47,7 @@ export function DestinationScreen() {
   useEffect(() => {
     void loadCourses();
     // 화면을 떠나면 고르던 것을 지운다 (출발했으면 경로 안내가 따로 들고 있다)
-    return () => clearPlan(true);
+    return () => clearPlan();
   }, []);
   const lat = fix?.lat ?? null;
   const lon = fix?.lon ?? null;
@@ -105,6 +100,20 @@ export function DestinationScreen() {
   const ins = useOverlayInsets(baseRef, topRef, bottomRef);
   // 이미 주행·기록 중이면 새로 출발하지 않는다 (메인 화면과 같은 안내)
   const busy = drive.phase !== 'idle' && !drive.replay;
+  // 그룹 주행 방장이 방 목적지를 고르는 중: 출발 대신 모두에게 보낸다 (주행 중에도)
+  const back = forRoom ? '#/group' : '#/';
+  const [sending, setSending] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  const sendToRoom = () => {
+    if (!route || !plan.dest) return;
+    const dest = plan.dest;
+    setSending({ busy: true, error: null });
+    shareGroupDestination({ name: dest.name, lat: dest.lat, lon: dest.lon }, route).then(
+      () => {
+        window.location.hash = busy ? '#/drive' : '#/group';
+      },
+      (e: unknown) => setSending({ busy: false, error: groupErrorText(e) }),
+    );
+  };
   const gps: GpsState = permission === 'denied' ? 'weak' : !fix ? 'none' : fix.hAcc <= 10 ? 'good' : fix.hAcc <= 30 ? 'wait' : 'weak';
 
   let bottom;
@@ -132,20 +141,41 @@ export function DestinationScreen() {
       <div className="card card-col dest-card">
         <strong className="dest-title">{plan.dest.name}</strong>
         <span className="sub mono">{`${formatLength(route.distanceM)} · ${travelTime(route.durationS)} · 커브 ${curves}개`}</span>
-        <button type="button" className="sheet-item" aria-pressed={plan.record} onClick={() => setRecord(!plan.record)}>
-          <span className="card-col">
-            <strong>기록 남기기 {plan.record ? '켜짐' : '꺼짐'}</strong>
-            <span className="sub">{plan.record ? '끝나면 기록이 남고 코스로 저장할 수 있어요' : '끝나도 기록을 남기지 않아요'}</span>
-          </span>
-        </button>
-        <div className="dest-actions">
-          <button type="button" className="ghost-btn" onClick={() => clearPlan()}>
-            다시 고르기
-          </button>
-          <button type="button" className="primary-btn" disabled={busy} onClick={() => startRouteDrive()}>
-            이 경로로 출발
-          </button>
-        </div>
+        {forRoom ? (
+          <>
+            <span className="sub">방 모두에게 이 경로가 가요. 참가자는 "이 경로로 진행"을 누르면 같은 길로 안내받아요</span>
+            {sending.error && (
+              <span className="notice warn" role="alert">
+                {sending.error}
+              </span>
+            )}
+            <div className="dest-actions">
+              <button type="button" className="ghost-btn" onClick={() => clearPlan()}>
+                다시 고르기
+              </button>
+              <button type="button" className="primary-btn" disabled={sending.busy} onClick={sendToRoom}>
+                {sending.busy ? '보내는 중…' : '모두에게 보내기'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <button type="button" className="sheet-item" aria-pressed={plan.record} onClick={() => setRecord(!plan.record)}>
+              <span className="card-col">
+                <strong>기록 남기기 {plan.record ? '켜짐' : '꺼짐'}</strong>
+                <span className="sub">{plan.record ? '끝나면 기록이 남고 코스로 저장할 수 있어요' : '끝나도 기록을 남기지 않아요'}</span>
+              </span>
+            </button>
+            <div className="dest-actions">
+              <button type="button" className="ghost-btn" onClick={() => clearPlan()}>
+                다시 고르기
+              </button>
+              <button type="button" className="primary-btn" disabled={busy} onClick={() => startRouteDrive()}>
+                이 경로로 출발
+              </button>
+            </div>
+          </>
+        )}
       </div>
     );
   } else if (plan.status === 'error' && plan.dest) {
@@ -218,12 +248,12 @@ export function DestinationScreen() {
       <div className="main-full" ref={baseRef}>
         <div className="main-top overlay" ref={topRef}>
           <div className="card card-row dest-head">
-            <a className="back-btn" href="#/" aria-label="뒤로" onClick={() => clearPlan(true)}>
+            <a className="back-btn" href={back} aria-label="뒤로" onClick={() => clearPlan()}>
               <IconBack size={24} />
             </a>
             <div className="card-col" style={{ flex: 1, minWidth: 0 }}>
-              <span className="title">목적지 고르기</span>
-              <span className="sub">장소를 검색하거나 지도를 길게 눌러 찍어요</span>
+              <span className="title">{forRoom ? '방 목적지 고르기' : '목적지 고르기'}</span>
+              <span className="sub">{forRoom ? '정하면 방 모두에게 같은 경로가 가요' : '장소를 검색하거나 지도를 길게 눌러 찍어요'}</span>
             </div>
           </div>
           <form className="card card-row dest-search" role="search" onSubmit={onSearch}>
@@ -241,7 +271,7 @@ export function DestinationScreen() {
               검색
             </button>
           </form>
-          {busy && (
+          {busy && !forRoom && (
             <a className="notice warn" href={drive.phase === 'preparing' ? '#/prepare' : '#/drive'} style={{ textDecoration: 'none' }}>
               진행 중인 주행이 있어요 · 돌아가기
             </a>

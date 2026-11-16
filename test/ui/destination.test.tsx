@@ -1,6 +1,6 @@
 // 목적지 고르기 화면 (설계 docs/superpowers/specs/2026-11-16-destination-route-design.md 5.4)
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Course } from '../../src/types/course';
 import type { Destination, RoutePlan } from '../../src/app/routeNav';
 
@@ -8,7 +8,7 @@ const gate = (lat: number, lon: number) => ({ lat, lon, bearingDeg: 0, widthM: 2
 const course = { id: 'a', name: '하오고개', kind: 'point_to_point', source: 'gpx', origin: { lat: 37.4, lon: 127 }, startGate: gate(37.4, 127), finishGate: gate(37.41, 127), centerline: null, lengthM: 1100, sectorBoundsM: null, version: 1 } as Course;
 
 let fix: { lat: number; lon: number; hAcc: number } | null = { lat: 37.39, lon: 127, hAcc: 5 };
-const idlePlan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true, forRoom: false };
+const idlePlan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true };
 let plan: RoutePlan = idlePlan;
 const planTo = vi.fn(async (_d: Destination, _f: { lat: number; lon: number }) => {});
 const startRouteDrive = vi.fn();
@@ -50,6 +50,12 @@ vi.mock('../../src/ui/components/MainMap', () => ({
   },
 }));
 
+const shareGroupDestination = vi.fn(async (_d: unknown, _r: unknown) => {});
+vi.mock('../../src/app/group', async (orig) => ({
+  ...(await orig<typeof import('../../src/app/group')>()),
+  shareGroupDestination: (d: unknown, r: unknown) => shareGroupDestination(d, r),
+}));
+
 const { DestinationScreen } = await import('../../src/ui/screens/DestinationScreen');
 const { rememberDestination, handOffDestination } = await import('../../src/app/routeNav');
 
@@ -82,7 +88,6 @@ const readyPlan = (): RoutePlan => ({
   status: 'ready',
   error: null,
   record: true,
-  forRoom: false,
 });
 
 describe('목적지 고르기', () => {
@@ -258,6 +263,18 @@ describe('목적지 고르기', () => {
     render(<DestinationScreen />);
     expect(screen.getByText('현재 위치를 받는 중… 받으면 바로 경로를 찾아요')).toBeInTheDocument();
     expect(screen.getByText('하오고개 · 출발점')).toBeInTheDocument();
+  });
+
+  it('group host: picks the room destination and sends it to everyone instead of starting', async () => {
+    plan = readyPlan();
+    render(<DestinationScreen forRoom />);
+    expect(screen.getByText('방 목적지 고르기')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '이 경로로 출발' })).toBeNull();
+    expect(screen.getByRole('link', { name: '뒤로' })).toHaveAttribute('href', '#/group');
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '모두에게 보내기' })));
+    expect(shareGroupDestination).toHaveBeenCalledWith({ name: '남산공원길 부근', lat: 37.45, lon: 127.05 }, plan.route);
+    expect(startRouteDrive).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#/group');
   });
 
   it('back goes home and clears plan', () => {

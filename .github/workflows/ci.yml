@@ -72,6 +72,8 @@ jobs:
         env:
           # 방금 배포한 서버(Worker) 주소. 서버 배포를 건너뛰었으면 Actions 변수 VITE_API_URL(있으면), 둘 다 없으면 폰에만 저장
           VITE_API_URL: ${{ needs.deploy-worker.outputs.api_url || vars.VITE_API_URL }}
+          # 그룹 주행 카톡 초대 카드 (카카오 JavaScript 키, 웹 페이지에 그대로 보이는 공개 키). 없으면 폰 공유 창·링크 복사
+          VITE_KAKAO_JS_KEY: ${{ secrets.KAKAO_JS_KEY }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
