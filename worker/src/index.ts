@@ -20,6 +20,9 @@
 //   DELETE /api/presence                 공유 끄기 (지운다)
 //   POST /api/route {from, to, headingDeg?} 목적지 길찾기 (네이버 클라우드 Directions 15, 계정당 하루 300번)
 //   GET /api/places?q=                   장소 검색 (네이버 지역 검색, 최대 5개, 계정당 하루 500번)
+//   GET/PUT /api/prefs                   즐겨찾기·분류 (코스 둘러보기)
+//   GET /api/popular?period=             인기 도로 (기본 코스별 달린 사람 수)
+//   POST /api/driving {builtin}          기본 코스로 주행 중 신호 (실시간 인기, 위치 없음)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
@@ -29,6 +32,7 @@ import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
+import { drivingNow, getPrefs, popular, putPrefs } from './browse';
 import { searchPlaces } from './places';
 import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
@@ -110,6 +114,23 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
   if (path === '/auth/kakao/finish') {
     if (method !== 'POST') throw new HttpError(405);
     return json(200, headers, await finishKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+
+  if (path === '/api/prefs') {
+    const userId = await authenticate(req, env);
+    if (method === 'GET') return json(200, headers, await getPrefs(env, userId));
+    if (method === 'PUT') return json(200, headers, await putPrefs(env, userId, await readJson(req, 16_384)));
+    throw new HttpError(405);
+  }
+  if (path === '/api/popular') {
+    if (method !== 'GET') throw new HttpError(405);
+    await authenticate(req, env);
+    return json(200, headers, await popular(env, new URL(req.url).searchParams.get('period')));
+  }
+  if (path === '/api/driving') {
+    if (method !== 'POST') throw new HttpError(405);
+    const userId = await authenticate(req, env);
+    return json(200, headers, await drivingNow(env, userId, await readJson(req, 1024)));
   }
 
   if (path === '/api/places') {
