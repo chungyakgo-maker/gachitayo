@@ -8,7 +8,7 @@ import type { LiveSnapshot } from '../engine/live/livePipeline';
 import { bearingOfPsi, ROUTE, RouteGuide, type RouteStep } from '../engine/route/routeGuide';
 import type { Course } from '../types/course';
 import { getAuth } from './account';
-import { beginPrepare, chooseCourse, chooseFreeDrive, getDriveState, subscribeDrive, subscribeLive } from './drive';
+import { beginPrepare, chooseCourse, chooseFreeDrive, driveBusy, getDriveState, subscribeDrive, subscribeLive } from './drive';
 
 export interface Destination {
   lat: number;
@@ -50,6 +50,8 @@ const RECENT_KEY = 'gachitayo.recentDest.v1';
 const RECENT_MAX = 5;
 /** 이 안이면 같은 곳 (m) */
 const SAME_PLACE_M = 30;
+/** 길찾기 요청 제한 시간 (산길에서 통신이 멈춰도 "새 경로 찾는 중"에 갇히지 않게) */
+const ROUTE_TIMEOUT_MS = 10_000;
 
 const distM = (a: LatLon, b: LatLon) => {
   const p = toLocal(a, b.lat, b.lon);
@@ -62,7 +64,7 @@ async function requestRoute(from: LatLon, to: LatLon, headingDeg?: number): Prom
   const auth = getAuth();
   if (!auth) throw new ApiError(401, NO_ACCOUNT);
   const body = { from: { lat: from.lat, lon: from.lon }, to: { lat: to.lat, lon: to.lon }, ...(headingDeg === undefined ? {} : { headingDeg }) };
-  return apiFetch<RouteData>('POST', '/api/route', { token: auth.token, body });
+  return apiFetch<RouteData>('POST', '/api/route', { token: auth.token, body, signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) });
 }
 
 // ── 목적지 화면의 계획 ─────────────────────────────────
@@ -173,6 +175,8 @@ let unsubs: Array<() => void> = [];
 export function startRouteDrive(): void {
   const { dest, route, record, status } = plan;
   if (status !== 'ready' || !dest || !route) return;
+  // 이미 주행·기록 중이면 손대지 않는다 (진행 중인 주행을 일반 주행으로 바꿔 기록을 지우지 않게)
+  if (driveBusy()) return;
   rememberDestination(dest);
   stopNav();
   beginPrepare();
@@ -201,12 +205,19 @@ export function stopNav(): void {
   if (nav) setNav(null);
 }
 
-const statusOf = (step: RouteStep): NavLive['status'] => (step.arrived ? 'arrived' : inflight ? 'rerouting' : !step.onRoute ? 'off' : 'guiding');
+/** 경로 위면 다시 찾는 중이어도 안내(표지판)를 보인다 */
+const statusOf = (step: RouteStep): NavLive['status'] => (step.arrived ? 'arrived' : step.onRoute ? 'guiding' : inflight ? 'rerouting' : 'off');
 
 /** 스냅숏 하나 (10 Hz). 주행 단계에서만 경로 위치를 따라가고 다시 찾는다 */
 export function navTick(snap: LiveSnapshot, now = Date.now()): void {
   const n = nav;
-  if (!n || !snap.pos || !snap.origin) return;
+  if (!n) return;
+  // 준비 화면에서 코스를 고르면 코스 주행 (경로 안내를 끝낸다: 뒤에서 다시 찾기를 계속 보내지 않게)
+  if (getDriveState().course) {
+    stopNav();
+    return;
+  }
+  if (!snap.pos || !snap.origin) return;
   // 주행 평면 원점이 바뀌면(첫 GPS 등) 경로를 새 원점으로 다시 만든다
   const guide = n.guide.origin.lat === snap.origin.lat && n.guide.origin.lon === snap.origin.lon ? n.guide : new RouteGuide(n.route.points, snap.origin);
   if (getDriveState().phase !== 'driving') {

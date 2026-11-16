@@ -15,12 +15,16 @@ export const ROUTE = {
   rerouteGapMs: 20_000,
   /** 목적지까지 이만큼이면 도착 (m) */
   arriveM: 30,
+  /** 끝점과의 직선 거리로 도착을 볼 때는 경로로도 이만큼 안이어야 한다 (m, 헤어핀·맞은편 차로에서 일찍 도착하지 않게) */
+  arriveNearM: 150,
   /** 이보다 빠를 때만 진행 방향을 같이 보낸다 (m/s) */
   headingMinMps: 3,
 } as const;
 
 /** 경로 선을 이 간격으로 고르게 다시 찍는다 (STracker는 고른 간격을 가정한다. 카카오 꼭짓점은 들쭉날쭉) */
 const SPACING_M = 2;
+/** 아주 긴 경로는 점 수를 이만큼까지만 (경로 밖에서 전체를 찾을 때 1초에 10번 도는 계산이 무거워지지 않게, 200 km면 4 m 간격) */
+const MAX_POINTS = 50_000;
 
 export interface RouteStep {
   /** 경로 위 거리 (m). 벗어나 있으면 마지막으로 경로 위였던 곳 */
@@ -33,7 +37,10 @@ export interface RouteStep {
 }
 
 export class RouteGuide {
+  /** 따라가기·표지판용 (고른 간격) */
   readonly line: Polyline;
+  /** 카카오 점 그대로 (지도 그리기용: 다시 찍은 선은 길면 수만 점) */
+  readonly raw: Polyline;
   readonly notes: PaceNote[];
   readonly lengthM: number;
   private readonly st: STracker;
@@ -52,7 +59,8 @@ export class RouteGuide {
       ys.push(p.y);
     }
     const raw = makePolyline(xs, ys);
-    this.line = raw.length > 0 ? resamplePolyline(raw, SPACING_M) : raw;
+    this.raw = raw;
+    this.line = raw.length > 0 ? resamplePolyline(raw, Math.max(SPACING_M, raw.length / MAX_POINTS)) : raw;
     this.lengthM = this.line.length;
     this.notes = paceNotes(this.line);
     this.st = new STracker({ centerline: this.line.s.length >= 2 ? this.line : null, course: { kind: 'point_to_point' } });
@@ -64,7 +72,8 @@ export class RouteGuide {
     if (!this.arrived) {
       const n = this.line.s.length;
       const dEnd = n ? Math.hypot(p.x - this.line.x[n - 1]!, p.y - this.line.y[n - 1]!) : Infinity;
-      if ((tr.onCourse && remainingM !== null && remainingM <= ROUTE.arriveM) || dEnd <= ROUTE.arriveM) this.arrived = true;
+      const near = remainingM === null || remainingM <= ROUTE.arriveNearM;
+      if ((tr.onCourse && remainingM !== null && remainingM <= ROUTE.arriveM) || (dEnd <= ROUTE.arriveM && near)) this.arrived = true;
     }
     // GPS가 괜찮을 때만 이탈 시간을 잰다 (튄 위치로 다시 찾지 않게)
     if (!this.arrived && !tr.onCourse && tr.lateral > ROUTE.offM && p.gpsOk) this.offSince ??= p.t;

@@ -86,6 +86,40 @@ describe('RouteGuide', () => {
     }
   });
 
+  it('hairpin: passing near the end on the way up is not arrival', () => {
+    // 북쪽 300 m 오르고 반지름 12.5 m 헤어핀, 남쪽으로 280 m 내려와 끝 (끝점이 오르는 길에서 25 m)
+    const xy: Array<[number, number]> = [];
+    for (let y = 0; y <= 300; y += 20) xy.push([0, y]);
+    for (let a = 180 - 15; a >= 0; a -= 15) xy.push([12.5 + 12.5 * Math.cos((a * Math.PI) / 180), 300 + 12.5 * Math.sin((a * Math.PI) / 180)]);
+    for (let y = 280; y >= 20; y -= 20) xy.push([25, y]);
+    const pts = xy.map(([x, y]) => {
+      const p = fromLocal(O, x, y);
+      return [p.lat, p.lon] as [number, number];
+    });
+    const g = new RouteGuide(pts, O);
+    expect(g.update(at(0, 0, 10)).arrived).toBe(false);
+    expect(g.update(at(500, 0, 20)).arrived).toBe(false);
+    for (let i = 1; i <= 30; i++) g.update(at(500 + i * 1000, 0, 20 + i * 9));
+    expect(g.update(at(40_000, 25, 200)).arrived).toBe(false);
+    expect(g.update(at(41_000, 25, 120)).arrived).toBe(false);
+    expect(g.update(at(42_000, 25, 45)).arrived).toBe(true);
+  });
+
+  it('long route keeps the tracking line small and the raw line for drawing', () => {
+    // 200 km 직선 (점 두 개)
+    const end = fromLocal(O, 0, 200_000);
+    const g = new RouteGuide(
+      [
+        [O.lat, O.lon],
+        [end.lat, end.lon],
+      ],
+      O,
+    );
+    expect(g.line.x.length).toBeLessThanOrEqual(50_001);
+    expect(g.raw.x.length).toBe(2);
+    expect(g.lengthM).toBeCloseTo(200_000, -2);
+  });
+
   it('bearingOfPsi', () => {
     expect(bearingOfPsi(Math.PI / 2)).toBe(0);
     expect(bearingOfPsi(0)).toBe(90);

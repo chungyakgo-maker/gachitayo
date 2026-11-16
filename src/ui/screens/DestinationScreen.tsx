@@ -67,6 +67,8 @@ export function DestinationScreen() {
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const ins = useOverlayInsets(baseRef, topRef, bottomRef);
+  // 이미 주행·기록 중이면 새로 출발하지 않는다 (메인 화면과 같은 안내)
+  const busy = drive.phase !== 'idle' && !drive.replay;
   const gps: GpsState = permission === 'denied' ? 'weak' : !fix ? 'none' : fix.hAcc <= 10 ? 'good' : fix.hAcc <= 30 ? 'wait' : 'weak';
 
   let bottom;
@@ -92,7 +94,7 @@ export function DestinationScreen() {
           <button type="button" className="ghost-btn" onClick={() => clearPlan()}>
             다시 고르기
           </button>
-          <button type="button" className="primary-btn" onClick={() => startRouteDrive()}>
+          <button type="button" className="primary-btn" disabled={busy} onClick={() => startRouteDrive()}>
             이 경로로 출발
           </button>
         </div>
@@ -151,6 +153,11 @@ export function DestinationScreen() {
               <span className="sub">지도를 길게 눌러 목적지를 찍어요</span>
             </div>
           </div>
+          {busy && (
+            <a className="notice warn" href={drive.phase === 'preparing' ? '#/prepare' : '#/drive'} style={{ textDecoration: 'none' }}>
+              진행 중인 주행이 있어요 · 돌아가기
+            </a>
+          )}
         </div>
         <MainMap
           course={null}

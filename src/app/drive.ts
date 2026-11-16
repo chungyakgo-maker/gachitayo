@@ -417,10 +417,15 @@ let timeline: ReplayTimeline | null = null;
 /** 가장 나중에 시작한 재생의 취소 표시 (끝내거나 새 재생을 시작하면 aborted) */
 let activeReplay: { aborted: boolean } | null = null;
 
+/** 실제 주행·기록이 진행 중인지 (재생은 새 주행을 시작하면 끝내므로 빼고). 목적지로 주행이 진행 중인 주행을 바꾸지 않게 */
+export function driveBusy(): boolean {
+  return (state.phase !== 'idle' && !state.replay) || getRecordingState().phase !== 'idle';
+}
+
 /** 코스 모의주행 (사용자 요청 "코스를 미리 보고 싶을 때"): 가상 차가 코스를 한 번 달린다. 비교 랩 없음, 5×로 시작 */
 export function startCoursePreview(course: Course): Promise<void> {
   // 실제로 주행·기록 중이면 끊지 않고 준비 화면으로만 간다 (사양서 8.7, 검토 지적: 주행이 끊겨 끝낼 수 없었다)
-  if ((state.phase !== 'idle' && !state.replay) || getRecordingState().phase !== 'idle') {
+  if (driveBusy()) {
     go('#/prepare');
     return Promise.resolve();
   }

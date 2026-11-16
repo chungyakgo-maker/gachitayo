@@ -147,7 +147,9 @@ describe('목적지 경로 주행 화면', () => {
 
   it('route map model', () => {
     const m = routeMapModel(guide);
-    expect(m.line).toHaveLength(guide.line.x.length);
+    // 그리기는 카카오 점 그대로 (2 m로 다시 찍은 선은 길면 수만 점이라 매 프레임 그리기에 무겁다)
+    expect(m.line).toHaveLength(guide.raw.x.length);
+    expect(m.line.length).toBeLessThan(guide.line.x.length);
     expect(m.loop).toBe(false);
     expect(m.start).toBeNull();
     expect(m.finish).not.toBeNull();

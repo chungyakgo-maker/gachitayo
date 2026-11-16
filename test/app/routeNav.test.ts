@@ -6,6 +6,8 @@ import type { Course } from '../../src/types/course';
 
 const h = vi.hoisted(() => ({
   phase: 'driving',
+  busy: false,
+  course: null as unknown,
   live: null as null | ((s: unknown) => void),
   drv: null as null | (() => void),
   beginPrepare: vi.fn(),
@@ -13,7 +15,8 @@ const h = vi.hoisted(() => ({
   chooseFreeDrive: vi.fn(),
 }));
 vi.mock('../../src/app/drive', () => ({
-  getDriveState: () => ({ phase: h.phase }),
+  getDriveState: () => ({ phase: h.phase, course: h.course }),
+  driveBusy: () => h.busy,
   subscribeLive: (cb: (s: unknown) => void) => {
     h.live = cb;
     return () => {
@@ -70,7 +73,7 @@ const ROUTE_A = { distanceM: 663, durationS: 90, points: routePoints(), destName
 const ROUTE_B = { distanceM: 400, durationS: 60, points: [ll(200, 100), ll(600, 100)], destName: null };
 
 // ── 서버 흉내: 응답을 테스트가 정한다 ─────────────────────
-const pending: Array<{ url: string; body: { from: { lat: number; lon: number }; to: { lat: number; lon: number }; headingDeg?: number }; auth: string | null; resolve: (r: Response) => void; reject: (e: unknown) => void }> = [];
+const pending: Array<{ url: string; body: { from: { lat: number; lon: number }; to: { lat: number; lon: number }; headingDeg?: number }; auth: string | null; signal: AbortSignal | null; resolve: (r: Response) => void; reject: (e: unknown) => void }> = [];
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const flush = async () => {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
@@ -80,6 +83,8 @@ beforeEach(() => {
   storage.clear();
   vi.stubGlobal('localStorage', storage);
   h.phase = 'driving';
+  h.busy = false;
+  h.course = null;
   h.beginPrepare.mockClear();
   h.chooseCourse.mockClear();
   h.chooseFreeDrive.mockClear();
@@ -89,7 +94,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(
       (url: string, init: RequestInit) =>
-        new Promise<Response>((resolve, reject) => pending.push({ url, body: JSON.parse(String(init.body)), auth: new Headers(init.headers).get('Authorization'), resolve, reject })),
+        new Promise<Response>((resolve, reject) => pending.push({ url, body: JSON.parse(String(init.body)), auth: new Headers(init.headers).get('Authorization'), signal: init.signal ?? null, resolve, reject })),
     ),
   );
 });
@@ -302,6 +307,45 @@ describe('주행 중 안내', () => {
     h.drv!();
     expect(nav.getNavLive()).toBeNull();
     expect(h.live).toBeNull();
+  });
+
+  it('start does nothing while a drive is running', async () => {
+    await readyPlan();
+    h.busy = true;
+    nav.setRecord(false);
+    nav.startRouteDrive();
+    expect(h.beginPrepare).not.toHaveBeenCalled();
+    expect(h.chooseCourse).not.toHaveBeenCalled();
+    expect(h.chooseFreeDrive).not.toHaveBeenCalled();
+    expect(nav.getNavLive()).toBeNull();
+  });
+
+  it('choosing a course stops guidance', async () => {
+    await readyPlan();
+    nav.startRouteDrive();
+    h.course = { id: 'c1' };
+    goOff(100_000);
+    expect(nav.getNavLive()).toBeNull();
+    expect(h.live).toBeNull();
+    expect(pending).toHaveLength(1);
+  });
+
+  it('route requests have a timeout', async () => {
+    const p = nav.planTo(mapDest(340, 340), FROM);
+    expect(pending[0]!.signal).toBeInstanceOf(AbortSignal);
+    pending[0]!.reject(new DOMException('시간 초과', 'TimeoutError'));
+    await p;
+    expect(nav.getPlan().error).toBe('통신이 안 돼요. 잠시 뒤 다시 해 주세요');
+  });
+
+  it('back on route while rerouting shows signs again', async () => {
+    await readyPlan();
+    nav.startRouteDrive();
+    goOff(100_000);
+    expect(nav.getNavLive()!.status).toBe('rerouting');
+    expect(pending[1]!.signal).toBeInstanceOf(AbortSignal);
+    nav.navTick(snap(5000, 0, 200), 105_000);
+    expect(nav.getNavLive()!.status).toBe('guiding');
   });
 
   it('arrival shows arrived', async () => {

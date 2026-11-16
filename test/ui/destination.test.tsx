@@ -15,6 +15,7 @@ const startRouteDrive = vi.fn();
 const setRecord = vi.fn();
 const clearPlan = vi.fn();
 let mapProps: Record<string, unknown> = {};
+let drivePhase = 'idle';
 
 vi.mock('../../src/app/routeNav', async (orig) => ({
   ...(await orig<typeof import('../../src/app/routeNav')>()),
@@ -26,7 +27,7 @@ vi.mock('../../src/app/routeNav', async (orig) => ({
 }));
 vi.mock('../../src/app/drive', async (orig) => ({
   ...(await orig<typeof import('../../src/app/drive')>()),
-  useDrive: () => ({ phase: 'idle', courses: [course] }),
+  useDrive: () => ({ phase: drivePhase, replay: null, courses: [course] }),
   loadCourses: async () => [course],
 }));
 vi.mock('../../src/ui/hooks/useLocationPreview', () => ({ useLocationPreview: () => ({ fix, permission: 'granted' }) }));
@@ -50,6 +51,7 @@ beforeEach(() => {
   setRecord.mockClear();
   clearPlan.mockClear();
   mapProps = {};
+  drivePhase = 'idle';
 });
 
 const readyPlan = (): RoutePlan => ({
@@ -145,6 +147,14 @@ describe('목적지 고르기', () => {
     expect(screen.getByText('도착 지점 주변의 도로를 탐색할 수 없음')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
     expect(planTo).toHaveBeenCalledWith(dest, { lat: 37.39, lon: 127 });
+  });
+
+  it('a running drive blocks starting another', () => {
+    drivePhase = 'driving';
+    plan = readyPlan();
+    render(<DestinationScreen />);
+    expect(screen.getByRole('link', { name: /진행 중인 주행이 있어요/ })).toHaveAttribute('href', '#/drive');
+    expect(screen.getByRole('button', { name: '이 경로로 출발' })).toBeDisabled();
   });
 
   it('back goes home and clears plan', () => {

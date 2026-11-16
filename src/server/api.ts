@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(method: string, path: string, opts: { token?: string | null; body?: unknown } = {}): Promise<T> {
+export async function apiFetch<T>(method: string, path: string, opts: { token?: string | null; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
@@ -18,6 +18,7 @@ export async function apiFetch<T>(method: string, path: string, opts: { token?: 
     method,
     headers,
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    signal: opts.signal,
   });
   if (!r.ok) {
     let msg = `${r.status}`;

@@ -44,7 +44,8 @@ const routeCache = new WeakMap<RouteGuide, MapModel>();
 export function routeMapModel(guide: RouteGuide): MapModel {
   const hit = routeCache.get(guide);
   if (hit) return hit;
-  const { x, y } = guide.line;
+  // 카카오 점 그대로 (매 프레임 그리므로 2 m로 다시 찍은 선은 쓰지 않는다)
+  const { x, y } = guide.raw;
   const n = x.length;
   const line: XY[] = [];
   for (let i = 0; i < n; i++) line.push([x[i]!, y[i]!] as const);
