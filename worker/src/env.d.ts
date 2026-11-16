@@ -9,8 +9,20 @@ declare namespace Cloudflare {
     DB: D1Database;
     /** 앞 친구 간격용 실시간 방 (사람마다 하나) */
     LIVE: DurableObjectNamespace<import('./live').LiveRoom>;
+    /** 그룹 주행 방 (방마다 하나) */
+    GROUP: DurableObjectNamespace<import('./group').GroupRoom>;
     /** 웹앱 출처 (GitHub Pages): https://{주인}.github.io */
     ALLOWED_ORIGIN: string;
+    /** 카카오 로그인 REST API 키 (GitHub Secrets → 배포 때 Worker 비밀값). 없으면 카카오 로그인을 끈다 */
+    KAKAO_REST_API_KEY?: string;
+    /** 카카오 로그인 클라이언트 시크릿 */
+    KAKAO_CLIENT_SECRET?: string;
+    /** 네이버 클라우드 Maps 길찾기(Directions 15) Client ID·Secret (목적지로 주행). 없으면 길찾기를 끈다 */
+    NCP_MAP_CLIENT_ID?: string;
+    NCP_MAP_CLIENT_SECRET?: string;
+    /** 네이버 클라우드 NAVER API HUB 지역 검색 Client ID·Secret (장소 검색). 없으면 검색을 끈다 */
+    NAVER_CLIENT_ID?: string;
+    NAVER_CLIENT_SECRET?: string;
     /** 테스트에서만: 적용할 D1 마이그레이션 */
     TEST_MIGRATIONS?: import('cloudflare:test').D1Migration[];
   }

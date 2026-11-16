@@ -22,4 +22,12 @@ describe('지도 버튼 크기 (나침반·GPS 32 px, 모든 지도 같게)', ()
       .filter((r) => /(^|[;\s])(width|height):/.test(r.body));
     expect(other.map((r) => r.sel)).toEqual([]);
   });
+
+  it('종료 버튼: 지금의 1/3 너비로 가운데, 지도 모드에서는 맨 아래 10 px (사용자 요청)', () => {
+    const btn = rules.find((r) => r.sel === '.end-btn')!;
+    expect(btn.body).toMatch(/width:\s*33%/);
+    expect(btn.body).toMatch(/align-self:\s*center/);
+    const bottom = rules.find((r) => r.sel === '.drive.mode-map .drive-map .drive-bottom')!;
+    expect(bottom.body).toMatch(/padding-bottom:\s*10px/);
+  });
 });

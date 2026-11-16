@@ -7,6 +7,7 @@ import { gateSegment } from '../../engine/course/geometry';
 import { fromLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 import { COURSE_STYLE, PIN_LABEL, PIN_TOP_PX, pinElement, sectorLabelElement, type GateWhich, type PickMapController } from './courseStyle';
+import { attachLongPress } from './longPress';
 import { FOLLOW_ZOOM, type AnalysisMapController, type FriendMarker, type MainMapApi, type MapFix, type ReplayMapController } from './mapTypes';
 
 export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -61,8 +62,14 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
   // 다른 코스는 감지된 코스 아래에 깔리게 먼저 (사용자 요청: 메인 지도에 코스 다 보이게)
   const otherLayer = L.layerGroup().addTo(map);
   const courseLayer = L.layerGroup().addTo(map);
+  // 목적지 경로 (목적지 고르기): 하늘색 선 + FINISH 핀
+  const routeLayer = L.layerGroup().addTo(map);
+  let routeKey = '';
+  let detachPress: (() => void) | null = null;
   const friendLayer = L.layerGroup().addTo(map);
   let others: Course[] = [];
+  let favorites: ReadonlySet<string> = new Set();
+  let tapCb: ((courseId: string) => void) | null = null;
   let show = true;
   const meLayer = L.layerGroup().addTo(map);
   let friends: FriendMarker[] = [];
@@ -133,8 +140,16 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     for (const c of others) {
       if (c.id === lastCourse?.id || !c.centerline || c.centerline.length < 2) continue;
       const pts = c.kind === 'loop' ? [...c.centerline, c.centerline[0]!] : c.centerline;
-      L.polyline(pts, { color: COURSE_STYLE.glow, opacity: 0.2, weight: 7, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
-      L.polyline(pts, { color: COURSE_STYLE.route, opacity: 0.9, weight: 2.4, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
+      const fav = favorites.has(c.id);
+      const color = fav ? COURSE_STYLE.favorite : COURSE_STYLE.route;
+      L.polyline(pts, { color: fav ? COURSE_STYLE.favorite : COURSE_STYLE.glow, opacity: fav ? 0.35 : 0.2, weight: fav ? 10 : 7, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
+      L.polyline(pts, { color, opacity: 0.95, weight: fav ? 4 : 2.4, lineJoin: 'round', lineCap: 'round', interactive: false, className: fav ? 'course-fav' : '' }).addTo(otherLayer);
+      // 누르기 쉬운 굵은 투명 선 (코스 둘러보기: 누르면 출발점 안내)
+      if (tapCb) {
+        const hit = L.polyline(pts, { color: '#000', opacity: 0, weight: 24, interactive: true, className: 'course-hit' }).addTo(otherLayer);
+        const id = c.id;
+        hit.on('click', () => tapCb?.(id));
+      }
       const name = document.createElement('span');
       name.textContent = c.name;
       L.marker([c.startGate.lat, c.startGate.lon], { icon: L.divIcon({ className: 'map-label course-name', html: name, iconSize: [140, 16], iconAnchor: [-8, 8] }), interactive: false, keyboard: false }).addTo(otherLayer);
@@ -189,9 +204,50 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     setOnline(online) {
       showTiles(online);
     },
-    setCourses(list) {
+    setCourses(list, fav) {
       others = list;
+      favorites = fav ?? new Set();
       drawOthers();
+    },
+    onCourseTap(cb) {
+      tapCb = cb;
+      drawOthers();
+    },
+    setRoute(points, dest) {
+      routeLayer.clearLayers();
+      const pts = points && points.length >= 2 ? points.map(([lat, lon]) => L.latLng(lat, lon)) : null;
+      if (pts) {
+        const o = { lineJoin: 'round', lineCap: 'round', interactive: false } as const;
+        L.polyline(pts, { ...o, color: ACCENT, opacity: 0.25, weight: 12, className: 'dest-route-glow' }).addTo(routeLayer);
+        L.polyline(pts, { ...o, color: ACCENT, opacity: 1, weight: 5, className: 'dest-route' }).addTo(routeLayer);
+      }
+      if (dest)
+        L.marker([dest.lat, dest.lon], {
+          icon: L.divIcon({ className: 'map-pin finish dest', html: pinElement('finish', PIN_LABEL.finish), iconSize: [26, 36], iconAnchor: [13, 36] }),
+          interactive: false,
+          keyboard: false,
+          zIndexOffset: 600,
+        }).addTo(routeLayer);
+      const key = pts ? `${pts.length}:${pts[0]!.lat},${pts[0]!.lng}:${pts[pts.length - 1]!.lat},${pts[pts.length - 1]!.lng}` : '';
+      if (pts && key !== routeKey) {
+        // 경로가 다 보이게, 그 뒤로는 내 위치를 따라가지 않는다 (GPS 아이콘을 누르면 다시)
+        userMoved = true;
+        move(() =>
+          map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(44, 44 + inset.top + PIN_TOP_PX), paddingBottomRight: L.point(44, 44 + inset.bottom), maxZoom: 17, animate: false }),
+        );
+      }
+      routeKey = key;
+    },
+    onLongPress(cb) {
+      detachPress?.();
+      detachPress = null;
+      if (!cb) return;
+      const c = map.getContainer();
+      detachPress = attachLongPress(c, (x, y) => {
+        const r = c.getBoundingClientRect();
+        const ll = map.containerPointToLatLng([x - r.left, y - r.top]);
+        cb(ll.lat, ll.lng);
+      });
     },
     setShowCourses(on) {
       if (on === show) return;
@@ -236,6 +292,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     tilesShown: () => shown,
     map,
     destroy() {
+      detachPress?.();
       map.remove();
     },
   };
@@ -262,6 +319,8 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
   });
   const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
   map.setView([36.5, 127.8], 7);
+  /** 따라가기 확대 단계 (+ / − 로 바뀐다) */
+  let zf = FOLLOW_ZOOM;
   let shown = false;
   let fails = 0;
   tiles.on('tileload', () => {
@@ -281,32 +340,38 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     fit(points, inset) {
       if (points.length === 0) return;
       map.invalidateSize({ pan: false });
-      if (points.length === 1) map.setView(map.unproject(map.project(points[0]!, FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]), FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
-      else map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20 + inset.top], paddingBottomRight: [20, 20 + inset.bottom], maxZoom: 18, animate: false });
+      if (points.length === 1) map.setView(map.unproject(map.project(points[0]!, zf).add([0, (inset.bottom - inset.top) / 2]), zf), zf, { animate: false });
+      else {
+        map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20 + inset.top], paddingBottomRight: [20, 20 + inset.bottom], maxZoom: 18, animate: false });
+        if (zf !== FOLLOW_ZOOM) map.setZoom(map.getZoom() + (zf - FOLLOW_ZOOM), { animate: false });
+      }
     },
     follow(lat, lon, inset) {
       map.invalidateSize({ pan: false });
       // 가려지지 않은 영역의 가운데에 오게 (위·아래 가림 차이의 절반만큼 옮긴다)
-      const c = map.project([lat, lon], FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]);
-      map.setView(map.unproject(c, FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
+      const c = map.project([lat, lon], zf).add([0, (inset.bottom - inset.top) / 2]);
+      map.setView(map.unproject(c, zf), zf, { animate: false });
     },
     centerOn(lat, lon) {
       map.invalidateSize({ pan: false });
-      map.setView([lat, lon], FOLLOW_ZOOM, { animate: false });
+      map.setView([lat, lon], zf, { animate: false });
     },
     track(lat, lon, inset) {
-      const target = map.unproject(map.project([lat, lon], FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]), FOLLOW_ZOOM);
-      if (map.getZoom() !== FOLLOW_ZOOM) {
-        map.setView(target, FOLLOW_ZOOM, { animate: false });
+      const target = map.unproject(map.project([lat, lon], zf).add([0, (inset.bottom - inset.top) / 2]), zf);
+      if (map.getZoom() !== zf) {
+        map.setView(target, zf, { animate: false });
         return;
       }
-      const off = map.project(target, FOLLOW_ZOOM).subtract(map.project(map.getCenter(), FOLLOW_ZOOM));
+      const off = map.project(target, zf).subtract(map.project(map.getCenter(), zf));
       if (Math.abs(off.x) < 0.5 && Math.abs(off.y) < 0.5) return;
-      if (Math.hypot(off.x, off.y) > 300) map.setView(target, FOLLOW_ZOOM, { animate: false });
+      if (Math.hypot(off.x, off.y) > 300) map.setView(target, zf, { animate: false });
       else map.panBy(off, { animate: false });
     },
     resize() {
       map.invalidateSize({ pan: false });
+    },
+    setZoomOffset(d) {
+      zf = FOLLOW_ZOOM + d;
     },
     project(lat, lon) {
       const p = map.latLngToContainerPoint([lat, lon]);

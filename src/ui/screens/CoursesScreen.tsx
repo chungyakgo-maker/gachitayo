@@ -7,10 +7,14 @@ import { CourseThumb } from '../components/CourseThumb';
 import { loadCourses, useDrive } from '../../app/drive';
 import { parseGpx, suggestedCourseName } from '../../gpx/parse';
 import { Sheet } from '../components/Sheet';
-import { IconChevron } from '../icons';
 import { Tabbed } from '../components/TabBar';
 import { formatLapTime, formatLength } from '../format';
 import { useBestTimes } from './useBestTimes';
+import { CourseChips } from '../components/CourseChips';
+import { filterCourses } from '../../app/courseFilter';
+import { isFavorite, TAG_LABEL, tagsOf, toggleFavorite, useCoursePrefs } from '../../app/coursePrefs';
+import { usePopular } from '../../app/popular';
+import { updateSettings, useSettings } from '../../app/settings';
 
 export function CoursesScreen() {
   const { courses } = useDrive();
@@ -20,6 +24,12 @@ export function CoursesScreen() {
   const best = useBestTimes(courses);
   const mine = courses.filter((c) => !c.builtin);
   const builtins = courses.filter((c) => c.builtin);
+  // 분류 칩 (코스 둘러보기 설계): 전체면 예전처럼 내 코스·기본 코스로 나누고, 고르면 그 코스만 (인기 도로는 달린 사람 많은 순)
+  const settings = useSettings();
+  const prefs = useCoursePrefs();
+  const filter = settings.courseFilter;
+  const popular = usePopular(settings.popularPeriod, filter === 'popular');
+  const filtered = filterCourses(courses, filter, { isFavorite: (c) => isFavorite(c, prefs), tagsOf: (c) => tagsOf(c, prefs) }, popular.rows);
   const file = useRef<HTMLInputElement>(null);
   const [gpx, setGpx] = useState<{ text: string; name: string; hasTime: boolean } | null>(null);
   const [gpxName, setGpxName] = useState('');
@@ -54,6 +64,7 @@ export function CoursesScreen() {
         <header className="page-head">
           <h1 className="big">코스</h1>
         </header>
+        <CourseChips filter={filter} period={settings.popularPeriod} onFilter={(f) => updateSettings({ courseFilter: f })} onPeriod={(p) => updateSettings({ popularPeriod: p })} />
         <div className="button-pair">
           <a className="btn" href="#/course-new" style={{ textAlign: 'center', textDecoration: 'none' }}>
             지도에서 새 코스
@@ -70,6 +81,21 @@ export function CoursesScreen() {
             <br />
             주행을 시작하면 첫 주행으로 코스를 만들어요.
           </div>
+        ) : filter !== 'all' ? (
+          <section className="card-col" style={{ gap: 8 }} aria-label="고른 분류의 코스">
+            {filter === 'popular' && popular.error && <div className="notice">{popular.error}</div>}
+            {filter === 'popular' && !popular.rows && !popular.error ? (
+              <span className="sub">불러오는 중…</span>
+            ) : filtered.length === 0 ? (
+              <span className="sub">{filter === 'popular' ? '이 기간에 달린 기록이 아직 없어요' : '이 분류에 코스가 없어요'}</span>
+            ) : (
+              <ul className="rows">
+                {filtered.map(({ course: c, drivers }) => (
+                  <CourseRow key={c.id} c={c} best={best[c.id]} drivers={drivers} />
+                ))}
+              </ul>
+            )}
+          </section>
         ) : (
           <>
             <section className="card-col" style={{ gap: 8 }} aria-label="내 코스">
@@ -119,10 +145,13 @@ export function CoursesScreen() {
   );
 }
 
-function CourseRow({ c, best }: { c: Course; best: number | null | undefined }) {
+function CourseRow({ c, best, drivers }: { c: Course; best: number | null | undefined; drivers?: number }) {
   const route = builtinInfo(c)?.route;
+  const prefs = useCoursePrefs();
+  const fav = isFavorite(c, prefs);
+  const tags = tagsOf(c, prefs);
   return (
-    <li>
+    <li className="course-li">
       <a className="row-card course-row" href={`#/course/${c.id}`}>
         <CourseThumb course={c} />
         <span className="card-col course-row-text">
@@ -131,13 +160,26 @@ function CourseRow({ c, best }: { c: Course; best: number | null | undefined }) 
             {c.kind === 'loop' ? '랩' : '편도'} · {formatLength(c.lengthM)}
           </span>
           {route && <span className="sub course-row-route">{route}</span>}
+          {(tags.length > 0 || drivers !== undefined) && (
+            <span className="course-tags">
+              {drivers !== undefined && <span className="course-tag hot">{drivers}명</span>}
+              {tags.map((t) => (
+                <span key={t} className="course-tag">
+                  {TAG_LABEL[t]}
+                </span>
+              ))}
+            </span>
+          )}
         </span>
         <span className="right card-col" style={{ alignItems: 'flex-end' }}>
           <span className="label">내 베스트</span>
           <span className="mono">{best != null ? formatLapTime(best, 3) : '—'}</span>
         </span>
-        <IconChevron size={18} color="#9AA1A9" />
       </a>
+      {/* 즐겨찾기 (사용자 요청): 줄 오른쪽 별, 즐겨찾기면 보라 */}
+      <button type="button" className={`fav-star${fav ? ' on' : ''}`} aria-label={`${c.name} 즐겨찾기`} aria-pressed={fav} onClick={() => toggleFavorite(c)}>
+        {fav ? '★' : '☆'}
+      </button>
     </li>
   );
 }

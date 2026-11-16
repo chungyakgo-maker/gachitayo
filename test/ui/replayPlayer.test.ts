@@ -38,7 +38,7 @@ describe('재생 플레이어 (사양서 10.2: 재생 막대·배속·모의주�
     const p = startReplay({ kind: 'sim', withRef: false }, 5);
     await untilReady();
     await p;
-    expect(replay()).toMatchObject({ seekable: true, playing: true, preparing: null, speed: 5, returnTo: '#/dev/replay' });
+    expect(replay()).toMatchObject({ seekable: true, playing: true, preparing: null, speed: 5, returnTo: '#/replay' });
     expect(replay().endMs).toBeGreaterThan(60_000);
     expect(window.location.hash).toBe('#/drive');
   });
@@ -95,7 +95,7 @@ describe('재생 플레이어 (사양서 10.2: 재생 막대·배속·모의주�
     }
     await p;
     expect(getDriveState()).toMatchObject({ phase: 'idle', replay: null, error: null });
-    expect(window.location.hash).toBe('#/dev/replay');
+    expect(window.location.hash).toBe('#/replay');
     await vi.advanceTimersByTimeAsync(1000);
     expect(getLiveSnapshot()).toBeNull();
   });

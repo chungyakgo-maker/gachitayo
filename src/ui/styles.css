@@ -1308,8 +1308,12 @@ html.app-h .modal-backdrop {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  width: 100%;
-  height: 52px;
+  /* 사용자 요청: 지금의 1/3 크기로 줄여 [종료], 맨 아래 가운데 */
+  width: 33%;
+  align-self: center;
+  margin-left: auto;
+  margin-right: auto;
+  height: 44px;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   background: transparent;
@@ -1320,7 +1324,7 @@ html.app-h .modal-backdrop {
 }
 
 .end-btn.tall {
-  height: 60px;
+  height: 48px;
   border-radius: 16px;
   font-size: 16px;
 }
@@ -2400,6 +2404,8 @@ html.app-h .modal-backdrop {
   z-index: 1100;
   background: transparent;
   border-top: 0;
+  /* 종료 버튼을 맨 아래 10 px에 (사용자 요청) */
+  padding-bottom: 10px;
 }
 
 .drive.mode-map .end-btn {
@@ -2582,4 +2588,588 @@ button.map-gps:active {
 /* 선 지도: 출처 표시를 아래 탭 위로 */
 .main-map .maplibregl-ctrl-bottom-right {
   bottom: var(--inset-b, 0px);
+}
+
+/* 카카오 로그인 버튼 (카카오 디자인 가이드: 노랑, 검정 말풍선, 글자 검정 85%) */
+.kakao-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-radius: 12px;
+  background: #fee500;
+  color: rgba(0, 0, 0, 0.85);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kakao-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.warn-text {
+  color: #ff8a3d;
+}
+
+/* 코스 이탈 안내 (시안 B): 표지판 자리의 주황 표지판 + 거리 */
+.tile.off-course-tile,
+.drive.mode-map .tile.off-course-tile {
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.off-course-sign {
+  height: 100%;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: #ff8a3d;
+  color: #1a0d00;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+}
+.off-course-sign .bang {
+  font-size: 40px;
+  line-height: 1;
+}
+.off-course-sign .word {
+  font-size: 15px;
+  margin-top: 4px;
+}
+.off-course-side {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-weight: 800;
+  color: #ffb27f;
+  font-size: 14px;
+  line-height: 1.3;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+.off-course-side .dist {
+  font-family: var(--mono);
+  font-size: 30px;
+  color: #fff;
+}
+.off-course-side .dist small {
+  font-size: 16px;
+}
+.off-course-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #ff8a3d;
+  font-weight: 800;
+}
+.off-course-panel .word {
+  font-size: 34px;
+}
+.off-course-panel .dist {
+  font-family: var(--mono);
+  font-size: 22px;
+  color: var(--fg);
+}
+.off-course-panel .lbl {
+  font-size: 16px;
+}
+
+/* 주행 중 칸 터치로 바꾸기 (사용자 요청): 칸을 감싸는 투명 버튼 */
+.slot-btn {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.slot-btn > * {
+  width: 100%;
+}
+.slot-btn:active > * {
+  opacity: 0.8;
+}
+.slot-btn.slot-off {
+  height: 30px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-align: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* ── 목적지 고르기 (설계 2026-11-16 destination-route 5.4): 지도 전체 + 위·아래 얹은 카드 ── */
+.dest-screen {
+  position: fixed;
+  inset: 0;
+  bottom: auto;
+  height: var(--app-h, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.dest-head .back-btn {
+  flex: none;
+}
+
+.dest-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding: 0 calc(12px + var(--safe-r)) calc(12px + var(--safe-b)) calc(12px + var(--safe-l));
+}
+
+.dest-bottom .card {
+  background: rgba(14, 15, 18, 0.88);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dest-card {
+  gap: 10px;
+}
+
+.dest-card .sheet-item {
+  min-height: 48px;
+}
+
+.dest-list {
+  max-height: 42vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dest-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dest-title {
+  font-size: 18px;
+}
+
+.dest-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 10px;
+}
+
+/* 목적지 고르기: 장소 검색창 (네이버 지역 검색). 글자 16px (아이폰이 입력칸을 눌렀을 때 확대하지 않게) */
+.dest-search {
+  padding: 8px;
+  gap: 8px;
+}
+
+.dest-search .text-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+}
+
+.dest-search-btn {
+  width: auto;
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 16px;
+}
+
+/* ── 코스 둘러보기 (설계 2026-11-16 course-browse): 메인 검색창, 분류 칩, 코스 창 지도 ── */
+.main-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: rgba(14, 15, 18, 0.84);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--fg-dim);
+}
+
+.main-search:focus-within {
+  border-color: var(--accent);
+}
+
+.main-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font-size: 16px;
+  outline: none;
+}
+
+.main-results {
+  gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.browse-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+  scrollbar-width: none;
+}
+
+.browse-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.browse-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 15, 18, 0.84);
+  color: #c9ced4;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.browse-chips.small .browse-chip {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.browse-chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.browse-chip .fav {
+  color: #b15cff;
+}
+
+.browse-chip[aria-pressed='true'] .fav {
+  color: #5a1fa0;
+}
+
+.sheet-map {
+  height: 230px;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.course-li {
+  position: relative;
+  list-style: none;
+}
+
+.course-li .course-row {
+  padding-right: 60px;
+}
+
+.fav-star {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  font-size: 24px;
+  color: #5b6168;
+}
+
+.fav-star.on {
+  color: #b15cff;
+}
+
+.course-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.course-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c9ced4;
+}
+
+.course-tag.hot {
+  background: rgba(255, 178, 36, 0.18);
+  color: #ffd27a;
+}
+
+/* 주행 지도 확대·축소 (사용자 요청) */
+.map-zoom {
+  position: absolute;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 15, 18, 0.84);
+}
+
+.map-zoom button {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  background: none;
+  color: #eceef0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.map-zoom button + button {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.map-zoom button:disabled {
+  color: #4b5057;
+}
+
+/* 메인 위쪽 얹은 칸: 칸 사이 빈 곳은 지도가 손가락을 받는다 (두 손가락 확대가 웹페이지가 아니라 지도로) */
+.main-top.overlay {
+  pointer-events: none;
+}
+
+.main-top.overlay > * {
+  pointer-events: auto;
+}
+
+/* ── 그룹 주행 (설계 2026-11-16 group-drive, 시안: 시작 창·대기실·참가자 목적지 받기·주행 지도) ── */
+.map-group {
+  position: absolute;
+  left: calc(12px + var(--safe-l, 0px));
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 15, 18, 0.84);
+  color: #eceef0;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.group-order {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+  pointer-events: none;
+}
+
+.group-car {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 4px;
+  border-radius: 15px;
+  border: 2px solid;
+  font-size: 13px;
+  font-weight: 700;
+  color: #eceef0;
+  background: rgba(14, 15, 18, 0.84);
+  max-width: 132px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.group-car.me {
+  background: rgba(170, 202, 230, 0.22);
+}
+
+.group-car i,
+.group-num {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  color: #0d0e10;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.group-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  font-size: 14px;
+}
+
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 5px 8px 5px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--card-line);
+}
+
+.group-member.me {
+  border-color: #aacae6;
+  background: rgba(170, 202, 230, 0.08);
+}
+
+.group-member .name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-badge {
+  flex: none;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 178, 36, 0.18);
+  color: #ffd27a;
+  font-weight: 700;
+}
+
+.group-arrows {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.group-arrows button {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--fg);
+  font-size: 18px;
+}
+
+.group-arrows button:disabled {
+  color: var(--fg-off);
+  border-color: var(--card-line);
+}
+
+.group-code {
+  font-family: var(--mono, monospace);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  text-align: center;
+  color: var(--fg);
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kakao-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  border-radius: 14px;
+  background: #fee500;
+  color: #191919;
+  font-size: 17px;
+  font-weight: 800;
+  border: 0;
+  font-family: inherit;
+}
+
+.group-stepper {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-stepper button {
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--fg);
+  font-size: 26px;
+}
+
+.group-stepper button:disabled {
+  color: var(--fg-off);
+}
+
+.group-stepper .v {
+  text-align: center;
+  font-family: var(--mono, monospace);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.group-code-input {
+  flex: 1;
+  letter-spacing: 4px;
+  font-family: var(--mono, monospace);
+}
+
+.group-bottom {
+  padding: 4px 0 calc(16px + var(--safe-b, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }

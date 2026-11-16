@@ -39,3 +39,34 @@ describe('주행 중 엔진: 구간 델타와 최고 속도 (대시보드)', () 
     expect(st.sectorDeltas).toEqual([null, null, null]);
   });
 });
+
+// 코스 이탈 안내 B (설계 docs/superpowers/specs/2026-11-13-off-course-design.md): 랩 안에서 코스와 30 m 넘게 떨어지면 거리(10 m 단위)
+describe('주행 중 코스 이탈 거리', () => {
+  it('출발선 전에는 코스 밖이어도 이탈 거리를 주지 않고, 랩 안에서 벗어나면 코스까지 거리를 준다', () => {
+    const oval = stadiumTrack();
+    const course = courseFromTrack(oval, { gateAtS: 100 });
+    const live = new LiveEngine(buildGeometry(course), null);
+    const v = 15;
+    const push = (t: number, x: number, y: number) => live.push({ t, x, y, v, sigmaPos: 2, ax: null, ay: null, gpsOk: true, gCalibrated: false });
+    // 출발선 전, 코스에서 80 m 떨어진 곳
+    const p0 = oval.pointAt(50);
+    expect(push(0, p0.x, p0.y + 80).offCourseM).toBeNull();
+    // 코스를 따라 출발선을 지나 랩 안으로
+    let t = 1000;
+    let st = push(t, p0.x, p0.y);
+    for (let s = 50; s <= 300; s += 5) {
+      t += (5 / v) * 1000;
+      const p = oval.pointAt(s);
+      st = push(t, p.x, p.y);
+    }
+    expect(st.lapElapsedMs).not.toBeNull();
+    expect(st.offCourseM).toBeNull();
+    // 코스 옆 47 m로 벗어남 → 50 m (10 m 단위)
+    const p1 = oval.pointAt(305);
+    const n = { x: -(oval.pointAt(306).y - p1.y), y: oval.pointAt(306).x - p1.x };
+    const len = Math.hypot(n.x, n.y);
+    st = push(t + 400, p1.x + (n.x / len) * 47, p1.y + (n.y / len) * 47);
+    expect(st.onCourse).toBe(false);
+    expect(st.offCourseM).toBe(50);
+  });
+});

@@ -27,7 +27,7 @@ import {
 } from './recording';
 import { getSettings, type DriveMode } from './settings';
 import { enqueueSessionUpload } from './sync';
-import { changeProposedKind, loadRaw, processStoredSession, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
+import { changeProposedKind, dismissDetour, loadRaw, overwriteWithDetour, processStoredSession, saveDetourAsNew, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
 
@@ -64,6 +64,8 @@ export interface DriveState {
   ref: RefLapRecord | null;
   mode: DriveMode;
   error: string | null;
+  /** 일반 주행 (기록 안 남김, 사용자 요청): 화면은 똑같이, 끝나면 기록을 지운다 */
+  noRecord: boolean;
 }
 
 let state: DriveState = {
@@ -76,6 +78,7 @@ let state: DriveState = {
   ref: null,
   mode: getSettings().defaultMode,
   error: null,
+  noRecord: false,
 };
 const listeners = new Set<() => void>();
 function set(patch: Partial<DriveState>): void {
@@ -83,6 +86,13 @@ function set(patch: Partial<DriveState>): void {
   listeners.forEach((l) => l());
 }
 export const getDriveState = (): DriveState => state;
+/** 주행 상태가 바뀔 때 (React 밖에서, 경로 안내가 주행 끝을 알아채려고) */
+export function subscribeDrive(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
 export function useDrive(): DriveState {
   return useSyncExternalStore((cb) => {
     listeners.add(cb);
@@ -99,6 +109,14 @@ function publish(s: LiveSnapshot | null): void {
   liveListeners.forEach((l) => l());
 }
 export const getLiveSnapshot = (): LiveSnapshot | null => live;
+/** 화면 스냅숏(10 Hz)을 React 밖에서 받는다 (경로 안내) */
+export function subscribeLive(cb: (s: LiveSnapshot | null) => void): () => void {
+  const l = () => cb(live);
+  liveListeners.add(l);
+  return () => {
+    liveListeners.delete(l);
+  };
+}
 export function useLiveSnapshot(): LiveSnapshot | null {
   return useSyncExternalStore((cb) => {
     liveListeners.add(cb);
@@ -160,7 +178,7 @@ export function beginPrepare(): void {
   }
   startRecording();
   pipeline = new LivePipeline({ course: null, ref: null });
-  set({ phase: 'preparing', replay: null, course: null, courseChosen: false, refs: [], ref: null, mode: getSettings().defaultMode, error: null });
+  set({ phase: 'preparing', replay: null, course: null, courseChosen: false, refs: [], ref: null, mode: getSettings().defaultMode, error: null, noRecord: false });
   publish(null);
   void loadCourses();
   let detecting = false;
@@ -188,6 +206,12 @@ export function beginPrepare(): void {
     stopTicker();
   };
   go('#/prepare');
+}
+
+/** 일반 주행 (사용자 요청 "기록 안 남김"): 코스 없이, 끝나면 기록을 지운다 */
+export function chooseFreeDrive(): void {
+  set({ course: null, courseChosen: true, noRecord: true });
+  void applyCourse(null, true);
 }
 
 export function chooseCourse(course: Course | null): void {
@@ -228,7 +252,7 @@ export function startDrive(): void {
   startLinks();
   markRecordingEvent('drive_start', state.course ? { courseId: state.course.id, courseVersion: state.course.version } : {});
   const id = getRecordingState().sessionId;
-  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null });
+  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null, ...(state.noRecord ? { noRecord: true } : {}) });
   set({ phase: 'driving' });
   go('#/drive');
 }
@@ -258,6 +282,15 @@ export async function endDrive(): Promise<void> {
   stopLiveLinks();
   teardownLive?.();
   teardownLive = null;
+  // 일반 주행: 기록을 남기지 않는다 (지우고 메인으로)
+  if (state.noRecord) {
+    await discardRecording();
+    pipeline = null;
+    publish(null);
+    set({ phase: 'idle', noRecord: false });
+    go('#/');
+    return;
+  }
   const id = await stopRecording();
   if (!id) {
     // 저장 실패: 기록 상태(stopFailed)에 "다시 저장" 안내가 있다
@@ -320,6 +353,30 @@ export async function processSession(sessionId: string, kind?: CourseKind): Prom
   return andUpload(sessionId, await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
 }
 
+/** 벗어난 길을 새 코스로 저장하고 이 주행을 그 코스로 옮긴다 (코스 이탈) */
+export async function saveDetour(sessionId: string, name: string): Promise<boolean> {
+  const r = await andUpload(sessionId, await track(sessionId, () => saveDetourAsNew(deps(), sessionId, name)));
+  if (r) await loadCourses();
+  return r !== null;
+}
+
+/** 지금 코스(내 코스)를 벗어난 길로 덮어쓴다 */
+export async function overwriteDetour(sessionId: string): Promise<boolean> {
+  const r = await andUpload(sessionId, await track(sessionId, () => overwriteWithDetour(deps(), sessionId)));
+  if (r) await loadCourses();
+  return r !== null;
+}
+
+/** 벗어난 길 저장 제안을 닫는다 */
+export async function dismissDetourOf(sessionId: string): Promise<void> {
+  await dismissDetour(deps(), sessionId);
+}
+
+/** 되살린 기록 다시 계산 (카카오 로그인 되살리기): 서버에 이미 있으니 업로드 대기열에 넣지 않는다 */
+export async function processRestoredSession(sessionId: string): Promise<DriveResultRecord | null> {
+  return track(sessionId, () => processStoredSession(deps(), sessionId));
+}
+
 export async function changeKind(sessionId: string, kind: CourseKind): Promise<DriveResultRecord | null> {
   return andUpload(sessionId, await track(sessionId, () => changeProposedKind(deps(), sessionId, kind)));
 }
@@ -360,10 +417,15 @@ let timeline: ReplayTimeline | null = null;
 /** 가장 나중에 시작한 재생의 취소 표시 (끝내거나 새 재생을 시작하면 aborted) */
 let activeReplay: { aborted: boolean } | null = null;
 
+/** 실제 주행·기록이 진행 중인지 (재생은 새 주행을 시작하면 끝내므로 빼고). 목적지로 주행이 진행 중인 주행을 바꾸지 않게 */
+export function driveBusy(): boolean {
+  return (state.phase !== 'idle' && !state.replay) || getRecordingState().phase !== 'idle';
+}
+
 /** 코스 모의주행 (사용자 요청 "코스를 미리 보고 싶을 때"): 가상 차가 코스를 한 번 달린다. 비교 랩 없음, 5×로 시작 */
 export function startCoursePreview(course: Course): Promise<void> {
   // 실제로 주행·기록 중이면 끊지 않고 준비 화면으로만 간다 (사양서 8.7, 검토 지적: 주행이 끊겨 끝낼 수 없었다)
-  if ((state.phase !== 'idle' && !state.replay) || getRecordingState().phase !== 'idle') {
+  if (driveBusy()) {
     go('#/prepare');
     return Promise.resolve();
   }
@@ -428,7 +490,7 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
   // 이 재생의 취소 표시: 준비 중에 끝내거나 다른 재생을 시작하면(버튼 두 번 누름 등) true. 기다린 뒤마다 확인한다
   const signal = { aborted: false };
   activeReplay = signal;
-  const returnTo = src.kind === 'course' ? `#/course/${src.course.id}` : '#/dev/replay';
+  const returnTo = src.kind === 'course' ? `#/course/${src.course.id}` : '#/replay';
   try {
     if (src.kind !== 'friendSim') {
       // 누르자마자 "준비 중"으로 주행 화면에 간다. 가상 주행 데이터 만들기·기록 읽기·계산은 그다음 (화면이 멈춰 보이지 않게)

@@ -3,11 +3,13 @@
 import type { WidgetId } from '../../app/settings';
 import { WIDGET_LABEL } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
-import { formatDelta, formatLapTime } from '../format';
+import { formatDelta, formatLapTime, formatLength } from '../format';
 
 export type XY = readonly [number, number];
 
 export interface OverlayFrame {
+  /** 일반 주행 (기록 안 남김): 코스 없이 달릴 때 "일반 주행 · 기록 안 함" */
+  free?: boolean;
   /** 세션 시계 ms */
   t: number;
   /** 위치를 아직 못 받았으면 false (값 대신 —) */
@@ -38,12 +40,18 @@ export interface OverlayFrame {
   ghost: { x: number; y: number } | null;
   /** 지나온 경로 (첫 주행은 처음부터, 코스 주행은 이번 랩만) */
   path?: ReadonlyArray<XY>;
+  /** 코스 주행 진행: 랩 안이면 지금 코스 위치 s (m). 지도에서 지나온 코스 선을 옅게 그린다 (사용자 요청) */
+  courseS?: number | null;
   /** 앞 친구 간격 (M9). 앞 친구를 고르지 않았으면 없음 */
   gap?: GapInfo | null;
+  /** 목적지로 주행 (코스 없이 카카오 경로를 따라갈 때): 칸 1 제목에 남은 거리·상태 */
+  nav?: { remainingM: number | null; status: 'guiding' | 'off' | 'rerouting' | 'arrived' } | null;
 }
 
 export interface GapInfo {
   nickname: string;
+  /** 칸 1 제목을 바꿀 때 (그룹 주행: "앞 차 · 2 친구2") */
+  title?: string;
   /** 목표 간격 초 */
   targetS: number;
   /** 지금 간격 초 (모르면 null) */
@@ -77,6 +85,7 @@ export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, has
     ghost: hasCourse && hasRef && snap?.ghost ? { x: snap.ghost.x, y: snap.ghost.y } : null,
     // 코스가 있으면 이번 랩에서 지나온 길만 (한 바퀴 돌면 코스 전체가 빨개지지 않게)
     path: snap ? (hasCourse ? snap.path.slice(snap.pathFrom) : snap.path) : undefined,
+    courseS: hasCourse && st && st.lapElapsedMs !== null && typeof st.s === 'number' ? st.s : null,
   };
 }
 
@@ -98,7 +107,7 @@ export function headline(f: OverlayFrame): Headline {
   if (f.gap) {
     const g = f.gap;
     // 델타 칸 = 친구와의 델타, 제목 "Delta (친구이름)" (사용자 요청). 목표 간격은 오른쪽에 작게
-    const label = `Delta (${g.nickname})`;
+    const label = g.title ?? `Delta (${g.nickname})`;
     if (g.stale) return { label: `${label} · 신호 없음`, text: '—', word: '', tone: 'none', plain: false };
     if (g.gapS === null) return { label, text: '—', word: '', tone: 'none', plain: false };
     const d = g.gapS - g.targetS;
@@ -107,7 +116,12 @@ export function headline(f: OverlayFrame): Headline {
     const word = tone === 'slow' ? '가까움' : tone === 'fast' ? '멂' : '유지';
     return { label, text: formatDelta(d, 1), word, tone, plain: false };
   }
-  if (!f.hasCourse) return { label: '코스 기록 중 · 출발 뒤', text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
+  if (!f.hasCourse && f.nav) {
+    const n = f.nav;
+    const base = n.status === 'arrived' ? '도착했어요' : n.status === 'rerouting' ? '새 경로 찾는 중…' : n.status === 'off' ? '경로를 벗어났어요' : `목적지까지 ${formatLength(n.remainingM)}`;
+    return { label: f.free ? `${base} · 기록 안 함` : base, text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
+  }
+  if (!f.hasCourse) return { label: f.free ? '일반 주행 · 기록 안 함' : '코스 기록 중 · 출발 뒤', text: formatLapTime(f.lapElapsedMs, 1), word: '', tone: 'none', plain: true };
   if (!f.hasRef) return { label: '비교 랩 없음', text: '—', word: '', tone: 'none', plain: false };
   if (!f.hasState || f.lapNo === 0) return { label: '출발선을 지나면 시작', text: '—', word: '', tone: 'none', plain: false };
   return { label: '베스트 대비', text: formatDelta(f.delta), word: wordOf(f.delta), tone: toneOf(f.delta), plain: false };

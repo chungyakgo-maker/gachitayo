@@ -55,3 +55,23 @@ export function installAppHeight(): () => void {
     window.removeEventListener('orientationchange', apply);
   };
 }
+
+/**
+ * 웹페이지 전체 확대·축소 막기 (사용자 요청 "웹페이지가 전체로 확대/축소 되는 느낌이야 이거 고정시켜").
+ * 아이폰 사파리는 viewport의 user-scalable=no를 무시하므로 손가락 둘 움직임과 사파리 확대 제스처의 기본 동작을 막는다.
+ * 지도는 자기 손가락 처리(JS)로 확대·축소하므로 그대로 된다. 한 손가락 끌기(목록 넘기기)는 막지 않는다
+ */
+export function lockPageZoom(target: Document | HTMLElement = document): () => void {
+  const stopGesture = (e: Event) => e.preventDefault();
+  const stopPinch = (e: Event) => {
+    const t = (e as TouchEvent).touches;
+    if (t && t.length > 1) e.preventDefault();
+  };
+  const opts = { passive: false } as AddEventListenerOptions;
+  for (const n of ['gesturestart', 'gesturechange', 'gestureend']) target.addEventListener(n, stopGesture, opts);
+  target.addEventListener('touchmove', stopPinch, opts);
+  return () => {
+    for (const n of ['gesturestart', 'gesturechange', 'gestureend']) target.removeEventListener(n, stopGesture, opts);
+    target.removeEventListener('touchmove', stopPinch, opts);
+  };
+}

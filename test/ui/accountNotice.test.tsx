@@ -11,7 +11,7 @@ vi.mock('../../src/app/account', async (orig) => ({
 const { MainScreen } = await import('../../src/ui/screens/MainScreen');
 const { SettingsScreen } = await import('../../src/ui/screens/SettingsScreen');
 
-const base: AccountState = { status: 'none', userId: null, nickname: '민수', onboarded: true, lost: false, busy: false, error: null };
+const base: AccountState = { status: 'none', userId: null, nickname: '민수', onboarded: true, lost: false, kakao: false, busy: false, error: null };
 
 describe('계정 안내 (사양서 9장)', () => {
   it('서버 연결 전에 시작해 아직 계정이 없으면 "끊김" 경고 대신 자동으로 만든다고 알린다', () => {

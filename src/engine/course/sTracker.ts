@@ -4,8 +4,8 @@
 // - 횡거리 30 m 초과면 코스 이탈: s 갱신을 멈춘다. 이탈 중에는 전체를 검색해 돌아오는 곳을 찾는다.
 // - 출발 게이트를 지나면 resetAtStart()로 0에서 다시 시작한다.
 import { config } from '../config';
-import type { CourseGeometry } from './geometry';
-import { closestOnSegment } from './polyline';
+import type { CourseKind } from '../../types/course';
+import { closestOnSegment, type Polyline } from './polyline';
 
 const cfg = config.course;
 
@@ -17,12 +17,18 @@ export interface STrack {
   onCourse: boolean;
 }
 
+/** 따라갈 선: 코스 계산 형식(CourseGeometry) 그대로, 또는 목적지 경로처럼 꺾은선 + 편도 (균일 간격이어야 한다) */
+export interface TrackLine {
+  centerline: Polyline | null;
+  course: { kind: CourseKind };
+}
+
 export class STracker {
   private sPrev: number | null = null;
   private tPrev: number | null = null;
   private off = false;
 
-  constructor(private readonly geom: CourseGeometry) {}
+  constructor(private readonly geom: TrackLine) {}
 
   resetAtStart(): void {
     this.sPrev = 0;

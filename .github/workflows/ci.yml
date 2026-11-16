@@ -67,11 +67,17 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: 카카오 초대 키 확인 (값은 출력하지 않음)
+        env:
+          K: ${{ secrets.KAKAO_JS_KEY }}
+        run: if [ -n "$K" ]; then echo "KAKAO_JS_KEY 있음 · 카톡 카드로 초대"; else echo "KAKAO_JS_KEY 없음 · 초대는 폰 공유 창·링크 복사"; fi
       - name: 빌드
         run: npm run build
         env:
           # 방금 배포한 서버(Worker) 주소. 서버 배포를 건너뛰었으면 Actions 변수 VITE_API_URL(있으면), 둘 다 없으면 폰에만 저장
           VITE_API_URL: ${{ needs.deploy-worker.outputs.api_url || vars.VITE_API_URL }}
+          # 그룹 주행 카톡 초대 카드 (카카오 JavaScript 키, 웹 페이지에 그대로 보이는 공개 키). 없으면 폰 공유 창·링크 복사
+          VITE_KAKAO_JS_KEY: ${{ secrets.KAKAO_JS_KEY }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
@@ -163,8 +169,32 @@ jobs:
         working-directory: worker
         env:
           OWNER: ${{ github.repository_owner }}
+          # Worker 비밀값 (있는 것만 넣는다. 값은 출력하지 않고 이름만):
+          # 카카오 로그인 (설계 5.5), 네이버 클라우드 길찾기·장소 검색 (목적지로 주행 설계 6)
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          NCP_MAP_CLIENT_ID: ${{ secrets.NCP_MAP_CLIENT_ID }}
+          NCP_MAP_CLIENT_SECRET: ${{ secrets.NCP_MAP_CLIENT_SECRET }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
         run: |
-          npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" | tee deploy.log
+          secrets="$RUNNER_TEMP/worker-secrets.json"
+          (umask 077; node -e '
+            const e = process.env;
+            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"];
+            const o = {};
+            for (const n of names) if ((e[n] || "").trim()) o[n] = e[n].trim();
+            require("fs").writeFileSync(process.argv[1], JSON.stringify(o));
+            console.log("Worker 비밀값: " + (Object.keys(o).join(", ") || "없음"));
+          ' "$secrets")
+          if [ -z "$KAKAO_REST_API_KEY" ] || [ -z "$KAKAO_CLIENT_SECRET" ]; then echo "::notice::카카오 비밀값이 없어 카카오 로그인은 꺼진 채로 배포합니다"; fi
+          if [ -z "$NCP_MAP_CLIENT_ID" ] || [ -z "$NAVER_CLIENT_ID" ]; then echo "::notice::네이버 클라우드 비밀값이 없어 목적지 길찾기·장소 검색은 꺼진 채로 배포합니다"; fi
+          if [ "$(cat "$secrets")" != "{}" ]; then
+            npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" --secrets-file "$secrets" | tee deploy.log
+          else
+            npx wrangler deploy --var "ALLOWED_ORIGIN:https://${OWNER,,}.github.io" | tee deploy.log
+          fi
+          rm -f "$secrets"
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
           if [ -z "$url" ]; then echo "::error::Worker 주소(workers.dev)를 찾지 못했습니다. Cloudflare에서 workers.dev 하위 주소를 정했는지 확인해 주세요"; exit 1; fi
           echo "서버 주소: $url"
@@ -185,6 +215,7 @@ jobs:
           app=$(check -X OPTIONS -H "Origin: capacitor://localhost" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
           echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 아이폰 앱 사전 요청: $app (204) · 다른 주소: $other (403)"
           [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$app" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
+          echo "카카오 로그인: $(curl -s --max-time 20 -H "Origin: $origin" "$API_URL/auth/providers")"
           # 선 지도 (사양서 8.9): 지도 데이터가 올라가 있으면 정보·서울 타일·글자 조각을 확인한다
           info=$(check -H "Origin: $origin" "$API_URL/map/info")
           if [ "$info" = 200 ]; then

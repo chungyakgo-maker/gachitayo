@@ -1,5 +1,6 @@
 // 설정 (사양서 8.8 일부): 기본 화면 모드, 상단 표시 값 세 칸(칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽), 델타 색. 폰(localStorage)에 보관한다.
 import { useSyncExternalStore } from 'react';
+import { FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from './courseFilter';
 import { G_MAX_DEFAULT, G_MAX_OPTIONS } from '../ui/overlay/gmeter';
 
 export { G_MAX_DEFAULT, G_MAX_OPTIONS };
@@ -20,6 +21,8 @@ export interface Settings {
   defaultMode: DriveMode;
   /** 지도 모드 위쪽 칸 1(넓은 칸): 델타를 보인다. 끄면 표시 안 함 (사용자 요청) */
   topDelta: boolean;
+  /** 칸 1 델타의 기준: 앞 친구를 골랐으면 친구와의 델타(friend) 또는 베스트 대비(best). 친구가 없으면 늘 베스트 (주행 중 칸 1을 눌러 바꾼다) */
+  deltaSource: 'friend' | 'best';
   /** 지도 모드 위쪽 칸 2(왼쪽)·칸 3(오른쪽) */
   widgets: [WidgetId, WidgetId];
   deltaPalette: DeltaPalette;
@@ -39,6 +42,12 @@ export interface Settings {
   mainCourses: boolean;
   /** 커브 방향 화면 색 (사용자 요청 시안 A·B·C·D 중 고름, 기본 D) */
   curveTint: CurveTint;
+  /** 메인 지도·코스 목록의 분류 칩 (코스 둘러보기 설계) */
+  courseFilter: CourseFilter;
+  /** 인기 도로 기간 */
+  popularPeriod: PopularPeriod;
+  /** 주행 지도 확대 단계 (−4 ~ +2, 사용자 요청 "주행 모드중 지도 축소나 확대") */
+  driveZoom: number;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -50,6 +59,7 @@ export const GAP_MAX_S = 10;
 export const DEFAULT_SETTINGS: Settings = {
   defaultMode: 'map',
   topDelta: true,
+  deltaSource: 'friend',
   widgets: ['g', 'pace'],
   deltaPalette: 'green-red',
   gap: { friendId: null, nickname: null, targetS: 2 },
@@ -60,7 +70,13 @@ export const DEFAULT_SETTINGS: Settings = {
   driveFriends: true,
   mainCourses: true,
   curveTint: 'D',
+  courseFilter: 'all',
+  popularPeriod: '30d',
+  driveZoom: 0,
 };
+
+export const DRIVE_ZOOM_MIN = -4;
+export const DRIVE_ZOOM_MAX = 2;
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   g: 'G미터',
@@ -100,6 +116,7 @@ function load(): Settings {
     return {
       defaultMode: MODES.includes(raw.defaultMode as DriveMode) ? raw.defaultMode! : DEFAULT_SETTINGS.defaultMode,
       topDelta: raw.topDelta !== false,
+      deltaSource: raw.deltaSource === 'best' ? 'best' : 'friend',
       widgets,
       deltaPalette: raw.deltaPalette === 'blue-orange' ? 'blue-orange' : 'green-red',
       gap: loadGap(raw.gap),
@@ -114,6 +131,10 @@ function load(): Settings {
       mainCourses: raw.mainCourses !== false,
       // 예전 켜기/끄기(true/false)는 D/끄기로
       curveTint: (raw.curveTint as unknown) === false ? 'off' : CURVE_TINTS.includes(raw.curveTint as CurveTint) ? raw.curveTint! : 'D',
+      courseFilter: FILTERS.some((f) => f.id === raw.courseFilter) ? raw.courseFilter! : 'all',
+      popularPeriod: PERIODS.some((p) => p.id === raw.popularPeriod) ? raw.popularPeriod! : '30d',
+      driveZoom:
+        typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom) ? Math.min(DRIVE_ZOOM_MAX, Math.max(DRIVE_ZOOM_MIN, Math.round(raw.driveZoom))) : 0,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -142,6 +163,30 @@ export function setWidget(slot: 0 | 1, id: WidgetId): void {
   if (id !== 'none' && w[other] === id) w[other] = w[slot];
   w[slot] = id;
   updateSettings({ widgets: w });
+}
+
+/** 주행 중 칸 1을 누르면 (사용자 요청): 앞 친구가 있으면 친구 델타 → 베스트 델타 → 표시 안 함, 없으면 델타 ↔ 표시 안 함 */
+export function nextTop(s: Pick<Settings, 'topDelta' | 'deltaSource'>, hasFriend: boolean): Pick<Settings, 'topDelta' | 'deltaSource'> {
+  if (!s.topDelta) return { topDelta: true, deltaSource: hasFriend ? 'friend' : s.deltaSource };
+  if (hasFriend && s.deltaSource === 'friend') return { topDelta: true, deltaSource: 'best' };
+  return { topDelta: false, deltaSource: s.deltaSource };
+}
+
+/** 주행 중 칸 2·3을 누르면 (사용자 요청): 목록 순서대로 다음 값. 다른 칸의 값, 지금 쓸 수 없는 값(코스 없으면 표지판, 앞 친구 없으면 간격), 표시 안 함은 건너뛴다 */
+export function nextWidget(widgets: readonly [WidgetId, WidgetId], slot: 0 | 1, ctx: { hasCourse: boolean; hasFriend: boolean }): [WidgetId, WidgetId] {
+  const order: WidgetId[] = WIDGETS.filter((id) => id !== 'none');
+  const other = widgets[slot === 0 ? 1 : 0];
+  const ok = (id: WidgetId) => id !== other && (id !== 'pace' || ctx.hasCourse) && (id !== 'gap' || ctx.hasFriend);
+  const from = order.indexOf(widgets[slot]);
+  for (let i = 1; i <= order.length; i++) {
+    const id = order[(from + i + order.length) % order.length]!;
+    if (ok(id)) {
+      const w: [WidgetId, WidgetId] = [widgets[0], widgets[1]];
+      w[slot] = id;
+      return w;
+    }
+  }
+  return [widgets[0], widgets[1]];
 }
 
 export function useSettings(): Settings {

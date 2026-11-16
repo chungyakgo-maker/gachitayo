@@ -202,12 +202,16 @@ export async function recoverInterrupted(
   repo: SessionRepo,
   /** 다른 창에서 지금 기록 중인 세션인지 (그런 세션은 건드리지 않는다) */
   isLive: (sessionId: string) => Promise<boolean> = async () => false,
+  /** 일반 주행(기록 안 남김)으로 남은 세션을 지운다 (사용자 요청 "일반 주행") */
+  discard: (sessionId: string) => Promise<void> = async () => {},
 ) {
   const sessions = await repo.list();
   const candidates = sessions.filter((s) => s.status === 'recording' || s.status === 'interrupted');
   const found: SessionRecord[] = [];
   for (const s of candidates) {
-    if (!(await isLive(s.id))) found.push(s);
+    if (await isLive(s.id)) continue;
+    if (s.noRecord) await discard(s.id);
+    else found.push(s);
   }
   for (const s of found) {
     if (s.status === 'recording') await repo.update(s.id, { status: 'interrupted' });

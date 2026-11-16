@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GachitayoDb } from '../../src/storage/db';
 import { createSessionRepo, type SessionRepo } from '../../src/storage/sessionRepo';
 import { Recorder, finishInterrupted, recoverInterrupted, type RecorderDeps } from '../../src/storage/recorder';
@@ -211,6 +211,15 @@ describe('중단 복구', () => {
     const found = await recoverInterrupted(env.repo);
     expect(found.map((s) => [s.id, s.status])).toEqual([['s1', 'interrupted']]);
     expect((await env.repo.get('s1'))?.status).toBe('interrupted');
+  });
+
+  it('일반 주행(기록 안 남김)이 중단됐으면 묻지 않고 지운다 (사용자 요청 "일반 주행")', async () => {
+    const env = await killedSession();
+    await env.repo.update('s1', { noRecord: true });
+    const discard = vi.fn(async () => {});
+    const found = await recoverInterrupted(env.repo, async () => false, discard);
+    expect(found).toEqual([]);
+    expect(discard).toHaveBeenCalledWith('s1');
   });
 
   it('이어서 하면 seq가 이어지고, resume 시각은 마지막 샘플보다 뒤다', async () => {

@@ -62,6 +62,8 @@ export interface LiveState {
   delta: number | null;
   s: number | null;
   onCourse: boolean;
+  /** 랩 안에서 코스를 벗어났을 때 코스 선까지 거리 m (10 m 단위). 코스 위·랩 밖이면 null (코스 이탈 안내 B) */
+  offCourseM: number | null;
   gx: number | null;
   gy: number | null;
   /** gx, gy가 보정 전 GPS 추정값 */
@@ -94,6 +96,7 @@ export class LiveEngine {
   private delta: number | null = null;
   private firstMoveT: number | null = null;
   private gpsBadSince: number | null = null;
+  private offCourseM: number | null = null;
   private readonly progress: LapProgress;
   private maxV = 0;
   /** 구간 경계를 지날 때의 델타 (구간 1 시작은 0) */
@@ -133,7 +136,8 @@ export class LiveEngine {
       }
     }
 
-    const tr = this.st ? this.st.update(p.x, p.y, p.v, p.t) : { s: null as number | null, onCourse: true };
+    const tr = this.st ? this.st.update(p.x, p.y, p.v, p.t) : { s: null as number | null, onCourse: true, lateral: Number.NaN };
+    this.offCourseM = !tr.onCourse && this.lapStartT !== null && Number.isFinite(tr.lateral) ? Math.round(tr.lateral / 10) * 10 : null;
     tr.s = this.progress.map(tr.s, this.lapStartT !== null);
     status.offCourse = !tr.onCourse;
 
@@ -241,6 +245,7 @@ export class LiveEngine {
       delta: this.delta,
       s,
       onCourse,
+      offCourseM: this.offCourseM,
       gx: g ? g.gx : null,
       gy: g ? g.gy : null,
       gEstimated: g !== null && this.gEstimated,

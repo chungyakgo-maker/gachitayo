@@ -1,8 +1,13 @@
 // 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
-import { useState } from 'react';
-import { recreateAccount, updateNickname, useAccount } from '../../app/account';
+import { useEffect, useState } from 'react';
+import { friendlyServerError, recreateAccount, updateNickname, useAccount } from '../../app/account';
 import { deleteAccount } from '../../app/deleteAccount';
+import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
+import { logout, logoutCheck } from '../../app/logout';
+import { KakaoButton } from '../components/KakaoButton';
+import { KakaoPendingCard } from '../components/KakaoPendingCard';
+import { RestoreBanner } from '../components/RestoreBanner';
 import { Overlay } from '../components/Overlay';
 import { isApp } from '../../platform';
 import { LegalLink } from '../legal';
@@ -25,6 +30,91 @@ const PALETTES: Array<[DeltaPalette, string, string, string]> = [
   ['green-red', '초록·빨강', '#3EE08F', '#FF5B4F'],
   ['blue-orange', '파랑·주황', '#5CB8FF', '#E8690F'],
 ];
+
+/** 카카오 로그인·로그아웃 (설계 5.6) */
+function KakaoAccount() {
+  const acc = useAccount();
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ask, setAsk] = useState<{ localOnly: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void getProviders().then((p) => alive && setOn(p.kakao));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const login = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await startKakaoLogin('#/settings');
+    } catch (e) {
+      setError(friendlyServerError(e));
+      setBusy(false);
+    }
+  };
+  const askLogout = async () => {
+    setBusy(true);
+    setError(null);
+    const c = await logoutCheck();
+    setBusy(false);
+    if (c.ok) setAsk({ localOnly: c.localOnly });
+    else setError(c.error);
+  };
+  const doLogout = async () => {
+    setBusy(true);
+    const r = await logout();
+    if (!r.ok) {
+      setBusy(false);
+      setAsk(null);
+      setError(r.error);
+    }
+  };
+  return (
+    <>
+      <KakaoPendingCard />
+      {acc.kakao ? (
+        <div className="card-row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <span style={{ fontWeight: 600 }}>카카오 연결됨</span>
+          <button type="button" className="btn" disabled={busy} onClick={() => void askLogout()}>
+            로그아웃
+          </button>
+        </div>
+      ) : (
+        on &&
+        (acc.status === 'ready' || acc.lost) && (
+          <div className="card-col" style={{ gap: 6 }}>
+            <KakaoButton label="카카오로 로그인" disabled={busy} onClick={() => void login()} />
+            <span className="sub">{acc.lost ? '예전에 카카오로 연결했다면 이걸로 돌아와요' : '로그인하면 폰을 바꿔도 기록이 돌아와요'}</span>
+          </div>
+        )
+      )}
+      <RestoreBanner />
+      {error && <div className="notice warn">{error}</div>}
+      {ask && (
+        <Overlay>
+          <div className="modal-backdrop">
+            <div className="modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+              <h2 id="logout-title">로그아웃할까요?</h2>
+              <p>로그아웃하면 이 폰의 기록과 내 코스가 지워져요. 다시 로그인하면 서버에서 되살아나요.</p>
+              {ask.localOnly > 0 && <p className="warn-text">{`이 폰에만 있는 기록 ${ask.localOnly}개는 되살릴 수 없어요.`}</p>}
+              <div className="modal-actions">
+                <button type="button" className="btn danger" disabled={busy} onClick={() => void doLogout()}>
+                  로그아웃
+                </button>
+                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(null)}>
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </Overlay>
+      )}
+    </>
+  );
+}
 
 function AccountSection() {
   const acc = useAccount();
@@ -58,10 +148,13 @@ function AccountSection() {
         </div>
       )}
       {acc.error && <div className="notice warn">{acc.error}</div>}
+      <KakaoAccount />
       <span className="sub" style={{ lineHeight: 1.6 }}>
         {acc.status === 'disabled'
           ? '서버 연결 전이라 기록은 이 폰에만 있어요.'
-          : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요(서버 기록은 남아요). 홈 화면 앱으로 쓰고 자주 올려 주세요.'}
+          : acc.kakao
+            ? '카카오 계정에 연결돼 있어요. 폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요.'
+            : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요(서버 기록은 남아요). 홈 화면 앱으로 쓰고 자주 올려 주세요.'}
       </span>
     </section>
   );
@@ -270,13 +363,6 @@ export function SettingsScreen() {
         {!isApp() && (
           <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
             <span className="label">개발자 메뉴</span>
-            <a className="list-link" href="#/dev/replay">
-              <span className="card-col" style={{ gap: 3 }}>
-                <strong style={{ fontSize: 15 }}>재생 모드</strong>
-                <span className="sub">저장된 기록이나 가상 주행을 주행 화면에 흘려 확인</span>
-              </span>
-              <IconChevron size={20} color="#9AA1A9" />
-            </a>
             <a className="list-link" href="#/dev/recorder">
               <span className="card-col" style={{ gap: 3 }}>
                 <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>

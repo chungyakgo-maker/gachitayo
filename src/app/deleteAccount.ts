@@ -5,10 +5,13 @@ import Dexie from 'dexie';
 import { ApiError, apiFetch } from '../server/api';
 import { friendlyServerError, getAuth } from './account';
 import { getRecordingState } from './recording';
+import { getGroup, leaveGroupRoom } from './group';
 
 export async function deleteAccount(opts: { reload?: () => void } = {}): Promise<void> {
   if (getRecordingState().phase === 'recording') throw new Error('주행 중에는 계정을 지울 수 없어요');
   const auth = getAuth();
+  // 그룹 주행 방에서 먼저 나간다 (다른 사람 방에 내가 남지 않게, 실패해도 계속)
+  if (getGroup().room) await leaveGroupRoom();
   if (auth) {
     try {
       await apiFetch('DELETE', '/api/me', { token: auth.token });

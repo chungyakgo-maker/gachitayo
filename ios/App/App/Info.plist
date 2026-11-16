@@ -77,6 +77,18 @@
 	<array>
 		<string>location</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.dgo.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dgo</string>
+				<string>kakao89c5ba572b46879e01420e651551d84c</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>nmap</string>

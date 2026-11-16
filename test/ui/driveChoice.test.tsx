@@ -8,9 +8,15 @@ const gate = { lat: 37.39, lon: 127.01, bearingDeg: 90, widthM: 30 };
 const course: Course = { id: 'c1', name: '하오고개', kind: 'point_to_point', source: 'gpx', origin: { lat: 37.39, lon: 127.01 }, startGate: gate, finishGate: { ...gate, lat: 37.4 }, centerline: null, lengthM: 3200, sectorBoundsM: null, version: 1 };
 
 const calls: string[] = [];
-const beginPrepare = vi.fn(() => calls.push('begin'));
+// 실제 beginPrepare처럼: 주행이 없으면 준비 단계로 (이미 주행 중이면 그대로)
+let drivePhase = 'idle';
+const beginPrepare = vi.fn(() => {
+  calls.push('begin');
+  if (drivePhase === 'idle') drivePhase = 'preparing';
+});
 const chooseCourse = vi.fn((c: Course | null) => calls.push(`choose:${c?.id ?? 'none'}`));
 const startDrive = vi.fn(() => calls.push('start'));
+const chooseFreeDrive = vi.fn(() => calls.push('free'));
 let drive: Record<string, unknown> = {};
 let fix: { lat: number; lon: number; hAcc: number } | null = null;
 
@@ -18,8 +24,10 @@ vi.mock('../../src/app/drive', async (orig) => ({
   ...(await orig<typeof import('../../src/app/drive')>()),
   useDrive: () => drive,
   beginPrepare: () => beginPrepare(),
+  getDriveState: () => ({ ...drive, phase: drivePhase }),
   chooseCourse: (c: Course | null) => chooseCourse(c),
   startDrive: () => startDrive(),
+  chooseFreeDrive: () => chooseFreeDrive(),
   loadCourses: async () => [],
 }));
 vi.mock('../../src/app/recording', async (orig) => ({
@@ -34,6 +42,7 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
   beforeEach(() => {
     cleanup();
     calls.length = 0;
+    drivePhase = 'idle';
     beginPrepare.mockClear();
     chooseCourse.mockClear();
     startDrive.mockClear();
@@ -61,14 +70,66 @@ describe('주행 시작: 코스 주행 / 일반 기록 주행 묻기 (사용자 
     expect(calls).toEqual(['begin', 'choose:c1']);
   });
 
-  it('메인: 근처에 코스가 없으면 묻지 않고 바로 준비', async () => {
+  it('메인: 근처에 코스가 없어도 기록 주행 / 일반 주행(기록 안 남김)을 묻는다 (사용자 요청 "일반 주행 버튼")', async () => {
     drive = idle();
     fix = null;
     const { MainScreen } = await import('../../src/ui/screens/MainScreen');
     render(<MainScreen />);
     fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('button', { name: /코스 주행/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /일반 기록 주행/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^일반 주행/ }));
+    expect(calls).toEqual(['begin', 'free']);
+  });
+
+  it('메인: 이미 주행 중이면 고르기 창에서 골라도 진행 중인 주행의 코스를 바꾸지 않는다 (검토 지적)', async () => {
+    drive = idle();
+    fix = { lat: 37.39, lon: 127.01, hAcc: 5 };
+    const { MainScreen } = await import('../../src/ui/screens/MainScreen');
+    render(<MainScreen />);
+    drivePhase = 'driving';
+    fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
+    fireEvent.click(screen.getByRole('button', { name: /코스 주행 · 하오고개/ }));
     expect(calls).toEqual(['begin']);
-    expect(screen.queryByRole('button', { name: /일반 기록 주행/ })).toBeNull();
+  });
+
+  it('메인: 목적지로 주행을 고르면 목적지 고르기 화면으로 (아직 준비를 열지 않는다)', async () => {
+    drive = idle();
+    fix = null;
+    window.location.hash = '#/';
+    const { MainScreen } = await import('../../src/ui/screens/MainScreen');
+    render(<MainScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
+    const item = screen.getByRole('button', { name: /목적지로 주행/ });
+    expect(item).toHaveTextContent('장소를 찾거나 지도에서 찍으면 그 길로 커브 표지판을 띄워요');
+    fireEvent.click(item);
+    expect(window.location.hash).toBe('#/destination');
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('button', { name: /목적지로 주행/ })).toBeNull();
+  });
+
+  it('메인: 근처에 코스가 있으면 세 가지 (코스 주행 · 일반 기록 주행 · 일반 주행)', async () => {
+    drive = idle();
+    fix = { lat: 37.39, lon: 127.01, hAcc: 5 };
+    const { MainScreen } = await import('../../src/ui/screens/MainScreen');
+    render(<MainScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /주행 시작/ }));
+    expect(screen.getByRole('button', { name: /코스 주행 · 하오고개/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /일반 기록 주행/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^일반 주행.*기록을 남기지 않아요/ })).toBeInTheDocument();
+  });
+
+  it('준비: 일반 주행이면 기록 안 남김을 알리고 버튼은 "주행 시작"', async () => {
+    drive = { ...idle(), phase: 'preparing', course: null, courseChosen: true, noRecord: true };
+    const { PrepareScreen } = await import('../../src/ui/screens/PrepareScreen');
+    render(<PrepareScreen />);
+    expect(screen.getByText(/일반 주행 · 끝나도 기록을 남기지 않아요/)).toBeInTheDocument();
+    // 코스·비교 랩 고르기는 숨긴다 (기록을 남기지 않으므로 코스를 만들지도 않는다)
+    expect(screen.queryByText(/근처에 저장된 코스/)).toBeNull();
+    expect(screen.queryByText('비교 랩')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '주행 시작' }));
+    expect(calls).toEqual(['start']);
   });
 
   it('준비: 위치로 자동 감지된 코스면 기록 시작을 누를 때 한 번 묻는다. 직접 고른(또는 이미 답한) 코스면 바로 시작', async () => {

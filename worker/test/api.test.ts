@@ -76,7 +76,7 @@ describe('익명 계정 (폰 열쇠)', () => {
     expect(u.userId).toMatch(/^[0-9a-f-]{36}$/);
     expect(u.token.length).toBeGreaterThanOrEqual(40);
     const me = await call('GET', '/api/me', { token: u.token });
-    expect(await me.json()).toEqual({ userId: u.userId, nickname: '지훈' });
+    expect(await me.json()).toEqual({ userId: u.userId, nickname: '지훈', kakao: false });
     const row = await env.DB.prepare('SELECT token_hash FROM users WHERE id = ?').bind(u.userId).first<{ token_hash: string }>();
     expect(row!.token_hash).not.toContain(u.token);
     expect(row!.token_hash).toMatch(/^[0-9a-f]{64}$/);
@@ -322,5 +322,40 @@ describe('계정 삭제 (사양서 13.3, 애플 심사 필수): DELETE /api/me',
     const fb = (await (await call('GET', '/api/friends', { token: b.token })).json()) as { friends: Array<{ userId: string }> };
     expect(fb.friends.map((f) => f.userId)).not.toContain(a.userId);
     expect(await count('SELECT COUNT(*) AS n FROM courses WHERE id = ?', bCourse)).toBe(1);
+  });
+
+  it('그 뒤 생긴 것도 지운다: 즐겨찾기·분류, 길찾기·검색 횟수, 주행 중 신호, 로그인 열쇠, 카카오 연결, 내가 만든 그룹 방(나감), 방 코드 오답', async () => {
+    const a = await newUser('지울사람');
+    const b = await newUser('방 친구');
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO user_prefs (user_id, data, updated_at) VALUES (?, ?, ?)').bind(a.userId, '{}', now),
+      env.DB.prepare('INSERT INTO route_usage (user_id, day, count) VALUES (?, ?, ?)').bind(a.userId, '2026-11-16', 3),
+      env.DB.prepare('INSERT INTO search_usage (user_id, day, count) VALUES (?, ?, ?)').bind(a.userId, '2026-11-16', 3),
+      env.DB.prepare('INSERT INTO driving_now (user_id, builtin, at) VALUES (?, ?, ?)').bind(a.userId, 'hao', now),
+      env.DB.prepare('INSERT INTO user_tokens (token_hash, user_id, created_at) VALUES (?, ?, ?)').bind(`h-${a.userId}`, a.userId, new Date(now).toISOString()),
+      env.DB.prepare('INSERT INTO identities (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)').bind('kakao', `k-${a.userId}`, a.userId, new Date(now).toISOString()),
+      env.DB.prepare('INSERT INTO room_code_misses (user_id, at) VALUES (?, ?)').bind(a.userId, now),
+    ]);
+    const room = (await (await call('POST', '/api/rooms', { token: a.token })).json()) as { roomId: string; code: string };
+    expect((await call('POST', '/api/rooms/join', { token: b.token, body: { code: room.code } })).status).toBe(200);
+
+    expect((await call('DELETE', '/api/me', { token: a.token })).status).toBe(200);
+
+    const count = async (sql: string, ...args: string[]) => (await env.DB.prepare(sql).bind(...args).first<number>('n')) ?? 0;
+    for (const [t, col] of [
+      ['user_prefs', 'user_id'],
+      ['route_usage', 'user_id'],
+      ['search_usage', 'user_id'],
+      ['driving_now', 'user_id'],
+      ['user_tokens', 'user_id'],
+      ['identities', 'user_id'],
+      ['room_code_misses', 'user_id'],
+      ['rooms', 'host_id'],
+    ] as const)
+      expect(await count(`SELECT COUNT(*) AS n FROM ${t} WHERE ${col} = ?`, a.userId), t).toBe(0);
+    // 방에 남은 사람이 방장이 되고, 지운 사람은 방에 없다
+    const st = (await (await call('GET', `/api/rooms/${room.roomId}`, { token: b.token })).json()) as { members: Array<{ userId: string; host: boolean }> };
+    expect(st.members).toEqual([expect.objectContaining({ userId: b.userId, host: true })]);
   });
 });

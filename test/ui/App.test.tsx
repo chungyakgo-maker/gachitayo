@@ -12,7 +12,7 @@ describe('App', () => {
   it('첫 실행: 닉네임과 안전 안내 확인 뒤 시작하면 메인 (서버 설정 전이면 폰에만 저장)', async () => {
     render(<App />);
     expect(screen.getByLabelText('닉네임')).toBeInTheDocument();
-    const start = screen.getByRole('button', { name: '시작하기' });
+    const start = screen.getByRole('button', { name: '로그인 없이 시작' });
     expect(start).toBeDisabled();
     expect(screen.getByText(/서버 연결 전이라 기록을 폰에만/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('닉네임'), { target: { value: '민수' } });

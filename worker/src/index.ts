@@ -1,9 +1,13 @@
 // 같이타요 API + 파일 게이트웨이 (사양서 6.5, 6.6, M6 결정: Cloudflare만)
 //   POST /auth/signup {nickname}         익명 계정 만들기 → {userId, token} (폰 열쇠)
-//   GET/PUT /api/me {nickname}           닉네임
+//   POST /auth/logout                    이 폰 열쇠만 못 쓰게 (카카오 로그인)
+//   GET /auth/providers                  {kakao} 카카오 로그인을 쓸 수 있는지 (비밀값이 있는지)
+//   POST /auth/kakao/start · GET /auth/kakao/callback · POST /auth/kakao/finish   카카오 로그인 (kakao.ts)
+//   GET/PUT /api/me {nickname}           닉네임 (+ kakao: 카카오 연결 여부)
 //   GET /api/courses                     내 코스 목록
 //   PUT /api/courses/{id}                코스 올리기 (같은 id면 덮어씀)
 //   DELETE /api/courses/{id}             코스 지우기 (이 코스의 기록이 남아 있으면 409)
+//   GET /api/sessions                    내 기록 목록 (새 폰에서 되살리기)
 //   PUT /api/sessions/{id}               세션 올리기
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
 //   DELETE /api/sessions/{id}            기록 지우기 (랩·세션 행, 원본·처리된 파일) (M10)
@@ -14,17 +18,29 @@
 //   GET /api/friends/presence            위치 공유 중인 친구의 위치 (2분 안에 받은 것만)
 //   PUT /api/presence {lat, lon, …}      내 위치 공유 (마지막 하나만 저장)
 //   DELETE /api/presence                 공유 끄기 (지운다)
+//   POST /api/route {from, to, headingDeg?} 목적지 길찾기 (네이버 클라우드 Directions 15, 계정당 하루 300번)
+//   GET /api/places?q=                   장소 검색 (네이버 지역 검색, 최대 5개, 계정당 하루 500번)
+//   GET/PUT /api/prefs                   즐겨찾기·분류 (코스 둘러보기)
+//   GET /api/popular?period=             인기 도로 (기본 코스별 달린 사람 수)
+//   POST /api/driving {builtin}          기본 코스로 주행 중 신호 (실시간 인기, 위치 없음)
+//   /api/rooms…, 웹소켓 /group/{id}      그룹 주행 방 (group.ts)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
-import { authenticate, signup, validNickname } from './auth';
-import { deleteCourse, deleteSession, getMe, listCourses, putCourse, putLaps, putMe, putSession, deleteAccount } from './data';
+import { authenticate, logout, signup, validNickname } from './auth';
+import { deleteAccount, deleteCourse, deleteSession, getMe, listCourses, listSessions, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
+import { drivingNow, getPrefs, popular, putPrefs } from './browse';
+import { connectRoom, createRoom, joinRoom, roomAction, roomRoute, roomState } from './group';
+import { searchPlaces } from './places';
+import { findRoute } from './route';
+import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 
 export { LiveRoom } from './live';
+export { GroupRoom } from './group';
 import { corsHeaders, errorResponse, HttpError, isAllowedOrigin, json, readJson, UUID_RE } from './http';
 
 /** 표 API 본문 최대 크기 (긴 코스 중심선, 랩 trace 묶음) */
@@ -55,6 +71,16 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
   if (path.startsWith('/files/')) return handleFiles(req, env, path, headers);
   if (path.startsWith('/map/')) return handleMap(req, env, path, headers, ctx);
 
+  const group = /^\/group\/([^/]+)$/.exec(path);
+  if (group) {
+    if (method !== 'GET') throw new HttpError(405);
+    if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket') throw new HttpError(426, 'WebSocket으로 연결해 주세요');
+    const id = group[1]!.toLowerCase();
+    if (!UUID_RE.test(id)) throw new HttpError(400, '잘못된 방');
+    const userId = await authenticate(req, env, tokenFromProtocol(req));
+    return connectRoom(env, id, userId);
+  }
+
   const live = /^\/live\/([^/]+)$/.exec(path);
   if (live) {
     if (method !== 'GET') throw new HttpError(405);
@@ -78,6 +104,84 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     const nickname = validNickname((body as { nickname?: unknown } | null)?.nickname);
     const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
     return json(201, headers, await signup(env, nickname, ip));
+  }
+
+  if (path === '/auth/logout') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await logout(env, req));
+  }
+
+  if (path === '/auth/providers') {
+    if (method !== 'GET') throw new HttpError(405);
+    return json(200, headers, { kakao: kakaoEnabled(env) });
+  }
+
+  if (path === '/auth/kakao/start') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await startKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+  if (path === '/auth/kakao/callback') {
+    if (method !== 'GET') throw new HttpError(405);
+    return kakaoCallback(req, env);
+  }
+  if (path === '/auth/kakao/finish') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await finishKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+
+  if (path === '/api/rooms') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await createRoom(env, await authenticate(req, env)));
+  }
+  if (path === '/api/rooms/join') {
+    if (method !== 'POST') throw new HttpError(405);
+    const userId = await authenticate(req, env);
+    return json(200, headers, await joinRoom(env, userId, await readJson(req, 1024)));
+  }
+  const rm = /^\/api\/rooms\/([0-9a-f-]{36})(?:\/(order|gap|dest|leave|route))?$/.exec(path);
+  if (rm) {
+    const userId = await authenticate(req, env);
+    const [, id, act] = rm;
+    if (!act) {
+      if (method !== 'GET') throw new HttpError(405);
+      return json(200, headers, await roomState(env, id!, userId));
+    }
+    if (act === 'route') {
+      if (method !== 'GET') throw new HttpError(405);
+      return json(200, headers, await roomRoute(env, id!, userId));
+    }
+    if (method !== 'POST') throw new HttpError(405);
+    const body = act === 'leave' ? null : await readJson(req, 1_048_576);
+    return json(200, headers, await roomAction(env, id!, userId, act, body));
+  }
+
+  if (path === '/api/prefs') {
+    const userId = await authenticate(req, env);
+    if (method === 'GET') return json(200, headers, await getPrefs(env, userId));
+    if (method === 'PUT') return json(200, headers, await putPrefs(env, userId, await readJson(req, 16_384)));
+    throw new HttpError(405);
+  }
+  if (path === '/api/popular') {
+    if (method !== 'GET') throw new HttpError(405);
+    await authenticate(req, env);
+    return json(200, headers, await popular(env, new URL(req.url).searchParams.get('period')));
+  }
+  if (path === '/api/driving') {
+    if (method !== 'POST') throw new HttpError(405);
+    const userId = await authenticate(req, env);
+    return json(200, headers, await drivingNow(env, userId, await readJson(req, 1024)));
+  }
+
+  if (path === '/api/places') {
+    if (method !== 'GET') throw new HttpError(405);
+    const userId = await authenticate(req, env);
+    return json(200, headers, await searchPlaces(env, userId, new URL(req.url).searchParams.get('q')));
+  }
+
+  if (path === '/api/route') {
+    if (method !== 'POST') throw new HttpError(405);
+    const userId = await authenticate(req, env);
+    return json(200, headers, await findRoute(env, userId, await readJson(req, 1024)));
   }
 
   if (path === '/api/me') {
@@ -105,6 +209,11 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     const userId = await authenticate(req, env);
     if (method === 'DELETE') return json(200, headers, await deleteCourse(env, userId, id.toLowerCase()));
     return json(200, headers, await putCourse(env, userId, id.toLowerCase(), await readJson(req, MAX_JSON_BYTES)));
+  }
+
+  if (path === '/api/sessions') {
+    if (method !== 'GET') throw new HttpError(405);
+    return json(200, headers, await listSessions(env, await authenticate(req, env)));
   }
 
   const session = /^\/api\/sessions\/([^/]+)(\/laps)?$/.exec(path);

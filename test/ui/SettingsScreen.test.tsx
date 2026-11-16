@@ -11,9 +11,9 @@ describe('설정 탭', () => {
     expect(screen.getByText(new RegExp(`버전 ${buildInfo.version} `))).toBeInTheDocument();
   });
 
-  it('개발자 메뉴: 재생 모드, 센서 기록 테스트', () => {
+  it('개발자 메뉴: 센서 기록 테스트 (재생 모드는 기록 탭의 기본 기능으로 옮김, 사용자 요청)', () => {
     render(<SettingsScreen />);
-    expect(screen.getByRole('link', { name: /재생 모드/ })).toHaveAttribute('href', '#/dev/replay');
+    expect(screen.queryByRole('link', { name: /재생 모드/ })).toBeNull();
     expect(screen.getByRole('link', { name: /센서 기록 테스트/ })).toHaveAttribute('href', '#/dev/recorder');
   });
 

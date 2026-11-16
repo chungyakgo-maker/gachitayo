@@ -62,6 +62,12 @@ export async function syncOnce(deps: SyncDeps): Promise<{ done: number; failed: 
       await deps.queue.remove(item.id);
       done++;
     } catch (e) {
+      // 지우기인데 서버가 다른 계정의 것이라고 하면(403) 이 계정으로는 지울 수 없다: 다시 시도하지 않는다
+      if ((item.kind === 'session-delete' || item.kind === 'course-delete') && (e as { status?: number }).status === 403) {
+        await deps.queue.remove(item.id);
+        done++;
+        continue;
+      }
       failed++;
       lastError = message(e);
       const attempts = item.attempts + 1;

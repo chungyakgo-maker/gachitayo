@@ -5,6 +5,7 @@ import { useRecording } from '../../app/recording';
 import { deleteSessionRecord } from '../../app/sync';
 import { importRawFile } from '../../app/rawTransfer';
 import { Overlay } from '../components/Overlay';
+import { RestoreBanner } from '../components/RestoreBanner';
 import type { SessionStatus } from '../../types/session';
 import { Tabbed } from '../components/TabBar';
 import { formatDuration, formatKst, formatLapTime } from '../format';
@@ -69,6 +70,15 @@ export function HistoryScreen() {
           aria-label="원본 파일 고르기"
           onChange={(e) => void onImport(e.target.files?.[0]).finally(() => (e.target.value = ''))}
         />
+        {/* 재생 모드 (사용자 요청: 개발자 메뉴에서 빼서 기본 기능으로) */}
+        <a className="list-link" href="#/replay">
+          <span className="card-col" style={{ gap: 3 }}>
+            <strong style={{ fontSize: 15 }}>재생 모드</strong>
+            <span className="sub">저장된 기록이나 가상 주행을 주행 화면으로 다시 보기</span>
+          </span>
+          <IconChevron size={20} color="#9AA1A9" />
+        </a>
+        <RestoreBanner />
         {importMsg && <div className={`notice${importMsg.warn ? ' warn' : ''}`}>{importMsg.text}</div>}
         {list.length === 0 ? (
           <div className="empty">아직 주행 기록이 없어요.</div>

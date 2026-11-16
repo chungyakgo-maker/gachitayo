@@ -1,7 +1,8 @@
 // 미니맵 (사양서 8.4 지도 모드, 13.1 오버레이의 미니맵): 지도 타일 없이 코스 선, 출발선(편도면 도착선),
 // 내 위치 화살표, 베스트 고스트(점선 원), 지나온 경로.
 // 보기 (사용자 요청): 전체 코스(한 화면에, 북쪽 위) / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼 지도가 돈다).
-import { gateSegment } from '../../engine/course/geometry';
+import { gateFromPoint, gateSegment } from '../../engine/course/geometry';
+import type { RouteGuide } from '../../engine/route/routeGuide';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
 import { roundRect, type Ctx } from './draw';
@@ -37,6 +38,23 @@ export function mapModel(course: Course | null): MapModel {
   return m;
 }
 
+const routeCache = new WeakMap<RouteGuide, MapModel>();
+
+/** 목적지 경로 → 그리기용 (코스 선과 같은 그림, 목적지에 도착선). 경로 안내의 평면(스냅숏 원점) 그대로 */
+export function routeMapModel(guide: RouteGuide): MapModel {
+  const hit = routeCache.get(guide);
+  if (hit) return hit;
+  // 카카오 점 그대로 (매 프레임 그리므로 2 m로 다시 찍은 선은 쓰지 않는다)
+  const { x, y } = guide.raw;
+  const n = x.length;
+  const line: XY[] = [];
+  for (let i = 0; i < n; i++) line.push([x[i]!, y[i]!] as const);
+  const finish = n >= 2 ? gateSegment(gateFromPoint(x[n - 1]!, y[n - 1]!, Math.atan2(y[n - 1]! - y[n - 2]!, x[n - 1]! - x[n - 2]!), guide.origin), guide.origin) : null;
+  const m: MapModel = { line, loop: false, start: null, finish };
+  routeCache.set(guide, m);
+  return m;
+}
+
 /** 평면 좌표(m) → 화면 좌표(px). rot: 지도를 돌린 각도(라디안, 반시계). 방향(화살표·게이트)을 같이 돌릴 때 쓴다 */
 export interface MapView {
   P: (x: number, y: number) => [number, number];
@@ -46,10 +64,19 @@ export interface MapView {
 export type { MapViewMode } from '../../app/settings';
 
 /** 나를 가운데 두는 보기: span = 화면 너비에 보일 거리(m), psi = 진행 방향(진행 방향 위일 때) */
-export function followView(me: { x: number; y: number }, w: number, h: number, opts: { spanM: number; insetBottom?: number; top?: number; headingUp?: number | null }): MapView {
+/** 나를 가운데·진행 방향 위 보기에서 내 위치 자리: 가려지지 않은 영역의 위에서 75% (사용자 요청 "더 아래로, 앞쪽 경로가 더 잘 보이게") */
+export const ME_ANCHOR = 0.75;
+
+/** 선 지도 카메라 여백: 여백 안 가운데가 가려지지 않은 영역의 anchor 자리가 되게 (위 여백을 늘린다) */
+export function anchorPadding(ins: { top: number; bottom: number }, h: number, anchor: number): { top: number; bottom: number } {
+  const free = Math.max(0, h - ins.top - ins.bottom);
+  return { top: ins.top + (2 * anchor - 1) * free, bottom: ins.bottom };
+}
+
+export function followView(me: { x: number; y: number }, w: number, h: number, opts: { spanM: number; insetBottom?: number; top?: number; headingUp?: number | null; anchor?: number }): MapView {
   const top = opts.top ?? 0;
   const cx = w / 2;
-  const cy = (top + h - (opts.insetBottom ?? 0)) / 2;
+  const cy = top + (h - (opts.insetBottom ?? 0) - top) * (opts.anchor ?? 0.5);
   const sc = w / Math.max(50, opts.spanM);
   // 진행 방향을 위(북쪽 자리)로: π/2 − psi 만큼 돌린다
   const rot = opts.headingUp === null || opts.headingUp === undefined ? 0 : Math.PI / 2 - opts.headingUp;
@@ -72,6 +99,15 @@ const screenDir = (v: MapView, dx: number, dy: number): [number, number] => {
   return [dx * c - dy * s, -(dx * s + dy * c)];
 };
 
+/** 지도에 그릴 다른 사람. 그룹 주행이면 사람마다 색과 순서 번호 (사용자 요청 "컬러도 모두 다르게", "모두 지도에 표시") */
+export interface MapPerson {
+  x: number;
+  y: number;
+  label: string;
+  color?: string;
+  no?: number;
+}
+
 export interface MiniMapOpts {
   /** 아래쪽을 가리는 띠 높이 (px) */
   insetBottom?: number;
@@ -83,9 +119,9 @@ export interface MiniMapOpts {
   /** 바깥에서 정한 좌표 변환 (재생 모드에서 지도 타일 위에 그릴 때) */
   view?: MapView;
   /** 함께 그릴 앞 친구 위치 (같은 평면 좌표) */
-  friend?: { x: number; y: number; label: string } | null;
+  friend?: MapPerson | null;
   /** 위치를 공유 중인 다른 친구들 (주행 중, 사용자 요청) */
-  friends?: ReadonlyArray<{ x: number; y: number; label: string }>;
+  friends?: ReadonlyArray<MapPerson>;
   /** 돌린 지도에서 왼쪽 위 작은 나침반 (주행 화면은 나침반 버튼이 대신하므로 끈다) */
   north?: boolean;
 }
@@ -133,6 +169,28 @@ const STYLE = { gate: '#C9CDD2' };
  * 테두리는 하얀색(사용자 요청 "검정색 말고 하얀색"). 지나온 길(빨강)은 이 위에 그린다.
  */
 export const COURSE_LINE = { outline: '#ffffff', outlineW: 10, line: '#9fd0ff', lineW: 6 } as const;
+/** 코스 주행에서 이번 랩에 이미 지나온 코스 선: 옅게 (사용자 요청 "지나온 길이 빨간색이라 더 눈에 띄어 집중이 안 된다") */
+export const COURSE_DONE = { line: 'rgba(159, 208, 255, 0.28)', lineW: 6 } as const;
+
+/** 코스 선을 s(m)에서 둘로 나눈다 (점 사이 거리로) */
+function splitAt(pts: ReadonlyArray<XY>, s: number): [XY[], XY[]] {
+  const done: XY[] = [pts[0]!];
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1]!;
+    const [bx, by] = pts[i]!;
+    const d = Math.hypot(bx - ax, by - ay);
+    if (acc + d >= s) {
+      const f = d > 0 ? (s - acc) / d : 0;
+      const m: XY = [ax + (bx - ax) * f, ay + (by - ay) * f];
+      done.push(m);
+      return [done, [m, ...pts.slice(i)]];
+    }
+    acc += d;
+    done.push(pts[i]!);
+  }
+  return [done, [pts[pts.length - 1]!]];
+}
 
 function polyline(ctx: Ctx, pts: ReadonlyArray<XY>, v: MapView, close: boolean): void {
   ctx.beginPath();
@@ -171,16 +229,29 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.setLineDash([]);
-  if (model.line.length >= 2) {
-    polyline(ctx, model.line, v, model.loop);
-    ctx.strokeStyle = COURSE_LINE.outline;
-    ctx.lineWidth = COURSE_LINE.outlineW;
-    ctx.stroke();
-    ctx.strokeStyle = COURSE_LINE.line;
-    ctx.lineWidth = COURSE_LINE.lineW;
-    ctx.stroke();
+  const hasLine = model.line.length >= 2;
+  if (hasLine) {
+    // 코스 주행: 이번 랩에 지나온 코스 선은 옅게, 남은 코스 선은 밝게 (빨간 지나온 길 대신, 사용자 요청)
+    const s = f.courseS ?? null;
+    const [done, rest] = s !== null && s > 0 ? splitAt(model.line, s) : [[], model.line];
+    if (done.length >= 2) {
+      polyline(ctx, done, v, false);
+      ctx.strokeStyle = COURSE_DONE.line;
+      ctx.lineWidth = COURSE_DONE.lineW;
+      ctx.stroke();
+    }
+    if (rest.length >= 2) {
+      polyline(ctx, rest, v, model.loop && done.length < 2);
+      ctx.strokeStyle = COURSE_LINE.outline;
+      ctx.lineWidth = COURSE_LINE.outlineW;
+      ctx.stroke();
+      ctx.strokeStyle = COURSE_LINE.line;
+      ctx.lineWidth = COURSE_LINE.lineW;
+      ctx.stroke();
+    }
   }
-  if (f.path && f.path.length >= 2) {
+  // 지나온 길(빨강)은 처음 기록할 때(코스 선이 없을 때)만 (사용자 요청)
+  if (!hasLine && f.path && f.path.length >= 2) {
     // 지나온 길: 코스 지도와 같은 빨간 선 + 빛 번짐 (사용자 요청 "너무 옅어서 안 보인다")
     polyline(ctx, f.path, v, false);
     ctx.strokeStyle = PATH_STYLE.glow;
@@ -235,19 +306,34 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
 
   for (const fp of [...(opts.friends ?? []), ...(opts.friend ? [opts.friend] : [])]) {
     const [x, y] = v.P(fp.x, fp.y);
+    const col = fp.color ?? th.friend;
+    const no = fp.no;
     ctx.setLineDash([]);
     ctx.beginPath();
-    ctx.arc(x, y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = th.friend;
+    ctx.arc(x, y, no ? 11 : 7, 0, Math.PI * 2);
+    ctx.fillStyle = col;
     ctx.fill();
     ctx.strokeStyle = '#0d0e10';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = no ? 2.5 : 2;
     ctx.stroke();
-    ctx.font = `700 12px ${th.sans}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = th.friend;
-    ctx.fillText(fp.label, x, y - 16);
+    if (no) {
+      ctx.font = `800 12px ${th.sans}`;
+      ctx.fillStyle = '#0d0e10';
+      ctx.fillText(String(no), x, y + 0.5);
+      // 그룹 이름표는 지도 위에서도 읽히게 테두리
+      ctx.font = `700 13px ${th.sans}`;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#0b0c0e';
+      ctx.strokeText(fp.label, x, y - 21);
+      ctx.fillStyle = col;
+      ctx.fillText(fp.label, x, y - 21);
+    } else {
+      ctx.font = `700 12px ${th.sans}`;
+      ctx.fillStyle = col;
+      ctx.fillText(fp.label, x, y - 16);
+    }
   }
 
   if (v.rot !== 0 && opts.north !== false) drawNorth(ctx, w, opts.top ?? 24, v, th);

@@ -68,6 +68,12 @@ describe('커브 찾기·등급 (사양서 8.4 커브 표지판)', () => {
     expect(long.map((n) => [n.grade, n.mod])).toEqual([[5, '길게']]);
   });
 
+  // 사용자 요청 "완만한 코너도 표지판" + 결정 15°·반지름 400 m (예전 20°·300 m)
+  it('완만한 커브: 반지름 350 m로 18° 돌면 6, 13°만 돌면 없음', () => {
+    expect(paceNotes(trace([['line', 200], ['arc', 18, 350, 1], ['line', 200]])).map((n) => [n.dir, n.grade])).toEqual([['left', 6]]);
+    expect(paceNotes(trace([['line', 200], ['arc', 13, 350, 1], ['line', 200]]))).toEqual([]);
+  });
+
   it('곧은 길의 작은 흔들림(±0.3 m)에는 커브가 없다', () => {
     expect(paceNotes(trace([['line', 800]], 0.3))).toEqual([]);
   });

@@ -66,3 +66,12 @@ export function formatLength(m: number | null): string {
   if (m === null) return '길이 미정';
   return m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.round(m)}m`;
 }
+
+/** 걸리는 시간: 1시간 미만은 분, 넘으면 시간·분 */
+export function formatTravelTime(s: number): string {
+  const min = Math.max(1, Math.round(s / 60));
+  if (min < 60) return `${min}분`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h}시간 ${m}분` : `${h}시간`;
+}
