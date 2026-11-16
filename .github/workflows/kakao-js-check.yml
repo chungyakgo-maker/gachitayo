@@ -1,0 +1,27 @@
+# 카카오 JavaScript SDK 확인 (일회용 점검): 그룹 주행 카톡 초대에 쓰는 SDK 주소가 있는지, KAKAO_JS_KEY 비밀값이 들어갔는지(있음/없음, 길이만).
+# 키 값은 출력하지 않는다.
+name: 카카오 JS 확인
+
+on:
+  push:
+    branches: [kakao-check]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SDK 주소 · 비밀값
+        env:
+          KEY: ${{ secrets.KAKAO_JS_KEY }}
+        run: |
+          set +e
+          for v in 2.7.4 2.7.2; do
+            code=$(curl -s -o /tmp/k.js -w '%{http_code}' "https://t1.kakaocdn.net/kakao_js_sdk/$v/kakao.min.js")
+            echo "SDK $v: HTTP $code, $(wc -c < /tmp/k.js) 바이트, sha384-$(openssl dgst -sha384 -binary /tmp/k.js | openssl base64 -A)"
+          done
+          K=$(printf '%s' "$KEY" | tr -d '[:space:]')
+          if [ -n "$K" ]; then echo "KAKAO_JS_KEY 있음 (길이 ${#K})"; else echo "KAKAO_JS_KEY 없음"; fi
