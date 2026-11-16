@@ -53,6 +53,27 @@ describe('주행 지도 + / −', () => {
     expect(onCycle).not.toHaveBeenCalled();
   });
 
+  it('pinching the drive map zooms the map one step per gesture, not the page', () => {
+    const { container, rerender } = render(<DriveView {...props()} />);
+    const map = container.querySelector('.drive-map')!;
+    const t = (d: number) => [
+      { clientX: 100, clientY: 300, identifier: 0 },
+      { clientX: 100 + d, clientY: 300, identifier: 1 },
+    ];
+    fireEvent.touchStart(map, { touches: t(100) });
+    fireEvent.touchMove(map, { touches: t(150) });
+    expect(getSettings().driveZoom).toBe(1);
+    fireEvent.touchMove(map, { touches: t(160) });
+    expect(getSettings().driveZoom).toBe(1);
+    fireEvent.touchEnd(map, { touches: [] });
+    rerender(<DriveView {...props()} />);
+    fireEvent.touchStart(map, { touches: t(100) });
+    fireEvent.touchMove(map, { touches: t(60) });
+    expect(getSettings().driveZoom).toBe(0);
+    fireEvent.touchEnd(map, { touches: [] });
+    expect(onCycle).not.toHaveBeenCalled();
+  });
+
   it('only on the map screen', () => {
     render(<DriveView {...props()} mode="minimal" />);
     expect(screen.queryByRole('button', { name: '지도 확대' })).toBeNull();

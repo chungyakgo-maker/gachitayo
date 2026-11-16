@@ -298,13 +298,6 @@ export function SettingsScreen() {
         </details>
         <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
           <span className="label">개발자 메뉴</span>
-          <a className="list-link" href="#/dev/replay">
-            <span className="card-col" style={{ gap: 3 }}>
-              <strong style={{ fontSize: 15 }}>재생 모드</strong>
-              <span className="sub">저장된 기록이나 가상 주행을 주행 화면에 흘려 확인</span>
-            </span>
-            <IconChevron size={20} color="#9AA1A9" />
-          </a>
           <a className="list-link" href="#/dev/recorder">
             <span className="card-col" style={{ gap: 3 }}>
               <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>

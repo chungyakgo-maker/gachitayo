@@ -52,6 +52,7 @@ function route(path: string): ReactElement {
       return <KakaoAuthScreen />;
     case '/dev/recorder':
       return <RecorderTestScreen />;
+    case '/replay':
     case '/dev/replay':
       return <ReplayScreen />;
     default:

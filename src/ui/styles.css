@@ -2968,3 +2968,12 @@ button.map-gps:active {
 .map-zoom button:disabled {
   color: #4b5057;
 }
+
+/* 메인 위쪽 얹은 칸: 칸 사이 빈 곳은 지도가 손가락을 받는다 (두 손가락 확대가 웹페이지가 아니라 지도로) */
+.main-top.overlay {
+  pointer-events: none;
+}
+
+.main-top.overlay > * {
+  pointer-events: auto;
+}

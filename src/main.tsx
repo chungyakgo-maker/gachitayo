@@ -12,7 +12,7 @@ import { startDrivingSignal } from './app/drivingSignal';
 import { subscribeAccount } from './app/account';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
-import { installAppHeight } from './ui/viewport';
+import { installAppHeight, lockPageZoom } from './ui/viewport';
 import './ui/fonts';
 import './ui/styles.css';
 
@@ -22,6 +22,8 @@ if (!root) throw new Error('#root 요소가 없습니다');
 registerServiceWorker();
 // 아이폰 홈 화면 앱에서 아래 탭이 화면 맨 아래에 붙도록 앱 높이를 화면 크기로 맞춘다
 installAppHeight();
+// 웹페이지 전체 확대·축소 막기 (사용자 요청): 지도만 확대·축소된다
+lockPageZoom();
 // 이전 실행에서 끝나지 않은 기록을 찾는다 (사양서 9장 앱 중단)
 void initRecording();
 // 계정 확인 뒤 업로드 대기열을 돌린다 (서버 설정 전이면 폰에만 저장).

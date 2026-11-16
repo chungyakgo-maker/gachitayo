@@ -490,7 +490,7 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
   // 이 재생의 취소 표시: 준비 중에 끝내거나 다른 재생을 시작하면(버튼 두 번 누름 등) true. 기다린 뒤마다 확인한다
   const signal = { aborted: false };
   activeReplay = signal;
-  const returnTo = src.kind === 'course' ? `#/course/${src.course.id}` : '#/dev/replay';
+  const returnTo = src.kind === 'course' ? `#/course/${src.course.id}` : '#/replay';
   try {
     if (src.kind !== 'friendSim') {
       // 누르자마자 "준비 중"으로 주행 화면에 간다. 가상 주행 데이터 만들기·기록 읽기·계산은 그다음 (화면이 멈춰 보이지 않게)

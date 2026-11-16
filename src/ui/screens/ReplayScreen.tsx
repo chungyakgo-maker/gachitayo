@@ -1,4 +1,5 @@
 // 재생 모드 (사양서 10.2): 저장된 기록이나 가상 주행을 주행 화면에 실제 속도나 배속으로 흘려보낸다.
+// 기본 기능 (사용자 요청 "재생모드는 개발자 모드에서 빼, 기본기능으로"): 기록 탭에서 들어온다.
 import { useState } from 'react';
 import { startReplay, useDrive } from '../../app/drive';
 import { useRecording } from '../../app/recording';
@@ -20,7 +21,7 @@ export function ReplayScreen() {
   return (
     <main className="page page-full">
       <header className="page-head">
-        <a className="back-btn" href="#/settings" aria-label="설정으로">
+        <a className="back-btn" href="#/history" aria-label="기록으로">
           <IconBack size={24} />
         </a>
         <h1>재생 모드</h1>

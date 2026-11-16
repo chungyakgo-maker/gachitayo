@@ -10,7 +10,7 @@ import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
 import { makePolyline } from '../../engine/course/polyline';
 import { cycleDriveMode, cycleReplaySpeed, endDrive, getDriveState, seekReplay, setReplayPlaying, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN } from '../../app/settings';
+import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN, getSettings } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
@@ -146,6 +146,29 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   // 주행 중 칸 터치로 바꾸기 (사용자 요청)
   const tapTop = onTop ?? (() => updateSettings(nextTop(settings, gap !== null)));
   const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settings.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
+
+  // 주행 지도 두 손가락 벌리기·오므리기 = + / − 한 단계 (사용자 요청: 웹페이지가 아니라 지도가 커지게)
+  const pinch = useRef<{ d0: number; done: boolean } | null>(null);
+  const span2 = (t: React.TouchList) => Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY);
+  const zoomBy = (d: number) => {
+    const z = getSettings().driveZoom;
+    updateSettings({ driveZoom: Math.max(DRIVE_ZOOM_MIN, Math.min(DRIVE_ZOOM_MAX, z + d)) });
+  };
+  const onPinchStart = (e: React.TouchEvent) => {
+    pinch.current = e.touches.length === 2 ? { d0: span2(e.touches), done: false } : null;
+  };
+  const onPinchMove = (e: React.TouchEvent) => {
+    const p = pinch.current;
+    if (!p || p.done || e.touches.length !== 2 || !(p.d0 > 0)) return;
+    const r = span2(e.touches) / p.d0;
+    if (r > 1.25) zoomBy(1);
+    else if (r < 0.8) zoomBy(-1);
+    else return;
+    p.done = true;
+  };
+  const onPinchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) pinch.current = null;
+  };
 
   const onPointerDown = (e: React.PointerEvent) => {
     // 칸 터치·버튼은 두 번 탭(화면 모드 바꾸기)으로 치지 않는다
@@ -380,7 +403,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
   return (
     // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
     <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
-      <div className="drive-map" ref={mapRef}>
+      <div className="drive-map" ref={mapRef} onTouchStart={onPinchStart} onTouchMove={onPinchMove} onTouchEnd={onPinchEnd} onTouchCancel={onPinchEnd}>
         {/* 지도는 화면 주사율로 따로 그린다 (사용자 요청 "지도가 뚝뚝 끊긴다"). 바탕 지도(OSM)는 설정으로 끔, 통신이 없으면 타일 없이 */}
         <LiveMap
           model={model}
