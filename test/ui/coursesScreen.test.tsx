@@ -24,7 +24,8 @@ describe('코스 탭: 내 코스 + 기본 코스 (사양서 7.5, 8.7)', () => {
     expect(rows[0]!.textContent).toContain('배후령');
     // 왼쪽 1:1 썸네일 (사용자 요청)
     expect(rows.every((r) => r.querySelector('.course-thumb svg path'))).toBe(true);
-    expect(rows[0]!.textContent).toContain('배후령편도 · 8.5km춘천 → 화천내 베스트8:32.345');
+    // 기본 코스는 처음에 산 길 (사용자 결정 "와인딩 없애, 산길로")
+    expect(rows[0]!.textContent).toContain('배후령편도 · 8.5km춘천 → 화천산 길내 베스트8:32.345');
     expect(rows[1]!.textContent).toContain('미시령 옛길');
     expect(rows[2]!.textContent).toContain('태백 → 만항재 쉼터');
     expect(rows[3]!.textContent).toContain('말티재편도 · 2.1km보은 → 말티재 전망대');

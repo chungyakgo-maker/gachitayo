@@ -60,6 +60,8 @@ export interface ReplayMapController {
   readonly nativeRotate?: boolean;
   /** 진행 방향 위: 내 위치를 가려지지 않은 영역 가운데에, 진행 방향(나침반 °)이 위로 */
   trackHeading?(lat: number, lon: number, bearingDeg: number, inset: { top: number; bottom: number }): void;
+  /** 주행 지도 + / − (사용자 요청): 따라가기 확대 단계를 이만큼 더하고, 전체 보기는 맞춘 뒤 이만큼 */
+  setZoomOffset?(d: number): void;
 }
 
 /** 따라가기 확대 단계 (사진 지도 기준. 선 지도는 1 작은 값이 같은 넓이) */

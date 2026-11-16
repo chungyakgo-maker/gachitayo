@@ -10,7 +10,7 @@ import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
 import { makePolyline } from '../../engine/course/polyline';
 import { cycleDriveMode, cycleReplaySpeed, endDrive, getDriveState, seekReplay, setReplayPlaying, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint } from '../../app/settings';
+import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
@@ -149,7 +149,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
 
   const onPointerDown = (e: React.PointerEvent) => {
     // 칸 터치·버튼은 두 번 탭(화면 모드 바꾸기)으로 치지 않는다
-    if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .replay-bar, .slot-btn')) return;
+    if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .replay-bar, .slot-btn, .map-zoom')) return;
     const now = Date.now();
     const prev = lastTap.current;
     if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 40) {
@@ -395,10 +395,20 @@ export function DriveView({ snap, gap = null, front = null, friends = [], course
           view={mapView}
           tiles={replay !== null || settings.mapTiles}
           speedKmh={st?.speedKmh ?? null}
+          zoom={settings.driveZoom}
         />
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
         <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />
         <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 10 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
+        {/* 지도 확대·축소 (사용자 요청 "주행 모드중 지도 축소나 확대"): 단계는 설정에 남는다 */}
+        <div className="map-zoom" style={{ top: ins.top + 62 }}>
+          <button type="button" aria-label="지도 확대" disabled={settings.driveZoom >= DRIVE_ZOOM_MAX} onClick={() => updateSettings({ driveZoom: Math.min(DRIVE_ZOOM_MAX, settings.driveZoom + 1) })}>
+            +
+          </button>
+          <button type="button" aria-label="지도 축소" disabled={settings.driveZoom <= DRIVE_ZOOM_MIN} onClick={() => updateSettings({ driveZoom: Math.max(DRIVE_ZOOM_MIN, settings.driveZoom - 1) })}>
+            −
+          </button>
+        </div>
         {/* 속도: 일반 내비처럼 오른쪽 아래, 칸 없이 숫자만 (사용자 요청 시안) */}
         <div className="map-speed" style={{ bottom: ins.bottom + 30 }} role="img" aria-label={`속도 ${kmh(st?.speedKmh ?? null)} km/h`}>
           {kmh(st?.speedKmh ?? null)}

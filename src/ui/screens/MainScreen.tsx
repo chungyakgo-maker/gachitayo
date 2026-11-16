@@ -13,13 +13,18 @@ import { MainMap } from '../components/MainMap';
 import { ShareToggle } from '../components/ShareToggle';
 import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
-import { formatLapTime, formatLength } from '../format';
 import { useLocationPreview } from '../hooks/useLocationPreview';
-import { IconArrowRight, IconCloud, IconPin, IconWarn } from '../icons';
+import { IconArrowRight, IconCloud, IconWarn } from '../icons';
 import type { GpsState } from '../components/GpsIcon';
 import { useOverlayInsets } from '../hooks/useOverlayInsets';
 import { usePwaUpdate } from '../pwa/usePwaUpdate';
-import { useBestTimes } from './useBestTimes';
+import { CourseChips } from '../components/CourseChips';
+import { CourseSheet } from '../components/CourseSheet';
+import { MainSearch } from '../components/MainSearch';
+import { filterCourses } from '../../app/courseFilter';
+import { isFavorite, tagsOf, useCoursePrefs } from '../../app/coursePrefs';
+import { usePopular } from '../../app/popular';
+import { handOffDestination } from '../../app/routeNav';
 
 export function MainScreen() {
   const { needRefresh, update } = usePwaUpdate();
@@ -49,11 +54,22 @@ export function MainScreen() {
   const course = near?.course ?? null;
   // 주행 시작 때 묻는다 (사용자 요청): 근처에 코스가 있으면 코스 주행, 늘 일반 기록 주행 / 일반 주행(기록 안 남김)
   const [ask, setAsk] = useState(false);
-  const best = useBestTimes(course ? [course] : []);
   const baseRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const tabRef = useRef<HTMLElement>(null);
   const ins = useOverlayInsets(baseRef, topRef, tabRef);
+  // 코스 둘러보기 (설계 2026-11-16 course-browse): 분류 칩, 즐겨찾기 보라, 코스 누르면 창, 맨 위 검색
+  const prefs = useCoursePrefs();
+  const popular = usePopular(settings.popularPeriod, settings.courseFilter === 'popular');
+  const shown = useMemo(
+    () => filterCourses(drive.courses, settings.courseFilter, { isFavorite: (c) => isFavorite(c, prefs), tagsOf: (c) => tagsOf(c, prefs) }, popular.rows).map((x) => x.course),
+    [drive.courses, settings.courseFilter, prefs, popular.rows],
+  );
+  const favorites = useMemo(() => new Set(drive.courses.filter((c) => isFavorite(c, prefs)).map((c) => c.id)), [drive.courses, prefs]);
+  const [sheetId, setSheetId] = useState<string | null>(null);
+  const sheetCourse = sheetId ? (drive.courses.find((c) => c.id === sheetId) ?? null) : null;
+  const [searching, setSearching] = useState(false);
+  const from = fix ? { lat: fix.lat, lon: fix.lon } : null;
 
   // 지도가 화면 전체, 위 카드·아래 탭은 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
   const gps: GpsState = permission === 'denied' ? 'weak' : !fix ? 'none' : fix.hAcc <= 10 ? 'good' : fix.hAcc <= 30 ? 'wait' : 'weak';
@@ -71,39 +87,16 @@ export function MainScreen() {
             {drive.phase === 'idle' ? '센서 기록 테스트가 진행 중이에요 · 돌아가기' : drive.replay ? '재생 중이에요 · 돌아가기' : '진행 중인 주행이 있어요 · 돌아가기'}
           </a>
         )}
-        {course ? (
-          <div className="card card-row">
-            <div className="card-col">
-              <span className="label-row">
-                <IconPin size={14} />
-                현재 위치에서 감지됨
-              </span>
-              <span className="title">{course.name}</span>
-              <span className="sub">
-                {course.kind === 'loop' ? '랩' : '편도'} · {formatLength(course.lengthM)}
-                {best[course.id] != null && (
-                  <>
-                    {' · 내 베스트 '}
-                    <span className="mono">{formatLapTime(best[course.id]!, 3)}</span>
-                  </>
-                )}
-              </span>
-            </div>
-          </div>
-        ) : (
-          // 근처에 코스가 없으면 한 줄로 작게 (사용자 요청)
-          <div className="card compact" aria-label="새 코스">
-            <div className="card-row">
-              <span className="label-row compact-line">
-                <IconPin size={14} />
-                <strong>새 코스</strong>
-                <span className="dim">· {fix ? '근처 코스 없음' : '위치 확인 중'}</span>
-              </span>
-            </div>
-            {/* "주행 시작을 누르면 위치 권한을 물어봐요" 안내는 뺐다 (사용자 요청). 권한을 끈 경우만 알린다 */}
-            {permission === 'denied' && <span className="sub">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>}
-          </div>
-        )}
+        {/* 맨 위 "새 코스"·"현재 위치에서 감지됨" 카드 대신 목적지 검색 (사용자 요청). 근처 코스는 주행 시작 고르기에서 */}
+        <MainSearch
+          from={from}
+          onOpenChange={setSearching}
+          onPick={(p) => {
+            handOffDestination({ lat: p.lat, lon: p.lon, name: p.name, kind: 'search' });
+            window.location.hash = '#/destination';
+          }}
+        />
+        {permission === 'denied' && <span className="notice">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>}
         {acc.status === 'none' && acc.lost && (
           <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>
             <IconWarn size={20} />
@@ -116,17 +109,30 @@ export function MainScreen() {
             업로드 대기 {sync.pending}건 · 통신이 연결되면 자동으로 올라갑니다
           </a>
         )}
+        {!searching && (
+          <>
         <button type="button" className="primary-btn start" onClick={() => setAsk(true)}>
           <span>주행 시작</span>
           <IconArrowRight size={26} />
         </button>
+            <CourseChips
+              filter={settings.courseFilter}
+              period={settings.popularPeriod}
+              onFilter={(f) => updateSettings({ courseFilter: f })}
+              onPeriod={(p) => updateSettings({ popularPeriod: p })}
+            />
+            {settings.courseFilter === 'popular' && popular.error && <span className="notice">{popular.error}</span>}
+            {settings.courseFilter === 'popular' && popular.rows && shown.length === 0 && <span className="notice">이 기간에 달린 기록이 아직 없어요</span>}
+          </>
+        )}
       </div>
       <MainMap
-        course={course}
-        courses={drive.courses}
-        showCourses={settings.mainCourses}
+        course={null}
+        courses={shown}
+        favorites={favorites}
+        onCourseTap={setSheetId}
         me={fix}
-        label={course ? `지도: ${course.name}, 내 위치` : '지도: 내 위치'}
+        label="지도: 코스와 내 위치 (코스 선을 누르면 출발점 안내)"
         friends={friendsOn ? fr.positions : []}
         insetTop={ins.top}
         insetBottom={ins.bottom}
@@ -136,16 +142,29 @@ export function MainScreen() {
         <div className="map-controls">
           <div className="map-chip-row">
             {friendsOn && <ShareToggle variant="map" />}
-            {/* 메인 지도에 코스 보이기·숨기기 (사용자 요청) */}
-            <button type="button" className="map-share" aria-pressed={settings.mainCourses} onClick={() => updateSettings({ mainCourses: !settings.mainCourses })}>
-              <span className="dot" />
-              {settings.mainCourses ? '코스 보기 켜짐' : '코스 보기 꺼짐'}
-            </button>
           </div>
           {friendsOn && fr.error && fr.sharing && <div className="map-chip">{fr.error}</div>}
         </div>
       </MainMap>
       </div>
+      {sheetCourse && (
+        <CourseSheet
+          course={sheetCourse}
+          from={from}
+          onClose={() => setSheetId(null)}
+          onStartPoint={() => {
+            setSheetId(null);
+            handOffDestination({ lat: sheetCourse.startGate.lat, lon: sheetCourse.startGate.lon, name: `${sheetCourse.name} · 출발점`, kind: 'course-start' });
+            window.location.hash = '#/destination';
+          }}
+          // 아이폰 모션 권한은 탭 처리 안에서 물어야 하므로 이 탭에서 바로 준비를 시작한다
+          onDrive={() => {
+            setSheetId(null);
+            beginPrepare();
+            chooseCourse(sheetCourse);
+          }}
+        />
+      )}
       {ask && (
         <DriveChoiceSheet
           course={course}

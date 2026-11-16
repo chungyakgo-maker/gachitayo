@@ -32,6 +32,8 @@ export interface LiveMapProps {
   tiles: boolean;
   /** 나를 가운데 보기(바탕 지도 없을 때)의 보이는 거리를 속도에 맞추려고 */
   speedKmh?: number | null;
+  /** 확대 단계 (+ / −, 사용자 요청). 0이 기본, +면 가깝게 */
+  zoom?: number;
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
@@ -40,6 +42,7 @@ const MIN_FRAME_MS = 15;
 
 export function LiveMap(props: LiveMapProps) {
   const { model, frame, origin, insetTop, insetBottom, label, view, tiles } = props;
+  const zoom = props.zoom ?? 0;
   const box = useElementSize<HTMLDivElement>();
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -93,6 +96,10 @@ export function LiveMap(props: LiveMapProps) {
   }, [tiles]);
 
   // 전체 코스: 코스·보기·크기가 바뀔 때만 맞춘다 (코스가 없으면 지나온 경로가 늘어날 때마다)
+  // + / − 확대 단계를 바탕 지도에 (전체 보기는 아래 맞추기가 다시 돈다)
+  useEffect(() => {
+    if (state === 'ready') ctl.current?.setZoomOffset?.(zoom);
+  }, [state, zoom]);
   const pathLen = frame.path?.length ?? 0;
   useEffect(() => {
     const c = ctl.current;
@@ -107,7 +114,7 @@ export function LiveMap(props: LiveMapProps) {
       { top: insetTop, bottom: insetBottom },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, model, origin?.lat, origin?.lon, view, insetTop, insetBottom, model.line.length ? 0 : Math.floor(pathLen / 20), box.width, box.height]);
+  }, [state, model, origin?.lat, origin?.lon, view, insetTop, insetBottom, model.line.length ? 0 : Math.floor(pathLen / 20), box.width, box.height, zoom]);
   useEffect(() => {
     if (state === 'ready') ctl.current?.resize();
   }, [state, box.width, box.height, view]);
@@ -134,7 +141,8 @@ export function LiveMap(props: LiveMapProps) {
     const friend = lerp.current.friend.sample(now);
     const ghost = lerp.current.ghost.sample(now);
     sm.head = smoothAngleStep(sm.head, me?.psi, dt, 250);
-    const target = 300 + Math.min(100, Math.max(0, (p.speedKmh ?? 0) - 60)) * 5;
+    // 바탕 지도 없을 때 보이는 거리: 속도에 맞추고 + / − 단계만큼 (한 단계 = 두 배)
+    const target = (300 + Math.min(100, Math.max(0, (p.speedKmh ?? 0) - 60)) * 5) * Math.pow(2, -(p.zoom ?? 0));
     sm.span += (target - sm.span) * (1 - Math.exp(-dt / 1000));
     const ins = { top: p.insetTop, bottom: p.insetBottom };
     const vcNow = ins.top + (h - ins.top - ins.bottom) * ME_ANCHOR;

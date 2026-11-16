@@ -9,15 +9,17 @@ import { FOLLOW_ZOOM, type ReplayMapController } from './mapTypes';
 export function createLineReplayMap(el: HTMLElement, cfg: LineMapConfig): ReplayMapController {
   // 지도 출처는 지도가 돌아가도 바로 보이게 바깥(LiveMap)에서 글자로 쓴다
   const map = newLineMap(el, cfg, { interactive: false, attribution: false });
-  const Z = lineZoom(FOLLOW_ZOOM);
+  /** 따라가기 확대 단계 (+ / − 로 바뀐다) */
+  let off = 0;
+  const Z = () => lineZoom(FOLLOW_ZOOM) + off;
   const pad = (inset: { top: number; bottom: number }) => ({ top: inset.top, bottom: inset.bottom, left: 0, right: 0 });
   let last = '';
   const go = (lat: number, lon: number, bearing: number, inset: { top: number; bottom: number }) => {
     // 같은 자리면 다시 그리지 않는다 (매 프레임 부르므로)
     const key = `${lat.toFixed(7)},${lon.toFixed(7)},${bearing.toFixed(1)},${inset.top},${inset.bottom}`;
-    if (key === last && map.getZoom() === Z) return;
+    if (key === last && map.getZoom() === Z()) return;
     last = key;
-    map.jumpTo({ center: [lon, lat], zoom: Z, bearing, padding: pad(inset) });
+    map.jumpTo({ center: [lon, lat], zoom: Z(), bearing, padding: pad(inset) });
   };
   return {
     nativeRotate: true,
@@ -25,10 +27,11 @@ export function createLineReplayMap(el: HTMLElement, cfg: LineMapConfig): Replay
       if (points.length === 0) return;
       map.resize();
       last = '';
-      if (points.length === 1) map.jumpTo({ center: [points[0]![1], points[0]![0]], zoom: Z, bearing: 0, padding: pad(inset) });
+      if (points.length === 1) map.jumpTo({ center: [points[0]![1], points[0]![0]], zoom: Z(), bearing: 0, padding: pad(inset) });
       else {
         map.jumpTo({ bearing: 0 });
         map.fitBounds(boundsOf(points), { padding: { top: 20 + inset.top, bottom: 20 + inset.bottom, left: 20, right: 20 }, maxZoom: lineZoom(18), duration: 0 });
+        if (off !== 0) map.jumpTo({ zoom: map.getZoom() + off });
       }
     },
     follow(lat, lon, inset) {
@@ -47,6 +50,10 @@ export function createLineReplayMap(el: HTMLElement, cfg: LineMapConfig): Replay
     },
     resize() {
       map.resize();
+      last = '';
+    },
+    setZoomOffset(d) {
+      off = d;
       last = '';
     },
     project(lat, lon) {

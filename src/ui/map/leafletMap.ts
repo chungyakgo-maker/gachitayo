@@ -319,6 +319,8 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
   });
   const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
   map.setView([36.5, 127.8], 7);
+  /** 따라가기 확대 단계 (+ / − 로 바뀐다) */
+  let zf = FOLLOW_ZOOM;
   let shown = false;
   let fails = 0;
   tiles.on('tileload', () => {
@@ -338,32 +340,38 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     fit(points, inset) {
       if (points.length === 0) return;
       map.invalidateSize({ pan: false });
-      if (points.length === 1) map.setView(map.unproject(map.project(points[0]!, FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]), FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
-      else map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20 + inset.top], paddingBottomRight: [20, 20 + inset.bottom], maxZoom: 18, animate: false });
+      if (points.length === 1) map.setView(map.unproject(map.project(points[0]!, zf).add([0, (inset.bottom - inset.top) / 2]), zf), zf, { animate: false });
+      else {
+        map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20 + inset.top], paddingBottomRight: [20, 20 + inset.bottom], maxZoom: 18, animate: false });
+        if (zf !== FOLLOW_ZOOM) map.setZoom(map.getZoom() + (zf - FOLLOW_ZOOM), { animate: false });
+      }
     },
     follow(lat, lon, inset) {
       map.invalidateSize({ pan: false });
       // 가려지지 않은 영역의 가운데에 오게 (위·아래 가림 차이의 절반만큼 옮긴다)
-      const c = map.project([lat, lon], FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]);
-      map.setView(map.unproject(c, FOLLOW_ZOOM), FOLLOW_ZOOM, { animate: false });
+      const c = map.project([lat, lon], zf).add([0, (inset.bottom - inset.top) / 2]);
+      map.setView(map.unproject(c, zf), zf, { animate: false });
     },
     centerOn(lat, lon) {
       map.invalidateSize({ pan: false });
-      map.setView([lat, lon], FOLLOW_ZOOM, { animate: false });
+      map.setView([lat, lon], zf, { animate: false });
     },
     track(lat, lon, inset) {
-      const target = map.unproject(map.project([lat, lon], FOLLOW_ZOOM).add([0, (inset.bottom - inset.top) / 2]), FOLLOW_ZOOM);
-      if (map.getZoom() !== FOLLOW_ZOOM) {
-        map.setView(target, FOLLOW_ZOOM, { animate: false });
+      const target = map.unproject(map.project([lat, lon], zf).add([0, (inset.bottom - inset.top) / 2]), zf);
+      if (map.getZoom() !== zf) {
+        map.setView(target, zf, { animate: false });
         return;
       }
-      const off = map.project(target, FOLLOW_ZOOM).subtract(map.project(map.getCenter(), FOLLOW_ZOOM));
+      const off = map.project(target, zf).subtract(map.project(map.getCenter(), zf));
       if (Math.abs(off.x) < 0.5 && Math.abs(off.y) < 0.5) return;
-      if (Math.hypot(off.x, off.y) > 300) map.setView(target, FOLLOW_ZOOM, { animate: false });
+      if (Math.hypot(off.x, off.y) > 300) map.setView(target, zf, { animate: false });
       else map.panBy(off, { animate: false });
     },
     resize() {
       map.invalidateSize({ pan: false });
+    },
+    setZoomOffset(d) {
+      zf = FOLLOW_ZOOM + d;
     },
     project(lat, lon) {
       const p = map.latLngToContainerPoint([lat, lon]);

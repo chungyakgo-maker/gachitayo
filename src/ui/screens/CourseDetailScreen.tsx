@@ -1,6 +1,7 @@
 // 코스 상세 (사양서 8.7): 지도(중심선·출발선·도착선·구간 경계), 이름 바꾸기, 출발선·도착선 옮기기(지도에서 누르기),
 // 코스 다듬기, GPX 내보내기, 코스 지우기(내 코스만), 출발점·도착점을 내비 앱으로 열기. 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
 import { useEffect, useMemo, useState } from 'react';
+import { isFavorite, setTag, TAG_LABEL, TAGS, tagsOf, toggleFavorite, useCoursePrefs } from '../../app/coursePrefs';
 import { courseGpxFile, deleteCourse, makeReverseCourse, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
 import { loadCourses, prepareWithCourse, startCoursePreview, useDrive } from '../../app/drive';
 import { config } from '../../engine/config';
@@ -153,6 +154,7 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
         {best[course.id] != null ? ` · 내 베스트 ${formatLapTime(best[course.id]!, 3)}` : ''} · 기록 {counts.sessions}개
       </span>
 
+      <CourseBrowseControls course={course} />
       <PickMap
         shapes={map.shapes}
         fit={map.fit}
@@ -321,5 +323,27 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
         </Overlay>
       )}
     </main>
+  );
+}
+
+/** 코스 상세의 즐겨찾기·분류 고르기 (사용자 요청 "코스에 즐겨찾기", "분류는 코스마다 직접 고르기": 해안 길·산 길) */
+export function CourseBrowseControls({ course }: { course: Course }) {
+  const prefs = useCoursePrefs();
+  const fav = isFavorite(course, prefs);
+  const tags = tagsOf(course, prefs);
+  return (
+    <div className="browse-chips" role="group" aria-label="즐겨찾기와 분류">
+      <button type="button" className="browse-chip" aria-pressed={fav} onClick={() => toggleFavorite(course)}>
+        <span className="fav" aria-hidden="true">
+          {fav ? '★' : '☆'}
+        </span>
+        즐겨찾기
+      </button>
+      {TAGS.map((t) => (
+        <button key={t} type="button" className="browse-chip" aria-pressed={tags.includes(t)} onClick={() => setTag(course, t, !tags.includes(t))}>
+          {TAG_LABEL[t]}
+        </button>
+      ))}
+    </div>
   );
 }

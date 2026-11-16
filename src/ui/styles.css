@@ -2799,3 +2799,172 @@ button.map-gps:active {
   padding: 0 18px;
   font-size: 16px;
 }
+
+/* ── 코스 둘러보기 (설계 2026-11-16 course-browse): 메인 검색창, 분류 칩, 코스 창 지도 ── */
+.main-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: rgba(14, 15, 18, 0.84);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: var(--fg-dim);
+}
+
+.main-search:focus-within {
+  border-color: var(--accent);
+}
+
+.main-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font-size: 16px;
+  outline: none;
+}
+
+.main-results {
+  gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.browse-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+  scrollbar-width: none;
+}
+
+.browse-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.browse-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 15, 18, 0.84);
+  color: #c9ced4;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.browse-chips.small .browse-chip {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.browse-chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.browse-chip .fav {
+  color: #b15cff;
+}
+
+.browse-chip[aria-pressed='true'] .fav {
+  color: #5a1fa0;
+}
+
+.sheet-map {
+  height: 230px;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.course-li {
+  position: relative;
+  list-style: none;
+}
+
+.course-li .course-row {
+  padding-right: 60px;
+}
+
+.fav-star {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  font-size: 24px;
+  color: #5b6168;
+}
+
+.fav-star.on {
+  color: #b15cff;
+}
+
+.course-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.course-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c9ced4;
+}
+
+.course-tag.hot {
+  background: rgba(255, 178, 36, 0.18);
+  color: #ffd27a;
+}
+
+/* 주행 지도 확대·축소 (사용자 요청) */
+.map-zoom {
+  position: absolute;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 15, 18, 0.84);
+}
+
+.map-zoom button {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  background: none;
+  color: #eceef0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.map-zoom button + button {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.map-zoom button:disabled {
+  color: #4b5057;
+}
