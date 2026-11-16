@@ -1,5 +1,4 @@
 // 기록 표 API (사양서 6.5): 코스·세션·랩·닉네임. 같은 id면 덮어쓰고(upsert), 다른 사람 행은 403.
-import { ROOM_TTL_MS } from './group';
 import { HttpError, UUID_RE } from './http';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -39,52 +38,6 @@ export async function getMe(env: Cloudflare.Env, userId: string) {
 export async function putMe(env: Cloudflare.Env, userId: string, nickname: string) {
   await env.DB.prepare('UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?').bind(nickname, new Date().toISOString(), userId).run();
   return { userId, nickname };
-}
-
-/**
- * 계정 삭제 (사양서 13.3, 애플 심사 필수): 이 사람의 행(랩·세션·코스·친구 양쪽·위치 공유·친구 코드 오답 기록·사용자)과
- * R2의 이 사람 폴더 파일을 모두 지운다. 외래키 연쇄 삭제에 기대지 않고 직접 지운다. signup_log는 사람과 묶이지 않아 그대로.
- * 그 뒤 생긴 것도 지운다: 카카오 연결·로그인 열쇠·로그인 중 상태, 즐겨찾기·분류, 길찾기·검색 횟수, 주행 중 신호,
- * 그룹 주행 방(내가 만든 방은 나가고 지움, 방 코드 오답 기록)
- */
-export async function deleteAccount(env: Cloudflare.Env, userId: string, now = Date.now()): Promise<{ ok: true; files: number }> {
-  // 내가 만든 방(24시간 안)에서는 나간다 (다른 사람 방은 앱이 지우기 전에 나간다)
-  const { results: myRooms } = await env.DB.prepare('SELECT id FROM rooms WHERE host_id = ? AND created_at > ?').bind(userId, now - ROOM_TTL_MS).all<{ id: string }>();
-  for (const r of myRooms) {
-    try {
-      await env.GROUP.get(env.GROUP.idFromName(r.id)).leave(userId);
-    } catch {
-      // 방이 이미 닫혔으면 그대로
-    }
-  }
-  let files = 0;
-  let cursor: string | undefined;
-  do {
-    const page = await env.SESSION_FILES.list({ prefix: `${userId}/`, cursor, limit: 1000 });
-    if (page.objects.length) await env.SESSION_FILES.delete(page.objects.map((o) => o.key));
-    files += page.objects.length;
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-  const del = (sql: string, ...args: string[]) => env.DB.prepare(sql).bind(...args);
-  await env.DB.batch([
-    del('DELETE FROM laps WHERE owner_id = ?', userId),
-    del('DELETE FROM sessions WHERE owner_id = ?', userId),
-    del('DELETE FROM courses WHERE owner_id = ?', userId),
-    del('DELETE FROM friends WHERE user_id = ? OR friend_id = ?', userId, userId),
-    del('DELETE FROM presence WHERE user_id = ?', userId),
-    del('DELETE FROM friend_code_misses WHERE user_id = ?', userId),
-    del('DELETE FROM identities WHERE user_id = ?', userId),
-    del('DELETE FROM user_tokens WHERE user_id = ?', userId),
-    del('DELETE FROM oauth_states WHERE user_id = ?', userId),
-    del('DELETE FROM route_usage WHERE user_id = ?', userId),
-    del('DELETE FROM search_usage WHERE user_id = ?', userId),
-    del('DELETE FROM user_prefs WHERE user_id = ?', userId),
-    del('DELETE FROM driving_now WHERE user_id = ?', userId),
-    del('DELETE FROM rooms WHERE host_id = ?', userId),
-    del('DELETE FROM room_code_misses WHERE user_id = ?', userId),
-    del('DELETE FROM users WHERE id = ?', userId),
-  ]);
-  return { ok: true, files };
 }
 
 // ── 코스 ──────────────────────────────────────────────

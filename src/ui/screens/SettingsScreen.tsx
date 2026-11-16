@@ -2,15 +2,12 @@
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useEffect, useState } from 'react';
 import { friendlyServerError, recreateAccount, updateNickname, useAccount } from '../../app/account';
-import { deleteAccount } from '../../app/deleteAccount';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
 import { logout, logoutCheck } from '../../app/logout';
 import { KakaoButton } from '../components/KakaoButton';
 import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { RestoreBanner } from '../components/RestoreBanner';
 import { Overlay } from '../components/Overlay';
-import { isApp } from '../../platform';
-import { LegalLink } from '../legal';
 import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
@@ -190,58 +187,6 @@ function SyncSection() {
   );
 }
 
-/** 계정 삭제 (사양서 13.3, 애플 심사 필수): 확인 창에서 "지우기"를 눌러야 지운다 */
-export function DeleteAccountSection() {
-  const [ask, setAsk] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <section className="card-col" style={{ gap: 8 }} aria-label="계정 삭제">
-      <span className="label">계정 삭제</span>
-      <button
-        type="button"
-        className="btn danger"
-        onClick={() => {
-          setError(null);
-          setAsk(true);
-        }}
-      >
-        계정과 모든 기록 지우기
-      </button>
-      {ask && (
-        <Overlay>
-          <div className="modal-backdrop">
-            <div className="modal" role="dialog" aria-modal="true" aria-labelledby="account-delete-title">
-              <h2 id="account-delete-title">계정을 지울까요?</h2>
-              <p>닉네임·친구·코스·주행 기록이 폰과 서버에서 모두 지워지고 되돌릴 수 없어요.</p>
-              {error && <div className="notice warn">{error}</div>}
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn danger"
-                  disabled={busy}
-                  onClick={() => {
-                    setBusy(true);
-                    setError(null);
-                    void deleteAccount()
-                      .catch((e: Error) => setError(e.message))
-                      .finally(() => setBusy(false));
-                  }}
-                >
-                  지우기
-                </button>
-                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(false)}>
-                  취소
-                </button>
-              </div>
-            </div>
-          </div>
-        </Overlay>
-      )}
-    </section>
-  );
-}
-
 export function SettingsScreen() {
   const s = useSettings();
   return (
@@ -351,27 +296,16 @@ export function SettingsScreen() {
           <summary>거치 팁</summary>
           <MountTips />
         </details>
-        <DeleteAccountSection />
-        <section className="card-col" style={{ gap: 8 }} aria-label="약관">
-          <span className="label">약관</span>
-          <span style={{ fontSize: 15, display: 'flex', gap: 16 }}>
-            <LegalLink kind="privacy">개인정보처리방침</LegalLink>
-            <LegalLink kind="location">위치정보 이용약관</LegalLink>
-          </span>
+        <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
+          <span className="label">개발자 메뉴</span>
+          <a className="list-link" href="#/dev/recorder">
+            <span className="card-col" style={{ gap: 3 }}>
+              <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>
+              <span className="sub">원본 파일(.json.gz / .json) 내보내기</span>
+            </span>
+            <IconChevron size={20} color="#9AA1A9" />
+          </a>
         </section>
-        {/* 개발자 메뉴는 웹(개발자용)에만. 아이폰 앱에서는 숨긴다 (사양서 13.3) */}
-        {!isApp() && (
-          <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
-            <span className="label">개발자 메뉴</span>
-            <a className="list-link" href="#/dev/recorder">
-              <span className="card-col" style={{ gap: 3 }}>
-                <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>
-                <span className="sub">원본 파일(.json.gz / .json) 내보내기</span>
-              </span>
-              <IconChevron size={20} color="#9AA1A9" />
-            </a>
-          </section>
-        )}
         <footer className="build-info">
           버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
         </footer>

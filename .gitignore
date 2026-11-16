@@ -6,4 +6,3 @@ coverage/
 *.log
 .DS_Store
 report-out/
-dist-app/

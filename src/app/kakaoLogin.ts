@@ -1,7 +1,6 @@
 // 카카오 로그인 (설계 docs/superpowers/specs/2026-11-13-kakao-login-design.md 5.2·5.6):
 // 시작할 때 이 창만 아는 verifier를 만들어 해시만 서버에 보내고, 카카오를 거쳐 돌아오면 verifier + 6자리 번호로 마친다.
 // 돌아온 창이 시작한 창과 다르면(아이폰 홈 화면 앱 등) 그 창은 번호만 보여 주고, 사용자가 원래 앱에 번호를 넣어 마친다.
-import { isApp } from '../platform';
 import { useSyncExternalStore } from 'react';
 import { ApiError, apiFetch } from '../server/api';
 import { accountEnabled } from '../server/config';
@@ -92,8 +91,7 @@ export function cancelKakaoLogin(): void {
 let providers: Promise<{ kakao: boolean }> | null = null;
 /** 서버가 카카오 로그인을 켜 두었는지 (한 번 받아 기억, 실패면 false이고 다음에 다시 묻는다) */
 export function getProviders(): Promise<{ kakao: boolean }> {
-  // 아이폰 앱 첫 버전은 카카오 로그인 없이 (애플 심사: 다른 회사 로그인을 넣으면 애플 로그인도 요구될 수 있어, 출시 준비 결정)
-  if (!accountEnabled() || isApp()) return Promise.resolve({ kakao: false });
+  if (!accountEnabled()) return Promise.resolve({ kakao: false });
   providers ??= apiFetch<{ kakao?: boolean }>('GET', '/auth/providers')
     .then((r) => ({ kakao: r.kakao === true }))
     .catch(() => {

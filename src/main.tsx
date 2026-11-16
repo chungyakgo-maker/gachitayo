@@ -10,7 +10,6 @@ import { seedBuiltinCourses } from './app/courses';
 import { syncCoursePrefs } from './app/coursePrefs';
 import { startDrivingSignal } from './app/drivingSignal';
 import { resumeGroupRoom } from './app/group';
-import { startAppLinks } from './app/appLinks';
 import { subscribeAccount } from './app/account';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
@@ -51,8 +50,6 @@ void finishFromHash(window.location.hash)
       }
     });
   });
-// 아이폰 앱: 방 초대 링크로 열리면 그 방으로
-startAppLinks();
 // 기본 코스로 주행 중이면 실시간 인기 신호 (코스 둘러보기 설계, 위치 없음)
 startDrivingSignal();
 // 기본 코스(배후령 · 미시령 옛길 · 만항재)를 처음 한 번 코스 목록에 넣는다
