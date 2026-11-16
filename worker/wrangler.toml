@@ -28,3 +28,12 @@ class_name = "LiveRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["LiveRoom"]
+
+# 그룹 주행 방 (방마다 하나: 참가자·순서·색·차 간격·목적지·경로, 실시간 위치 전달)
+[[durable_objects.bindings]]
+name = "GROUP"
+class_name = "GroupRoom"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["GroupRoom"]

@@ -9,6 +9,8 @@ declare namespace Cloudflare {
     DB: D1Database;
     /** 앞 친구 간격용 실시간 방 (사람마다 하나) */
     LIVE: DurableObjectNamespace<import('./live').LiveRoom>;
+    /** 그룹 주행 방 (방마다 하나) */
+    GROUP: DurableObjectNamespace<import('./group').GroupRoom>;
     /** 웹앱 출처 (GitHub Pages): https://{주인}.github.io */
     ALLOWED_ORIGIN: string;
     /** 카카오 로그인 REST API 키 (GitHub Secrets → 배포 때 Worker 비밀값). 없으면 카카오 로그인을 끈다 */
