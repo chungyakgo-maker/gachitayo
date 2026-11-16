@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSettings, setWidget, topSummary, updateSettings, DEFAULT_SETTINGS } from '../../src/app/settings';
 
 describe('설정 (폰 보관)', () => {
@@ -8,7 +8,7 @@ describe('설정 (폰 보관)', () => {
   });
 
   it('기본값: 지도 모드, 상단 칸 델타·G미터·표지판, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m, 주행 중 바탕 지도 보이기, G미터 최대 2g', () => {
-    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D' });
+    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D', courseFilter: 'all', popularPeriod: '30d', driveZoom: 0 });
   });
 
   it('G미터 최대값은 1.5·2·2.5·3 g만 (저장된 값이 이상하면 2g)', async () => {
@@ -121,5 +121,16 @@ describe('주행 중 칸을 누르면 다음 값으로', () => {
     updateSettings({ deltaSource: 'best' });
     expect(getSettings().deltaSource).toBe('best');
     expect(DEFAULT_SETTINGS.deltaSource).toBe('friend');
+  });
+  it('코스 분류 칩·인기 기간·주행 지도 확대는 남고, 이상한 값은 기본값으로 (코스 둘러보기 설계)', async () => {
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ courseFilter: 'fav', popularPeriod: 'autumn', driveZoom: 9 }));
+    vi.resetModules();
+    const m = await import('../../src/app/settings');
+    expect(m.getSettings()).toMatchObject({ courseFilter: 'fav', popularPeriod: 'autumn', driveZoom: 2 });
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ courseFilter: 'winding', popularPeriod: 'year', driveZoom: 'x' }));
+    vi.resetModules();
+    const m2 = await import('../../src/app/settings');
+    expect(m2.getSettings()).toMatchObject({ courseFilter: 'all', popularPeriod: '30d', driveZoom: 0 });
+    localStorage.clear();
   });
 });

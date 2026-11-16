@@ -7,6 +7,9 @@ import { startRestore } from './app/restore';
 import { initSync } from './app/sync';
 import { initFriends } from './app/friends';
 import { seedBuiltinCourses } from './app/courses';
+import { syncCoursePrefs } from './app/coursePrefs';
+import { startDrivingSignal } from './app/drivingSignal';
+import { subscribeAccount } from './app/account';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
 import { installAppHeight } from './ui/viewport';
@@ -30,7 +33,19 @@ void finishFromHash(window.location.hash)
   .then(initSync)
   .then(() => {
     if (getAccountState().kakao) void startRestore();
+    // 즐겨찾기·분류를 계정과 맞춘다 (카카오 로그인으로 계정이 바뀌어도 다시)
+    void syncCoursePrefs();
+    let lastUser = getAccountState().userId;
+    subscribeAccount(() => {
+      const u = getAccountState().userId;
+      if (u !== lastUser) {
+        lastUser = u;
+        void syncCoursePrefs();
+      }
+    });
   });
+// 기본 코스로 주행 중이면 실시간 인기 신호 (코스 둘러보기 설계, 위치 없음)
+startDrivingSignal();
 // 기본 코스(배후령 · 미시령 옛길 · 만항재)를 처음 한 번 코스 목록에 넣는다
 void seedBuiltinCourses();
 // 친구 위치 공유: 주행 기록의 GPS도 내 위치로 쓴다 (공유는 앱을 열 때마다 꺼져 있다)

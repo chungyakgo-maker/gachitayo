@@ -1,5 +1,6 @@
 // 설정 (사양서 8.8 일부): 기본 화면 모드, 상단 표시 값 세 칸(칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽), 델타 색. 폰(localStorage)에 보관한다.
 import { useSyncExternalStore } from 'react';
+import { FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from './courseFilter';
 import { G_MAX_DEFAULT, G_MAX_OPTIONS } from '../ui/overlay/gmeter';
 
 export { G_MAX_DEFAULT, G_MAX_OPTIONS };
@@ -41,6 +42,12 @@ export interface Settings {
   mainCourses: boolean;
   /** 커브 방향 화면 색 (사용자 요청 시안 A·B·C·D 중 고름, 기본 D) */
   curveTint: CurveTint;
+  /** 메인 지도·코스 목록의 분류 칩 (코스 둘러보기 설계) */
+  courseFilter: CourseFilter;
+  /** 인기 도로 기간 */
+  popularPeriod: PopularPeriod;
+  /** 주행 지도 확대 단계 (−4 ~ +2, 사용자 요청 "주행 모드중 지도 축소나 확대") */
+  driveZoom: number;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -63,7 +70,13 @@ export const DEFAULT_SETTINGS: Settings = {
   driveFriends: true,
   mainCourses: true,
   curveTint: 'D',
+  courseFilter: 'all',
+  popularPeriod: '30d',
+  driveZoom: 0,
 };
+
+export const DRIVE_ZOOM_MIN = -4;
+export const DRIVE_ZOOM_MAX = 2;
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   g: 'G미터',
@@ -118,6 +131,10 @@ function load(): Settings {
       mainCourses: raw.mainCourses !== false,
       // 예전 켜기/끄기(true/false)는 D/끄기로
       curveTint: (raw.curveTint as unknown) === false ? 'off' : CURVE_TINTS.includes(raw.curveTint as CurveTint) ? raw.curveTint! : 'D',
+      courseFilter: FILTERS.some((f) => f.id === raw.courseFilter) ? raw.courseFilter! : 'all',
+      popularPeriod: PERIODS.some((p) => p.id === raw.popularPeriod) ? raw.popularPeriod! : '30d',
+      driveZoom:
+        typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom) ? Math.min(DRIVE_ZOOM_MAX, Math.max(DRIVE_ZOOM_MIN, Math.round(raw.driveZoom))) : 0,
     };
   } catch {
     return DEFAULT_SETTINGS;
