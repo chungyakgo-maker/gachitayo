@@ -26,6 +26,8 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
   let lastMe: MapFix | null = null;
   let friends: FriendMarker[] = [];
   let others: Course[] = [];
+  let favorites: ReadonlySet<string> = new Set();
+  let tapCb: ((courseId: string) => void) | null = null;
   let show = true;
   let inset = { top: 0, bottom: 0 };
   let haveMe = false;
@@ -55,8 +57,15 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
     map.addSource('others', { type: 'geojson', data: emptyFC() });
     map.addSource('others-name', { type: 'geojson', data: emptyFC() });
     const round = { 'line-join': 'round', 'line-cap': 'round' } as const;
-    map.addLayer({ id: 'others-glow', type: 'line', source: 'others', layout: round, paint: { 'line-color': COURSE_STYLE.glow, 'line-width': 8, 'line-opacity': 0.3, 'line-blur': 4 } });
-    map.addLayer({ id: 'others-line', type: 'line', source: 'others', layout: round, paint: { 'line-color': COURSE_STYLE.route, 'line-width': 2.4, 'line-opacity': 0.9 } });
+    // 즐겨찾기(fav)는 진한 보라로 굵게 (사용자 요청 "즐겨찾기 된 코스는 메인지도에 보라색")
+    map.addLayer({ id: 'others-glow', type: 'line', source: 'others', layout: round, paint: { 'line-color': ['case', ['get', 'fav'], COURSE_STYLE.favorite, COURSE_STYLE.glow], 'line-width': ['case', ['get', 'fav'], 12, 8], 'line-opacity': ['case', ['get', 'fav'], 0.45, 0.3], 'line-blur': 4 } });
+    map.addLayer({ id: 'others-line', type: 'line', source: 'others', layout: round, paint: { 'line-color': ['case', ['get', 'fav'], COURSE_STYLE.favorite, COURSE_STYLE.route], 'line-width': ['case', ['get', 'fav'], 4, 2.4], 'line-opacity': 0.95 } });
+    // 누르기 쉬운 굵은 투명 선 (코스 둘러보기: 누르면 출발점 안내)
+    map.addLayer({ id: 'others-hit', type: 'line', source: 'others', layout: round, paint: { 'line-color': '#000000', 'line-width': 26, 'line-opacity': 0.01 } });
+    map.on('click', 'others-hit', (e) => {
+      const id = e.features?.[0]?.properties?.id;
+      if (typeof id === 'string') tapCb?.(id);
+    });
     map.addLayer({
       id: 'others-name',
       type: 'symbol',
@@ -125,7 +134,7 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       type: 'FeatureCollection',
       features: list.map((c) => {
         const line = c.kind === 'loop' ? [...c.centerline!, c.centerline![0]!] : c.centerline!;
-        return { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: line.map(([lat, lon]) => [lon, lat]) } };
+        return { type: 'Feature', properties: { id: c.id, fav: favorites.has(c.id) }, geometry: { type: 'LineString', coordinates: line.map(([lat, lon]) => [lon, lat]) } };
       }),
     });
     setData(map, 'others-name', {
@@ -209,9 +218,13 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       friends = list;
       drawFriends();
     },
-    setCourses(list) {
+    setCourses(list, fav) {
       others = list;
+      favorites = fav ?? new Set();
       drawOthers();
+    },
+    onCourseTap(cb) {
+      tapCb = cb;
     },
     setShowCourses(on) {
       if (on === show) return;

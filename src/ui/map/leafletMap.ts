@@ -68,6 +68,8 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
   let detachPress: (() => void) | null = null;
   const friendLayer = L.layerGroup().addTo(map);
   let others: Course[] = [];
+  let favorites: ReadonlySet<string> = new Set();
+  let tapCb: ((courseId: string) => void) | null = null;
   let show = true;
   const meLayer = L.layerGroup().addTo(map);
   let friends: FriendMarker[] = [];
@@ -138,8 +140,16 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     for (const c of others) {
       if (c.id === lastCourse?.id || !c.centerline || c.centerline.length < 2) continue;
       const pts = c.kind === 'loop' ? [...c.centerline, c.centerline[0]!] : c.centerline;
-      L.polyline(pts, { color: COURSE_STYLE.glow, opacity: 0.2, weight: 7, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
-      L.polyline(pts, { color: COURSE_STYLE.route, opacity: 0.9, weight: 2.4, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
+      const fav = favorites.has(c.id);
+      const color = fav ? COURSE_STYLE.favorite : COURSE_STYLE.route;
+      L.polyline(pts, { color: fav ? COURSE_STYLE.favorite : COURSE_STYLE.glow, opacity: fav ? 0.35 : 0.2, weight: fav ? 10 : 7, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(otherLayer);
+      L.polyline(pts, { color, opacity: 0.95, weight: fav ? 4 : 2.4, lineJoin: 'round', lineCap: 'round', interactive: false, className: fav ? 'course-fav' : '' }).addTo(otherLayer);
+      // 누르기 쉬운 굵은 투명 선 (코스 둘러보기: 누르면 출발점 안내)
+      if (tapCb) {
+        const hit = L.polyline(pts, { color: '#000', opacity: 0, weight: 24, interactive: true, className: 'course-hit' }).addTo(otherLayer);
+        const id = c.id;
+        hit.on('click', () => tapCb?.(id));
+      }
       const name = document.createElement('span');
       name.textContent = c.name;
       L.marker([c.startGate.lat, c.startGate.lon], { icon: L.divIcon({ className: 'map-label course-name', html: name, iconSize: [140, 16], iconAnchor: [-8, 8] }), interactive: false, keyboard: false }).addTo(otherLayer);
@@ -194,8 +204,13 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
     setOnline(online) {
       showTiles(online);
     },
-    setCourses(list) {
+    setCourses(list, fav) {
       others = list;
+      favorites = fav ?? new Set();
+      drawOthers();
+    },
+    onCourseTap(cb) {
+      tapCb = cb;
       drawOthers();
     },
     setRoute(points, dest) {

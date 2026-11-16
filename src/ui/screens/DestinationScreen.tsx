@@ -4,7 +4,7 @@
 // 경로를 받으면 길이·시간·커브 수를 보여 주고 "이 경로로 출발" (그 탭에서 주행 준비를 연다: 아이폰 모션 권한).
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { loadCourses, useDrive } from '../../app/drive';
-import { clearPlan, courseDestinations, findPlaces, MAP_PICK_NAME, planTo, recentDestinations, setRecord, startRouteDrive, usePlan, type Destination, type Place } from '../../app/routeNav';
+import { clearPlan, courseDestinations, findPlaces, MAP_PICK_NAME, planTo, recentDestinations, setRecord, startRouteDrive, clearHandedDestination, peekHandedDestination, usePlan, type Destination, type Place } from '../../app/routeNav';
 import { toLocal } from '../../engine/geo';
 import { RouteGuide } from '../../engine/route/routeGuide';
 import type { GpsState } from '../components/GpsIcon';
@@ -61,7 +61,9 @@ export function DestinationScreen() {
   const recent = useMemo(() => recentDestinations(), [plan.status]);
   const courses = useMemo(() => courseDestinations(drive.courses, from), [drive.courses, from]);
   // 위치를 아직 못 받았으면 고른 곳을 들고 있다가 위치가 오면 바로 경로를 찾는다 (사용자 보고: 검색 결과를 눌러도 반응이 없었다)
-  const [waiting, setWaiting] = useState<Destination | null>(null);
+  // 메인 검색 결과·코스 창에서 넘겨받은 목적지는 열자마자 (위치가 오면) 경로를 찾는다
+  const [waiting, setWaiting] = useState<Destination | null>(() => peekHandedDestination());
+  useEffect(() => clearHandedDestination(), []);
   const pick = (d: Destination) => {
     if (from) void planTo(d, from);
     else setWaiting(d);

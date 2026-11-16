@@ -23,8 +23,10 @@ export interface MainMapApi {
   locate(me: MapFix): void;
   /** 위치 공유 중인 친구 (점과 닉네임) */
   setFriends(list: FriendMarker[]): void;
-  /** 다른 저장된 코스들 (가는 빨간 선 + 이름). update의 코스는 빼고 그린다 (사용자 요청: 메인 지도에 코스 다 보이게) */
-  setCourses(list: import('../../types/course').Course[]): void;
+  /** 다른 저장된 코스들 (가는 빨간 선 + 이름, 즐겨찾기(코스 id)는 진한 보라로 굵게). update의 코스는 빼고 그린다 (사용자 요청: 메인 지도에 코스 다 보이게) */
+  setCourses(list: import('../../types/course').Course[], favorites?: ReadonlySet<string>): void;
+  /** 코스 선을 누르면 그 코스 id (코스 둘러보기: 출발점 안내 창). null이면 끈다 */
+  onCourseTap(cb: ((courseId: string) => void) | null): void;
   /** 코스(감지된 코스 + 다른 코스) 보이기·숨기기. 지도 위치는 그대로 (사용자 요청: 코스 보기 칩) */
   setShowCourses(on: boolean): void;
   /** 친구들(과 나)이 다 보이게 */

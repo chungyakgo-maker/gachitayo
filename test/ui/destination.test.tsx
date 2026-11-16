@@ -51,7 +51,7 @@ vi.mock('../../src/ui/components/MainMap', () => ({
 }));
 
 const { DestinationScreen } = await import('../../src/ui/screens/DestinationScreen');
-const { rememberDestination } = await import('../../src/app/routeNav');
+const { rememberDestination, handOffDestination } = await import('../../src/app/routeNav');
 
 beforeEach(() => {
   cleanup();
@@ -239,6 +239,24 @@ describe('목적지 고르기', () => {
     render(<DestinationScreen />);
     fireEvent.click(screen.getByRole('button', { name: '검색' }));
     expect(findPlaces).not.toHaveBeenCalled();
+  });
+
+  it('a destination handed over from the main screen is planned on open', () => {
+    handOffDestination({ lat: 37.1487091, lon: 128.8994813, name: '만항재', kind: 'search' });
+    render(<DestinationScreen />);
+    expect(planTo).toHaveBeenCalledWith({ lat: 37.1487091, lon: 128.8994813, name: '만항재', kind: 'search' }, { lat: 37.39, lon: 127 });
+    cleanup();
+    planTo.mockClear();
+    render(<DestinationScreen />);
+    expect(planTo).not.toHaveBeenCalled();
+  });
+
+  it('a handed destination waits for location', () => {
+    fix = null;
+    handOffDestination({ lat: 37.4, lon: 127, name: '하오고개 · 출발점', kind: 'course-start' });
+    render(<DestinationScreen />);
+    expect(screen.getByText('현재 위치를 받는 중… 받으면 바로 경로를 찾아요')).toBeInTheDocument();
+    expect(screen.getByText('하오고개 · 출발점')).toBeInTheDocument();
   });
 
   it('back goes home and clears plan', () => {

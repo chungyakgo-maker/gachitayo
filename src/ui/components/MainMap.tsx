@@ -31,6 +31,10 @@ export interface MainMapProps {
   dest?: { lat: number; lon: number } | null;
   /** 지도를 길게 누르면 그 자리 (목적지 고르기) */
   onLongPress?: (lat: number, lon: number) => void;
+  /** 즐겨찾기 코스 id (진한 보라로) */
+  favorites?: ReadonlySet<string>;
+  /** 코스 선을 누르면 (코스 둘러보기: 출발점 안내 창) */
+  onCourseTap?: (courseId: string) => void;
   children?: ReactNode;
 }
 
@@ -39,8 +43,12 @@ const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLi
 const insetVars = (t: number, b: number) => ({ '--inset-t': `${t}px`, '--inset-b': `${b}px` }) as CSSProperties;
 
 const NO_COURSES: Course[] = [];
+const NO_FAV: ReadonlySet<string> = new Set();
 
-export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, label, friends = [], insetTop = 0, insetBottom = 0, gps, gpsAcc, route = null, dest = null, onLongPress, children }: MainMapProps) {
+export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, label, friends = [], insetTop = 0, insetBottom = 0, gps, gpsAcc, route = null, dest = null, onLongPress, favorites = NO_FAV, onCourseTap, children }: MainMapProps) {
+  const tap = useRef(onCourseTap);
+  tap.current = onCourseTap;
+  const wantTap = onCourseTap !== undefined;
   const press = useRef(onLongPress);
   press.current = onLongPress;
   const wantPress = onLongPress !== undefined;
@@ -95,8 +103,13 @@ export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, 
     if (state === 'ready') ctl.current?.setFriends(friends);
   }, [state, friends]);
   useEffect(() => {
-    if (state === 'ready') ctl.current?.setCourses(courses);
-  }, [state, courses]);
+    if (state === 'ready') ctl.current?.setCourses(courses, favorites);
+  }, [state, courses, favorites]);
+  useEffect(() => {
+    if (state !== 'ready') return;
+    ctl.current?.onCourseTap(wantTap ? (id) => tap.current?.(id) : null);
+    return () => ctl.current?.onCourseTap(null);
+  }, [state, wantTap]);
   useEffect(() => {
     if (state === 'ready') ctl.current?.setShowCourses(showCourses);
   }, [state, showCourses]);

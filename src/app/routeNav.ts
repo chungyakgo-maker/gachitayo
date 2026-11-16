@@ -129,6 +129,22 @@ export function clearPlan(): void {
   setPlan({ dest: null, route: null, status: 'idle', error: null, record: true });
 }
 
+// ── 다른 화면에서 고른 목적지 넘기기 (메인 검색 결과, 코스 창의 "출발점으로 길찾기") ──
+
+let handed: Destination | null = null;
+
+/** 목적지 화면으로 넘길 목적지를 맡긴다 (목적지 화면이 열리면서 한 번 가져간다) */
+export function handOffDestination(d: Destination): void {
+  handed = d;
+}
+
+/** 맡긴 목적지 (가져간 뒤에는 clearHandedDestination으로 비운다: React 개발 모드가 초기값 함수를 두 번 불러도 같은 값이게) */
+export const peekHandedDestination = (): Destination | null => handed;
+
+export function clearHandedDestination(): void {
+  handed = null;
+}
+
 // ── 최근 목적지 · 코스 목적지 ──────────────────────────
 
 export function recentDestinations(): Destination[] {

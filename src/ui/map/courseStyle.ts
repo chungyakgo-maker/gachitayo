@@ -13,6 +13,8 @@ export const COURSE_STYLE = {
   pinDot: '#0d1a26',
   sector: '#ffb224',
   outline: '#0b0c0e',
+  /** 즐겨찾기 코스 (사용자 요청 "즐겨찾기 된 코스는 메인지도에 보라색"): 친구 점(연보라 #b78cff)보다 진하게 */
+  favorite: '#b15cff',
 } as const;
 
 export type GateWhich = 'start' | 'finish';

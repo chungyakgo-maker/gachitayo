@@ -226,6 +226,37 @@ describe('가려지지 않은 영역 가운데 (사용자 요청: 지도는 화�
     m.destroy();
   });
 
+  it('즐겨찾기 코스는 진한 보라로 굵게, 나머지는 빨강 (코스 둘러보기 설계)', async () => {
+    const { createMainMap, COURSE_STYLE } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    const fav: Course = { ...course, id: 'fav', name: '즐겨찾기 코스', centerline: [[37.21, 127.1], [37.212, 127.1]] };
+    const plain: Course = { ...course, id: 'plain', name: '보통 코스', centerline: [[37.22, 127.1], [37.222, 127.1]] };
+    m.setCourses([fav, plain], new Set(['fav']));
+    m.update(null, null);
+    expect(el.querySelectorAll('path[stroke="#b15cff"].course-fav')).toHaveLength(1);
+    expect(el.querySelectorAll(`path[stroke="${COURSE_STYLE.route}"]`).length).toBeGreaterThanOrEqual(1);
+    m.destroy();
+  });
+
+  it('코스 선을 누르면 그 코스 id를 알려 준다 (코스 둘러보기 설계: 출발점 안내)', async () => {
+    const { createMainMap } = await import('../../src/ui/map/leafletMap');
+    const el = host();
+    const m = createMainMap(el);
+    const other: Course = { ...course, id: 'c9', name: '눌러 볼 코스', centerline: [[37.21, 127.1], [37.212, 127.1]] };
+    m.setCourses([other]);
+    m.update(null, null);
+    const got: string[] = [];
+    m.onCourseTap((id) => got.push(id));
+    const hit = el.querySelector('path.course-hit')!;
+    hit.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+    expect(got).toEqual(['c9']);
+    m.onCourseTap(null);
+    hit.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+    expect(got).toEqual(['c9']);
+    m.destroy();
+  });
+
   it('메인 지도: 위 카드 190 px, 아래 탭 70 px이면 내 위치는 (190 + 430) / 2 = 310 px 높이에', async () => {
     const { createMainMap } = await import('../../src/ui/map/leafletMap');
     const el = host();
