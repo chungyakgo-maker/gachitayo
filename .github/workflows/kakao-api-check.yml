@@ -1,0 +1,29 @@
+# 카카오 API 확인 (일회용 점검): 디고 앱 REST API 키로 자동차 길찾기·장소 검색이 되는지 상태만 본다.
+# 키 값·사용자 위치는 출력하지 않는다 (공개된 두 지점: 서울역 → 남산, 검색어 "만항재").
+name: 카카오 API 확인
+
+on:
+  push:
+    branches: [kakao-check]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 자동차 길찾기 · 장소 검색 (상태만)
+        env:
+          KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+        run: |
+          set +e
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]')
+          if [ -z "$k" ]; then echo "::error::KAKAO_REST_API_KEY 없음"; exit 1; fi
+          d=$(curl -s -w '\n%{http_code}' -H "Authorization: KakaoAK $k" "https://apis-navi.kakaomobility.com/v1/directions?origin=126.9707,37.5547&destination=126.9882,37.5512")
+          echo "자동차 길찾기 HTTP $(printf '%s' "$d" | tail -1)"
+          printf '%s' "$d" | sed '$d' | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{try{const j=JSON.parse(s);const r=j.routes&&j.routes[0];console.log(r?("결과 "+r.result_code+" "+r.result_msg+" · 거리 "+((r.summary&&r.summary.distance)||"-")+" m"):("오류 "+JSON.stringify({code:j.code,msg:j.msg})))}catch(e){console.log("본문을 읽지 못함")}})'
+          s=$(curl -s -w '\n%{http_code}' -H "Authorization: KakaoAK $k" "https://dapi.kakao.com/v2/local/search/keyword.json?size=1&query=%EB%A7%8C%ED%95%AD%EC%9E%AC")
+          echo "장소 검색 HTTP $(printf '%s' "$s" | tail -1)"
+          printf '%s' "$s" | sed '$d' | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{try{const j=JSON.parse(s);console.log(j.meta?("찾은 수 "+j.meta.total_count):("오류 "+JSON.stringify({errorType:j.errorType,message:j.message})))}catch(e){console.log("본문을 읽지 못함")}})'
