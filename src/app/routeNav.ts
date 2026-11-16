@@ -32,6 +32,8 @@ export interface RoutePlan {
   error: string | null;
   /** 기록 남기기 (기본 켬): 켜면 일반 기록 주행, 끄면 일반 주행(기록 안 남김) */
   record: boolean;
+  /** 그룹 주행 방장이 방 목적지를 고르는 중 (출발 대신 "모두에게 정하기") */
+  forRoom: boolean;
 }
 
 export interface NavLive {
@@ -89,7 +91,7 @@ export async function findPlaces(q: string): Promise<Place[]> {
 
 // ── 목적지 화면의 계획 ─────────────────────────────────
 
-let plan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true };
+let plan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true, forRoom: false };
 const planListeners = new Set<() => void>();
 function setPlan(patch: Partial<RoutePlan>): void {
   plan = { ...plan, ...patch };
@@ -124,9 +126,15 @@ export function setRecord(on: boolean): void {
   setPlan({ record: on });
 }
 
-export function clearPlan(): void {
+/** full: 화면을 떠날 때 (그룹 방 목적지 고르기도 끝낸다) */
+export function clearPlan(full = false): void {
   planSeq++;
-  setPlan({ dest: null, route: null, status: 'idle', error: null, record: true });
+  setPlan({ dest: null, route: null, status: 'idle', error: null, record: true, ...(full ? { forRoom: false } : {}) });
+}
+
+/** 그룹 주행 방장이 방 목적지를 고르러 목적지 화면으로 갈 때 */
+export function setPlanForRoom(on: boolean): void {
+  setPlan({ forRoom: on });
 }
 
 // ── 다른 화면에서 고른 목적지 넘기기 (메인 검색 결과, 코스 창의 "출발점으로 길찾기") ──
@@ -218,6 +226,12 @@ export function startRouteDrive(): void {
   beginPrepare();
   if (record) chooseCourse(null);
   else chooseFreeDrive();
+  startNavWithRoute(route, dest);
+}
+
+/** 이 경로로 안내를 켠다 (목적지 화면의 출발, 그룹 주행의 방장 경로). 주행 준비는 부른 쪽이 연다 */
+export function startNavWithRoute(route: RouteData, dest: LatLon): void {
+  stopNav();
   const first = route.points[0]!;
   navDest = { lat: dest.lat, lon: dest.lon };
   setNav({ guide: new RouteGuide(route.points, { lat: first[0], lon: first[1] }), route, step: null, status: 'guiding' });
@@ -229,6 +243,19 @@ export function startRouteDrive(): void {
       if (getDriveState().phase === 'idle') stopNav();
     }),
   ];
+}
+
+/** 주행 중 경로를 바꾼다 (그룹 주행: 방장이 목적지를 새로 정함). 안내가 꺼져 있으면 켠다 */
+export function replaceNavRoute(route: RouteData, dest: LatLon): void {
+  if (!nav) {
+    startNavWithRoute(route, dest);
+    return;
+  }
+  navSeq++;
+  inflight = false;
+  lastReqAt = -Infinity;
+  navDest = { lat: dest.lat, lon: dest.lon };
+  setNav({ guide: new RouteGuide(route.points, nav.guide.origin), route, step: null, status: 'guiding' });
 }
 
 export function stopNav(): void {

@@ -26,7 +26,7 @@ export function setWebSocketFactoryForTest(f: WsFactory): void {
 const wsUrl = (path: string) => serverConfig.apiUrl.replace(/^http/, 'ws') + path;
 
 /** 다시 붙는 WebSocket: 열려 있는 동안 onOpen, 메시지마다 onMessage */
-function keepConnected(path: string, onMessage: ((data: string) => void) | null, onState: (connected: boolean) => void): { send: (s: string) => void; close: () => void } {
+export function keepConnected(path: string, onMessage: ((data: string) => void) | null, onState: (connected: boolean) => void): { send: (s: string) => void; close: () => void } {
   let ws: WebSocket | null = null;
   let closed = false;
   let retry = 0;

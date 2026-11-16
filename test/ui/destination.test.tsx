@@ -8,7 +8,7 @@ const gate = (lat: number, lon: number) => ({ lat, lon, bearingDeg: 0, widthM: 2
 const course = { id: 'a', name: '하오고개', kind: 'point_to_point', source: 'gpx', origin: { lat: 37.4, lon: 127 }, startGate: gate(37.4, 127), finishGate: gate(37.41, 127), centerline: null, lengthM: 1100, sectorBoundsM: null, version: 1 } as Course;
 
 let fix: { lat: number; lon: number; hAcc: number } | null = { lat: 37.39, lon: 127, hAcc: 5 };
-const idlePlan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true };
+const idlePlan: RoutePlan = { dest: null, route: null, status: 'idle', error: null, record: true, forRoom: false };
 let plan: RoutePlan = idlePlan;
 const planTo = vi.fn(async (_d: Destination, _f: { lat: number; lon: number }) => {});
 const startRouteDrive = vi.fn();
@@ -82,6 +82,7 @@ const readyPlan = (): RoutePlan => ({
   status: 'ready',
   error: null,
   record: true,
+  forRoom: false,
 });
 
 describe('목적지 고르기', () => {

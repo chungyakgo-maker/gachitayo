@@ -52,7 +52,7 @@ export function DestinationScreen() {
   useEffect(() => {
     void loadCourses();
     // 화면을 떠나면 고르던 것을 지운다 (출발했으면 경로 안내가 따로 들고 있다)
-    return () => clearPlan();
+    return () => clearPlan(true);
   }, []);
   const lat = fix?.lat ?? null;
   const lon = fix?.lon ?? null;
@@ -218,7 +218,7 @@ export function DestinationScreen() {
       <div className="main-full" ref={baseRef}>
         <div className="main-top overlay" ref={topRef}>
           <div className="card card-row dest-head">
-            <a className="back-btn" href="#/" aria-label="뒤로" onClick={() => clearPlan()}>
+            <a className="back-btn" href="#/" aria-label="뒤로" onClick={() => clearPlan(true)}>
               <IconBack size={24} />
             </a>
             <div className="card-col" style={{ flex: 1, minWidth: 0 }}>
