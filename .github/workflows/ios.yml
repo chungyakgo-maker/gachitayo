@@ -6,7 +6,7 @@ name: 아이폰 앱 빌드 (시뮬레이터)
 on:
   workflow_dispatch:
   push:
-    branches: [ios]
+    branches: [ios, app-login]
 
 permissions:
   contents: read
