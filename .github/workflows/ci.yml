@@ -181,11 +181,15 @@ jobs:
           NCP_MAP_CLIENT_SECRET: ${{ secrets.NCP_MAP_CLIENT_SECRET }}
           NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
           NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          # 애플 로그인 연결 끊기 (앱 로그인 설계 2026-11-17): Sign in with Apple 키·키 ID·팀 ID
+          APPLE_SIGNIN_KEY_P8: ${{ secrets.APPLE_SIGNIN_KEY_P8 }}
+          APPLE_SIGNIN_KEY_ID: ${{ secrets.APPLE_SIGNIN_KEY_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           secrets="$RUNNER_TEMP/worker-secrets.json"
           (umask 077; node -e '
             const e = process.env;
-            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"];
+            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET", "APPLE_SIGNIN_KEY_P8", "APPLE_SIGNIN_KEY_ID", "APPLE_TEAM_ID"];
             const o = {};
             for (const n of names) if ((e[n] || "").trim()) o[n] = e[n].trim();
             require("fs").writeFileSync(process.argv[1], JSON.stringify(o));

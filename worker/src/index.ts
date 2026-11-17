@@ -1,9 +1,10 @@
 // 같이타요 API + 파일 게이트웨이 (사양서 6.5, 6.6, M6 결정: Cloudflare만)
 //   POST /auth/signup {nickname}         익명 계정 만들기 → {userId, token} (폰 열쇠)
 //   POST /auth/logout                    이 폰 열쇠만 못 쓰게 (카카오 로그인)
-//   GET /auth/providers                  {kakao} 카카오 로그인을 쓸 수 있는지 (비밀값이 있는지)
+//   GET /auth/providers                  {kakao, apple} 카카오 로그인을 쓸 수 있는지 (비밀값이 있는지), 애플 로그인(아이폰 앱)
+//   POST /auth/apple                     애플 로그인 (아이폰 앱, apple.ts)
 //   POST /auth/kakao/start · GET /auth/kakao/callback · POST /auth/kakao/finish   카카오 로그인 (kakao.ts)
-//   GET/PUT /api/me {nickname}           닉네임 (+ kakao: 카카오 연결 여부)
+//   GET/PUT /api/me {nickname}           닉네임 (+ kakao·apple: 로그인 연결 여부)
 //   GET /api/courses                     내 코스 목록
 //   PUT /api/courses/{id}                코스 올리기 (같은 id면 덮어씀)
 //   DELETE /api/courses/{id}             코스 지우기 (이 코스의 기록이 남아 있으면 409)
@@ -38,6 +39,7 @@ import { connectRoom, createRoom, joinRoom, roomAction, roomRoute, roomState } f
 import { searchPlaces } from './places';
 import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
+import { finishApple } from './apple';
 
 export { LiveRoom } from './live';
 export { GroupRoom } from './group';
@@ -113,7 +115,7 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
 
   if (path === '/auth/providers') {
     if (method !== 'GET') throw new HttpError(405);
-    return json(200, headers, { kakao: kakaoEnabled(env) });
+    return json(200, headers, { kakao: kakaoEnabled(env), apple: true });
   }
 
   if (path === '/auth/kakao/start') {
@@ -127,6 +129,11 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
   if (path === '/auth/kakao/finish') {
     if (method !== 'POST') throw new HttpError(405);
     return json(200, headers, await finishKakao(req, env, await readJson(req, 4096), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
+  }
+
+  if (path === '/auth/apple') {
+    if (method !== 'POST') throw new HttpError(405);
+    return json(200, headers, await finishApple(req, env, await readJson(req, 16384), req.headers.get('CF-Connecting-IP') ?? 'unknown'));
   }
 
   if (path === '/api/rooms') {

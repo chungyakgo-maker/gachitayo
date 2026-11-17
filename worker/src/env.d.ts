@@ -23,6 +23,12 @@ declare namespace Cloudflare {
     /** 네이버 클라우드 NAVER API HUB 지역 검색 Client ID·Secret (장소 검색). 없으면 검색을 끈다 */
     NAVER_CLIENT_ID?: string;
     NAVER_CLIENT_SECRET?: string;
+    /** 애플 로그인 연결 끊기용 (앱 로그인 설계): Sign in with Apple 키(.p8 내용)·키 ID·팀 ID. 없으면 로그인은 되고 끊기만 못 한다 */
+    APPLE_SIGNIN_KEY_P8?: string;
+    APPLE_SIGNIN_KEY_ID?: string;
+    APPLE_TEAM_ID?: string;
+    /** 아이폰 앱 번들 ID (없으면 com.dgo.app) */
+    APPLE_BUNDLE_ID?: string;
     /** 테스트에서만: 적용할 D1 마이그레이션 */
     TEST_MIGRATIONS?: import('cloudflare:test').D1Migration[];
   }

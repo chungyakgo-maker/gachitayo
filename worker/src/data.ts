@@ -1,5 +1,6 @@
 // 기록 표 API (사양서 6.5): 코스·세션·랩·닉네임. 같은 id면 덮어쓰고(upsert), 다른 사람 행은 403.
 import { ROOM_TTL_MS } from './group';
+import { revokeApple } from './apple';
 import { HttpError, UUID_RE } from './http';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -30,10 +31,12 @@ function pair(v: unknown, what: string): [number, number] {
 // ── 닉네임 ────────────────────────────────────────────
 
 export async function getMe(env: Cloudflare.Env, userId: string) {
-  const row = await env.DB.prepare("SELECT id, nickname, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'kakao') AS kakao FROM users WHERE id = ?")
+  const row = await env.DB.prepare(
+    "SELECT id, nickname, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'kakao') AS kakao, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'apple') AS apple FROM users WHERE id = ?",
+  )
     .bind(userId)
-    .first<{ id: string; nickname: string; kakao: number }>();
-  return { userId: row!.id, nickname: row!.nickname, kakao: row!.kakao === 1 };
+    .first<{ id: string; nickname: string; kakao: number; apple: number }>();
+  return { userId: row!.id, nickname: row!.nickname, kakao: row!.kakao === 1, apple: row!.apple === 1 };
 }
 
 export async function putMe(env: Cloudflare.Env, userId: string, nickname: string) {
@@ -48,6 +51,9 @@ export async function putMe(env: Cloudflare.Env, userId: string, nickname: strin
  * 그룹 주행 방(내가 만든 방은 나가고 지움, 방 코드 오답 기록)
  */
 export async function deleteAccount(env: Cloudflare.Env, userId: string, now = Date.now()): Promise<{ ok: true; files: number }> {
+  // 애플 로그인 연결을 끊는다 (애플 규칙). 실패해도 계정은 지운다
+  const apple = await env.DB.prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?').bind(userId).first<{ refresh_token: string }>();
+  if (apple) await revokeApple(env, apple.refresh_token, now);
   // 내가 만든 방(24시간 안)에서는 나간다 (다른 사람 방은 앱이 지우기 전에 나간다)
   const { results: myRooms } = await env.DB.prepare('SELECT id FROM rooms WHERE host_id = ? AND created_at > ?').bind(userId, now - ROOM_TTL_MS).all<{ id: string }>();
   for (const r of myRooms) {
@@ -74,6 +80,7 @@ export async function deleteAccount(env: Cloudflare.Env, userId: string, now = D
     del('DELETE FROM presence WHERE user_id = ?', userId),
     del('DELETE FROM friend_code_misses WHERE user_id = ?', userId),
     del('DELETE FROM identities WHERE user_id = ?', userId),
+    del('DELETE FROM apple_tokens WHERE user_id = ?', userId),
     del('DELETE FROM user_tokens WHERE user_id = ?', userId),
     del('DELETE FROM oauth_states WHERE user_id = ?', userId),
     del('DELETE FROM route_usage WHERE user_id = ?', userId),

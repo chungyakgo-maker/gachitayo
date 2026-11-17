@@ -37,7 +37,7 @@ describe('여러 기기 열쇠·로그아웃·providers', () => {
     const t2 = await issueToken(env, u.userId);
     const r = await me(t2);
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ userId: u.userId, nickname: '민수', kakao: false });
+    expect(await r.json()).toEqual({ userId: u.userId, nickname: '민수', kakao: false, apple: false });
   });
 
   it('로그아웃하면 그 열쇠만 401, 같은 계정의 다른 열쇠는 그대로', async () => {
@@ -61,9 +61,9 @@ describe('여러 기기 열쇠·로그아웃·providers', () => {
   });
 
   it('providers: 카카오 비밀값이 있으면 kakao: true, 없으면 false', async () => {
-    expect(await (await call('GET', '/auth/providers')).json()).toEqual({ kakao: true });
+    expect(await (await call('GET', '/auth/providers')).json()).toEqual({ kakao: true, apple: true });
     const r = await handle(req('GET', '/auth/providers'), { ...env, KAKAO_REST_API_KEY: undefined });
-    expect(await r.json()).toEqual({ kakao: false });
+    expect(await r.json()).toEqual({ kakao: false, apple: true });
   });
 
   it('카카오가 연결된 계정은 /api/me가 kakao: true', async () => {
@@ -147,6 +147,22 @@ describe('카카오 시작·콜백·마치기', () => {
     expect(r.status).toBe(400);
   });
 
+  it('아이폰 앱: returnTo가 정확히 dgo://auth/kakao면 콜백이 앱 주소로 state·번호를 돌려준다 (다른 앱 주소는 400)', async () => {
+    kakao = { id: nextKakaoId(), nickname: 'x' };
+    const s = await start({ returnTo: 'dgo://auth/kakao' });
+    expect(s.res.status).toBe(200);
+    const cb = await callback(`code=abc&state=${s.state}`);
+    const loc = new URL(cb.headers.get('Location')!);
+    expect(`${loc.protocol}//${loc.host}${loc.pathname}`).toBe('dgo://auth/kakao');
+    expect(loc.searchParams.get('state')).toBe(s.state);
+    expect(loc.searchParams.get('pin')).toMatch(/^\d{6}$/);
+    for (const bad of ['dgo://auth/other', 'dgo://evil', 'other://auth/kakao', 'dgo://auth/kakao#x']) expect((await start({ returnTo: bad })).res.status).toBe(400);
+    // 취소도 앱 주소로
+    const s2 = await start({ returnTo: 'dgo://auth/kakao' });
+    const c2 = await callback(`error=access_denied&state=${s2.state}`);
+    expect(new URL(c2.headers.get('Location')!).searchParams.get('error')).toBe('cancelled');
+  });
+
   it('카카오 비밀값이 없으면 시작은 503', async () => {
     const r = await handle(req('POST', '/auth/kakao/start', { body: { returnTo: RETURN_TO, verifierHash: 'a'.repeat(64) } }), { ...env, KAKAO_CLIENT_SECRET: undefined });
     expect(r.status).toBe(503);
@@ -187,7 +203,7 @@ describe('카카오 시작·콜백·마치기', () => {
     const r = await login({ kakaoId: nextKakaoId(), nickname: '드리프트왕' });
     expect(r.kind).toBe('created');
     expect(r.nickname).toBe('드리프트왕');
-    expect(await (await me(r.token)).json()).toEqual({ userId: r.userId, nickname: '드리프트왕', kakao: true });
+    expect(await (await me(r.token)).json()).toEqual({ userId: r.userId, nickname: '드리프트왕', kakao: true, apple: false });
   });
 
   it('처음 보는 카카오 + 익명 B → B에 연결 (닉네임은 B 것 그대로)', async () => {
