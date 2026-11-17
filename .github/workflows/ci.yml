@@ -181,11 +181,15 @@ jobs:
           NCP_MAP_CLIENT_SECRET: ${{ secrets.NCP_MAP_CLIENT_SECRET }}
           NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
           NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          # 애플 로그인 연결 끊기 (앱 로그인 설계 2026-11-17): Sign in with Apple 키·키 ID·팀 ID
+          APPLE_SIGNIN_KEY_P8: ${{ secrets.APPLE_SIGNIN_KEY_P8 }}
+          APPLE_SIGNIN_KEY_ID: ${{ secrets.APPLE_SIGNIN_KEY_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           secrets="$RUNNER_TEMP/worker-secrets.json"
           (umask 077; node -e '
             const e = process.env;
-            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"];
+            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET", "APPLE_SIGNIN_KEY_P8", "APPLE_SIGNIN_KEY_ID", "APPLE_TEAM_ID"];
             const o = {};
             for (const n of names) if ((e[n] || "").trim()) o[n] = e[n].trim();
             require("fs").writeFileSync(process.argv[1], JSON.stringify(o));
@@ -216,7 +220,8 @@ jobs:
           pre=$(check -X OPTIONS -H "Origin: $origin" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
           other=$(check -H 'Origin: https://example.com' "$API_URL/api/me")
           # 아이폰 앱 디고 (사양서 13.3)
-          app=$(check -X OPTIONS -H "Origin: capacitor://localhost" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
+          # 새 서버가 퍼지기 전에 확인하면 예전 서버가 대답할 수 있어 잠깐씩 다시 본다 (2026-11-17 거짓 실패)
+          for i in $(seq 1 12); do app=$(check -X OPTIONS -H "Origin: capacitor://localhost" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me"); [ "$app" = 204 ] && break; sleep 5; done
           echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 아이폰 앱 사전 요청: $app (204) · 다른 주소: $other (403)"
           [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$app" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
           echo "카카오 로그인: $(curl -s --max-time 20 -H "Origin: $origin" "$API_URL/auth/providers")"

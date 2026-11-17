@@ -4,7 +4,10 @@
 //   POST /auth/kakao/finish {state, verifier, pin}    (+시작 때 계정이 있었으면 그 열쇠) → {userId, token, nickname, kind}
 // 계정은 마치기에서만 바꾼다(verifier·번호·열쇠 확인 뒤). 콜백은 카카오 회원번호·닉네임과 번호만 적는다.
 // 남이 보낸 링크로 피해자가 카카오를 거쳐도, 시작한 사람(verifier)과 피해자 화면의 번호가 둘 다 있어야 마칠 수 있다.
-import { bearer, checkSignupLimit, newToken, newUserStatements, revokeTokenStatements, sha256Hex, userOfToken } from './auth';
+import { bearer, sha256Hex, userOfToken } from './auth';
+import { signInWithIdentity, type LoginKind } from './login';
+
+export { mergeUsers, type LoginKind } from './login';
 import { HttpError } from './http';
 
 /** 로그인 한 번의 유효 시간 */
@@ -14,10 +17,11 @@ export const START_LIMIT_PER_HOUR = 30;
 /** 번호(pin)·verifier를 틀릴 수 있는 횟수 (이 횟수째에 그 로그인은 끝) */
 export const PIN_TRIES = 5;
 
-export type LoginKind = 'created' | 'linked' | 'login' | 'merged' | 'switched';
 
 export const kakaoEnabled = (env: Cloudflare.Env): boolean => Boolean(env.KAKAO_REST_API_KEY && env.KAKAO_CLIENT_SECRET);
 const redirectUriOf = (req: Request) => `${new URL(req.url).origin}/auth/kakao/callback`;
+/** 아이폰 앱으로 돌아가는 주소 (앱 로그인 설계 2026-11-17): 앱은 iOS 로그인 창이 이 주소를 받아 마친다 */
+export const APP_RETURN = 'dgo://auth/kakao';
 
 const b64url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes))
@@ -71,15 +75,20 @@ export async function startKakao(req: Request, env: Cloudflare.Env, body: unknow
   const b = (body ?? {}) as { returnTo?: unknown; verifierHash?: unknown };
   if (typeof b.verifierHash !== 'string' || !/^[0-9a-f]{64}$/.test(b.verifierHash)) throw new HttpError(400, '잘못된 verifierHash');
   if (typeof b.returnTo !== 'string') throw new HttpError(400, '잘못된 returnTo');
-  let back: URL;
-  try {
-    back = new URL(b.returnTo);
-  } catch {
-    throw new HttpError(400, '잘못된 returnTo');
+  let returnTo: string;
+  if (b.returnTo === APP_RETURN) returnTo = APP_RETURN;
+  else {
+    let back: URL;
+    try {
+      back = new URL(b.returnTo);
+    } catch {
+      throw new HttpError(400, '잘못된 returnTo');
+    }
+    // 열린 리다이렉트 금지: 웹앱 출처, 또는 정확히 아이폰 앱 주소만
+    if (back.origin !== env.ALLOWED_ORIGIN) throw new HttpError(400, '허용하지 않은 returnTo');
+    back.hash = '';
+    returnTo = back.href;
   }
-  // 열린 리다이렉트 금지: 웹앱 출처만
-  if (back.origin !== env.ALLOWED_ORIGIN) throw new HttpError(400, '허용하지 않은 returnTo');
-  back.hash = '';
   // 열쇠를 보냈으면 그 계정에서 시작한 로그인 (연결·합치기 대상)
   const token = bearer(req);
   const userId = token ? await userOfToken(env, token) : null;
@@ -93,7 +102,7 @@ export async function startKakao(req: Request, env: Cloudflare.Env, body: unknow
   await env.DB.batch([
     // 시작 횟수를 세려고 1시간 동안 남긴다 (유효 시간은 10분)
     env.DB.prepare('DELETE FROM oauth_states WHERE created_at < ?').bind(hourAgo),
-    env.DB.prepare('INSERT INTO oauth_states (state, verifier_hash, user_id, return_to, ip, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(state, b.verifierHash, userId, back.href, ip, now),
+    env.DB.prepare('INSERT INTO oauth_states (state, verifier_hash, user_id, return_to, ip, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(state, b.verifierHash, userId, returnTo, ip, now),
   ]);
   return { url: kakaoAuthorizeUrl(env, redirectUriOf(req), state) };
 }
@@ -119,8 +128,12 @@ function expiredPage(): Response {
   return new Response(html, { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
-const back = (row: StateRow, q: Record<string, string>) =>
-  new Response(null, { status: 302, headers: { Location: `${row.return_to}#/auth/kakao?${new URLSearchParams({ state: row.state, ...q }).toString()}`, 'Cache-Control': 'no-store' } });
+const back = (row: StateRow, q: Record<string, string>) => {
+  const query = new URLSearchParams({ state: row.state, ...q }).toString();
+  // 웹은 웹앱 주소#/auth/kakao?…, 아이폰 앱은 dgo://auth/kakao?…
+  const location = row.return_to === APP_RETURN ? `${APP_RETURN}?${query}` : `${row.return_to}#/auth/kakao?${query}`;
+  return new Response(null, { status: 302, headers: { Location: location, 'Cache-Control': 'no-store' } });
+};
 
 const pinHash = (state: string, pin: string) => sha256Hex(`${state}:${pin}`);
 
@@ -149,27 +162,6 @@ export async function kakaoCallback(req: Request, env: Cloudflare.Env, now = Dat
 
 // ── 마치기 ────────────────────────────────────────────
 
-const identityOf = (env: Cloudflare.Env, kakaoId: string) =>
-  env.DB.prepare("SELECT user_id FROM identities WHERE provider = 'kakao' AND subject = ?").bind(kakaoId).first<{ user_id: string }>();
-const hasKakao = async (env: Cloudflare.Env, userId: string) =>
-  (await env.DB.prepare("SELECT 1 AS x FROM identities WHERE user_id = ? AND provider = 'kakao'").bind(userId).first()) !== null;
-
-/** 합치기 (5.4): 익명 B의 코스·기록·랩·친구를 A로 옮기고 B를 지운다 (batch 한 번 = 한 덩어리).
- *  파일은 R2에서 옮기지 않는다: 기록 행에 저장된 키(B 폴더)로 파일 게이트웨이가 찾아 준다 */
-export function mergeUsers(env: Cloudflare.Env, from: string, into: string): D1PreparedStatement[] {
-  const db = env.DB;
-  return [
-    db.prepare('UPDATE courses SET owner_id = ? WHERE owner_id = ?').bind(into, from),
-    db.prepare('UPDATE sessions SET owner_id = ? WHERE owner_id = ?').bind(into, from),
-    db.prepare('UPDATE laps SET owner_id = ? WHERE owner_id = ?').bind(into, from),
-    db.prepare('INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) SELECT ?, friend_id, created_at FROM friends WHERE user_id = ? AND friend_id != ?').bind(into, from, into),
-    db.prepare('INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) SELECT user_id, ?, created_at FROM friends WHERE friend_id = ? AND user_id != ?').bind(into, from, into),
-    db.prepare('DELETE FROM friends WHERE user_id = ? OR friend_id = ?').bind(from, from),
-    db.prepare('DELETE FROM presence WHERE user_id = ?').bind(from),
-    db.prepare('DELETE FROM users WHERE id = ?').bind(from),
-  ];
-}
-
 export async function finishKakao(req: Request, env: Cloudflare.Env, body: unknown, ip: string, now = Date.now()): Promise<{ userId: string; token: string; nickname: string; kind: LoginKind }> {
   const b = (body ?? {}) as { state?: unknown; verifier?: unknown; pin?: unknown };
   if (typeof b.state !== 'string' || b.state.length < 16 || b.state.length > 100) throw new HttpError(400, '잘못된 state');
@@ -196,39 +188,6 @@ export async function finishKakao(req: Request, env: Cloudflare.Env, body: unkno
     throw new HttpError(403, '번호가 맞지 않아요');
   }
 
-  // 5.3 규칙
-  const kakaoId = row.kakao_id;
-  const known = await identityOf(env, kakaoId);
-  const startUser = row.user_id !== null && (await env.DB.prepare('SELECT 1 AS x FROM users WHERE id = ?').bind(row.user_id).first()) !== null ? row.user_id : null;
-  const startLinked = startUser !== null && (await hasKakao(env, startUser));
-  const iso = new Date(now).toISOString();
-  const stmts: D1PreparedStatement[] = [];
-  let userId: string;
-  let kind: LoginKind;
-  if (!known) {
-    if (startUser && !startLinked) {
-      userId = startUser;
-      kind = 'linked';
-    } else {
-      await checkSignupLimit(env, ip, now);
-      userId = crypto.randomUUID();
-      kind = 'created';
-      stmts.push(...newUserStatements(env, userId, kakaoNickname(row.kakao_nickname), await sha256Hex(newToken()), ip, now));
-    }
-    stmts.push(env.DB.prepare("INSERT INTO identities (provider, subject, user_id, created_at) VALUES ('kakao', ?, ?, ?)").bind(kakaoId, userId, iso));
-  } else {
-    userId = known.user_id;
-    if (!startUser || startUser === userId) kind = 'login';
-    else if (!startLinked) {
-      kind = 'merged';
-      stmts.push(...mergeUsers(env, startUser, userId));
-    } else kind = 'switched';
-  }
-  // 이 폰의 예전 열쇠는 못 쓰게 (새 열쇠로 바꾼다)
-  if (token && caller) stmts.push(...(await revokeTokenStatements(env, token)));
-  const fresh = newToken();
-  stmts.push(env.DB.prepare('INSERT INTO user_tokens (token_hash, user_id, created_at) VALUES (?, ?, ?)').bind(await sha256Hex(fresh), userId, iso));
-  await env.DB.batch(stmts);
-  const nick = await env.DB.prepare('SELECT nickname FROM users WHERE id = ?').bind(userId).first<{ nickname: string }>();
-  return { userId, token: fresh, nickname: nick!.nickname, kind };
+  // 5.3 규칙 (카카오·애플 공통, login.ts)
+  return signInWithIdentity(env, { provider: 'kakao', subject: row.kakao_id, nickname: kakaoNickname(row.kakao_nickname), startUserId: row.user_id, token: caller ? token : null }, ip, now);
 }
