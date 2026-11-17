@@ -50,7 +50,7 @@ jobs:
   deploy:
     name: GitHub Pages 배포
     needs: [test, worker-test, deploy-worker]
-    # 서버 배포가 실패하거나 건너뛰어도 웹앱은 배포한다 (그때는 폰에만 저장하는 빌드)
+    # 서버 배포가 실패하거나 건너뛰어도 웹앱은 배포한다. 서버 주소는 지금 서버(그대로 돌고 있음)로 (2026-11-16 사고: 주소 없이 배포돼 로그인이 풀렸다)
     if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.test.result == 'success' && needs.worker-test.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -73,7 +73,7 @@ jobs:
         run: if [ -n "$K" ]; then echo "KAKAO_JS_KEY 있음 · 카톡 카드로 초대"; else echo "KAKAO_JS_KEY 없음 · 초대는 폰 공유 창·링크 복사"; fi
       - name: 빌드
         run: |
-          # 서버 주소 없이 만들면 폰에만 저장하는 앱이 되어 모두 로그인이 풀린다. 그럴 때는 배포하지 않는다 (2026-11-16 사고)
+          # 서버 주소 없이 만들면 폰에만 저장하는 앱이 되어 모두 로그인이 풀린다. 그럴 때는 배포하지 않는다
           [ -n "$VITE_API_URL" ] || { echo "::error::서버 주소가 비어 있어 배포하지 않아요"; exit 1; }
           echo "서버 주소: $VITE_API_URL"
           npm run build
@@ -215,8 +215,10 @@ jobs:
           for i in $(seq 1 12); do code=$(check -H "Origin: $origin" "$API_URL/api/me"); [ "$code" = 401 ] && break; sleep 5; done
           pre=$(check -X OPTIONS -H "Origin: $origin" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
           other=$(check -H 'Origin: https://example.com' "$API_URL/api/me")
-          echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 다른 주소: $other (403)"
-          [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
+          # 아이폰 앱 디고 (사양서 13.3)
+          app=$(check -X OPTIONS -H "Origin: capacitor://localhost" -H 'Access-Control-Request-Method: PUT' "$API_URL/api/me")
+          echo "열쇠 없이 내 정보: $code (401이어야 함) · 앱 주소에서 사전 요청: $pre (204) · 아이폰 앱 사전 요청: $app (204) · 다른 주소: $other (403)"
+          [ "$code" = 401 ] && [ "$pre" = 204 ] && [ "$app" = 204 ] && [ "$other" = 403 ] || { echo "::error::서버가 예상과 다르게 응답합니다"; exit 1; }
           echo "카카오 로그인: $(curl -s --max-time 20 -H "Origin: $origin" "$API_URL/auth/providers")"
           # 선 지도 (사양서 8.9): 지도 데이터가 올라가 있으면 정보·서울 타일·글자 조각을 확인한다
           info=$(check -H "Origin: $origin" "$API_URL/map/info")

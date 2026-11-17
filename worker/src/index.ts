@@ -28,7 +28,7 @@
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
 import { authenticate, logout, signup, validNickname } from './auth';
-import { deleteCourse, deleteSession, getMe, listCourses, listSessions, putCourse, putLaps, putMe, putSession } from './data';
+import { deleteAccount, deleteCourse, deleteSession, getMe, listCourses, listSessions, putCourse, putLaps, putMe, putSession } from './data';
 import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
@@ -41,7 +41,7 @@ import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 
 export { LiveRoom } from './live';
 export { GroupRoom } from './group';
-import { corsHeaders, errorResponse, HttpError, json, readJson, UUID_RE } from './http';
+import { corsHeaders, errorResponse, HttpError, isAllowedOrigin, json, readJson, UUID_RE } from './http';
 
 /** 표 API 본문 최대 크기 (긴 코스 중심선, 랩 trace 묶음) */
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
@@ -49,7 +49,7 @@ const MAX_JSON_BYTES = 4 * 1024 * 1024;
 export async function handle(req: Request, env: Cloudflare.Env, ctx?: ExecutionContext): Promise<Response> {
   const origin = req.headers.get('Origin');
   // 브라우저 요청인데 출처가 다르면 막는다 (Origin이 없는 요청은 브라우저 밖이라 CORS와 무관)
-  if (origin !== null && origin !== env.ALLOWED_ORIGIN) return errorResponse(403, new Headers(), '허용하지 않은 출처');
+  if (origin !== null && !isAllowedOrigin(origin, env)) return errorResponse(403, new Headers(), '허용하지 않은 출처');
   const headers = corsHeaders(origin, env);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
   try {
@@ -191,6 +191,8 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
       const body = await readJson(req, 4096);
       return json(200, headers, await putMe(env, userId, validNickname((body as { nickname?: unknown } | null)?.nickname)));
     }
+    // 계정 삭제 (사양서 13.3)
+    if (method === 'DELETE') return json(200, headers, await deleteAccount(env, userId));
     throw new HttpError(405);
   }
 
