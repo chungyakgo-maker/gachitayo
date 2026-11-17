@@ -16,6 +16,7 @@ public class DgoAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPres
     ]
 
     private var webSession: ASWebAuthenticationSession?
+    private var webCall: CAPPluginCall?
     private var appleCall: CAPPluginCall?
 
     private func anchor() -> ASPresentationAnchor {
@@ -30,8 +31,15 @@ public class DgoAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPres
             return
         }
         DispatchQueue.main.async {
+            // 열려 있던 창이 있으면 그 호출은 취소로 끝내고 창을 닫는다 (자바스크립트가 기다리다 멈추지 않게)
+            self.webCall?.resolve(["cancelled": true])
+            self.webCall = nil
+            self.webSession?.cancel()
             let session = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme) { [weak self] callbackURL, error in
-                self?.webSession = nil
+                // 이미 다른 창으로 바뀐 호출이면 무시 (한 번만 끝낸다)
+                guard let self = self, self.webCall === call else { return }
+                self.webCall = nil
+                self.webSession = nil
                 if let e = error as? ASWebAuthenticationSessionError, e.code == .canceledLogin {
                     call.resolve(["cancelled": true])
                     return
@@ -46,8 +54,10 @@ public class DgoAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPres
             // 사파리에 이미 카카오 로그인이 되어 있으면 그대로 쓴다
             session.prefersEphemeralWebBrowserSession = false
             self.webSession = session
+            self.webCall = call
             if !session.start() {
                 self.webSession = nil
+                self.webCall = nil
                 call.reject("로그인 창을 열지 못했어요")
             }
         }
@@ -68,6 +78,8 @@ public class DgoAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPres
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self
             controller.presentationContextProvider = self
+            // 끝나지 않은 앞 호출은 취소로 끝낸다 (자바스크립트가 기다리다 멈추지 않게)
+            self.appleCall?.resolve(["cancelled": true])
             self.appleCall = call
             controller.performRequests()
         }

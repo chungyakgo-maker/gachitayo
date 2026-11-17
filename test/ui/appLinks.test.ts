@@ -31,5 +31,8 @@ describe('앱 링크', () => {
     expect(window.location.hash).toBe('#/join/111111');
     h.listeners[0]!({ url: 'kakao89c5ba572b46879e01420e651551d84c://kakaolink?code=482917' });
     expect(window.location.hash).toBe('#/join/482917');
+    // 카카오 로그인이 카카오톡 앱을 거쳐 앱 링크로 돌아오면 마치기 화면으로
+    h.listeners[0]!({ url: 'dgo://auth/kakao?state=SSS&pin=123456' });
+    expect(window.location.hash).toBe('#/auth/kakao?state=SSS&pin=123456');
   });
 });

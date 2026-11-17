@@ -56,7 +56,8 @@ function LoginAccount() {
     setBusy(true);
     setError(null);
     try {
-      await startKakaoLogin('#/settings');
+      // 앱에서 로그인 창을 닫으면 버튼을 다시 쓸 수 있게 (검토 지적)
+      if ((await startKakaoLogin('#/settings')) === 'cancelled') setBusy(false);
     } catch (e) {
       setError(friendlyServerError(e));
       setBusy(false);
@@ -67,6 +68,8 @@ function LoginAccount() {
     setError(null);
     const r = await startAppleLogin();
     setBusy(false);
+    // 이 폰의 계정이 다른 계정으로 바뀌었으면 화면을 다시 연다 (예전 계정의 친구·방 연결 비우기)
+    if (r.ok && r.changed) window.location.reload();
     if (!r.ok && 'error' in r) setError(r.error);
   };
   const askLogout = async () => {
@@ -90,12 +93,22 @@ function LoginAccount() {
     <>
       <KakaoPendingCard />
       {signedIn(acc) ? (
-        <div className="card-row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <span style={{ fontWeight: 600 }}>{[acc.kakao && '카카오', acc.apple && 'Apple'].filter(Boolean).join(' · ')} 연결됨</span>
-          <button type="button" className="btn" disabled={busy} onClick={() => void askLogout()}>
-            로그아웃
-          </button>
-        </div>
+        <>
+          <div className="card-row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ fontWeight: 600 }}>{[acc.kakao && '카카오', acc.apple && 'Apple'].filter(Boolean).join(' · ')} 연결됨</span>
+            <button type="button" className="btn" disabled={busy} onClick={() => void askLogout()}>
+              로그아웃
+            </button>
+          </div>
+          {/* 아직 안 붙인 로그인도 이 계정에 붙일 수 있게 (검토 지적: 애플만 붙은 계정은 웹에서 들어올 수 없었다) */}
+          {((on && !acc.kakao) || (apple && !acc.apple)) && (
+            <div className="card-col" style={{ gap: 8 }}>
+              {on && !acc.kakao && <KakaoButton label="카카오도 연결하기" disabled={busy} onClick={() => void login()} />}
+              {apple && !acc.apple && <AppleButton label="Apple도 연결하기" disabled={busy} onClick={() => void appleLogin()} />}
+              <span className="sub">{on && !acc.kakao ? '카카오를 연결하면 웹에서도 이 계정으로 들어올 수 있어요' : '어느 쪽으로 로그인해도 같은 계정으로 들어와요'}</span>
+            </div>
+          )}
+        </>
       ) : (
         (on || apple) &&
         (acc.status === 'ready' || acc.lost) && (

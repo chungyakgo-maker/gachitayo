@@ -118,7 +118,7 @@ async function sha256Hex(s: string): Promise<string> {
 
 /** 카카오 로그인 시작: 서버에서 카카오 주소를 받아 이동한다. from: 마친 뒤 돌아갈 화면.
  *  아이폰 앱은 iOS 로그인 창으로 열고, 돌아온 dgo://auth/kakao?state&pin 을 마치기 화면(#/auth/kakao)으로 넘긴다 */
-export async function startKakaoLogin(from: string): Promise<void> {
+export async function startKakaoLogin(from: string): Promise<'left' | 'returned' | 'cancelled'> {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const returnTo = isApp() ? APP_KAKAO_RETURN : `${window.location.origin}${window.location.pathname}`;
   const r = await apiFetch<{ url: string }>('POST', '/auth/kakao/start', { token: getAuth()?.token, body: { returnTo, verifierHash: await sha256Hex(verifier) } });
@@ -126,15 +126,23 @@ export async function startKakaoLogin(from: string): Promise<void> {
   writeStored({ state, verifier, from, startedAt: Date.now() });
   if (!isApp()) {
     kakaoNav.go(r.url);
-    return;
+    return 'left';
   }
-  const res = await DgoAuth.webAuth({ url: r.url, scheme: 'dgo' });
-  if (res.cancelled || !res.url) {
+  // 앱: 창을 닫거나 실패하면 진행 중 로그인을 지운다 (검토 지적: 남아 있으면 "다른 창에서 번호 넣기" 안내가 떴다)
+  let back: URL;
+  try {
+    const res = await DgoAuth.webAuth({ url: r.url, scheme: 'dgo' });
+    if (res.cancelled || !res.url) {
+      writeStored(null);
+      return 'cancelled';
+    }
+    back = new URL(res.url);
+  } catch (e) {
     writeStored(null);
-    return;
+    throw e;
   }
-  const back = new URL(res.url);
   window.location.hash = `#/auth/kakao${back.search}`;
+  return 'returned';
 }
 
 let afterLogin: () => void = () => {};
@@ -143,7 +151,7 @@ export function setAfterKakaoLogin(fn: () => void): void {
   afterLogin = fn;
 }
 
-export type FinishResult = { ok: true; kind: string } | { ok: false; error: string };
+export type FinishResult = { ok: true; kind: string; changed: boolean } | { ok: false; error: string };
 let inflight: { state: string; p: Promise<FinishResult> } | null = null;
 /** 이번 실행에서 마친 로그인 (화면이 늦게 떠도 같은 결과를 준다) */
 let finished: { state: string; from: string; result: FinishResult } | null = null;
@@ -167,9 +175,9 @@ export function finishKakaoLogin(state: string, pin: string): Promise<FinishResu
           body: { state, verifier: pending.verifier, pin },
         }),
       );
-      adoptLogin({ userId: r.userId, token: r.token, nickname: r.nickname, kakao: true });
+      const changed = adoptLogin({ userId: r.userId, token: r.token, nickname: r.nickname, kakao: true });
       writeStored(null);
-      const result: FinishResult = { ok: true, kind: r.kind };
+      const result: FinishResult = { ok: true, kind: r.kind, changed };
       finished = { state, from: pending.from, result };
       afterLogin();
       return result;

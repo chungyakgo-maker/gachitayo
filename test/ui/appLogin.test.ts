@@ -39,7 +39,7 @@ describe('카카오 로그인 (아이폰 앱)', () => {
     const k = await import('../../src/app/kakaoLogin');
     fetchMock.mockResolvedValueOnce(json(200, { url: `https://kauth.kakao.com/oauth/authorize?state=${STATE}` }));
     h.web.mockResolvedValueOnce({ url: `dgo://auth/kakao?state=${STATE}&pin=123456` });
-    await k.startKakaoLogin('#/settings');
+    expect(await k.startKakaoLogin('#/settings')).toBe('returned');
     expect(body(0).returnTo).toBe('dgo://auth/kakao');
     expect(h.web).toHaveBeenCalledWith({ url: `https://kauth.kakao.com/oauth/authorize?state=${STATE}`, scheme: 'dgo' });
     expect(window.location.hash).toBe(`#/auth/kakao?state=${STATE}&pin=123456`);
@@ -50,9 +50,17 @@ describe('카카오 로그인 (아이폰 앱)', () => {
     const k = await import('../../src/app/kakaoLogin');
     fetchMock.mockResolvedValueOnce(json(200, { url: `https://kauth.kakao.com/oauth/authorize?state=${STATE}` }));
     h.web.mockResolvedValueOnce({ cancelled: true });
-    await k.startKakaoLogin('#/');
+    expect(await k.startKakaoLogin('#/')).toBe('cancelled');
     expect(k.pendingKakaoLogin()).toBeNull();
     expect(window.location.hash).toBe('#/');
+  });
+
+  it('로그인 창이 실패해도 진행 중 로그인을 지우고 오류를 알린다', async () => {
+    const k = await import('../../src/app/kakaoLogin');
+    fetchMock.mockResolvedValueOnce(json(200, { url: `https://kauth.kakao.com/oauth/authorize?state=${STATE}` }));
+    h.web.mockRejectedValueOnce(new Error('세션 실패'));
+    await expect(k.startKakaoLogin('#/')).rejects.toThrow('세션 실패');
+    expect(k.pendingKakaoLogin()).toBeNull();
   });
 
   it('앱에서는 애플 로그인도 켜진다 (서버가 apple: true)', async () => {
@@ -75,7 +83,7 @@ describe('애플 로그인 (아이폰 앱)', () => {
     fetchMock.mockResolvedValueOnce(json(200, { userId: 'u1', token: 'n'.repeat(43), nickname: '민수', kind: 'linked' }));
     fetchMock.mockResolvedValueOnce(json(200, { userId: 'u1', nickname: '민수', kakao: false, apple: true }));
     const r = await ap.startAppleLogin();
-    expect(r).toEqual({ ok: true, kind: 'linked' });
+    expect(r).toEqual({ ok: true, kind: 'linked', changed: false });
     expect(String(fetchMock.mock.calls[0]![0])).toBe(`${API}/auth/apple`);
     expect(new Headers((fetchMock.mock.calls[0]![1] as RequestInit).headers).get('Authorization')).toBe(`Bearer ${'t'.repeat(43)}`);
     const b = body(0);
@@ -84,6 +92,17 @@ describe('애플 로그인 (아이폰 앱)', () => {
     expect(acc.getAccountState()).toMatchObject({ status: 'ready', userId: 'u1', apple: true, onboarded: true });
     expect(localStorage.getItem('gachitayo.token')).toBe('n'.repeat(43));
     expect(after).toHaveBeenCalled();
+  });
+
+  it('첫 화면에 적은 닉네임이 있으면 애플이 준 이름보다 먼저 보낸다, 다른 계정으로 바뀌면 changed', async () => {
+    localStorage.setItem('gachitayo.token', 't'.repeat(43));
+    localStorage.setItem('gachitayo.userId', 'u-old');
+    const ap = await import('../../src/app/appleLogin');
+    h.apple.mockResolvedValueOnce({ identityToken: 'id.tok.en', authorizationCode: 'c', name: '홍길동' });
+    fetchMock.mockResolvedValueOnce(json(200, { userId: 'u-new', token: 'n'.repeat(43), nickname: '민수', kind: 'switched' }));
+    fetchMock.mockResolvedValueOnce(json(200, { userId: 'u-new', nickname: '민수', kakao: false, apple: true }));
+    expect(await ap.startAppleLogin('  민수 ')).toEqual({ ok: true, kind: 'switched', changed: true });
+    expect(body(0).nickname).toBe('민수');
   });
 
   it('애플 창을 닫으면 아무것도 바뀌지 않는다', async () => {

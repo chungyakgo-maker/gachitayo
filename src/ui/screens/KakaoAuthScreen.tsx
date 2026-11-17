@@ -30,7 +30,11 @@ export function KakaoAuthScreen() {
     void finishKakaoLogin(q.state, q.pin).then((r) => {
       if (!alive) return;
       // 번호가 든 주소는 기록에 남기지 않는다
-      if (r.ok) window.location.replace(back);
+      if (r.ok) {
+        window.location.replace(back);
+        // 이 폰의 계정이 다른 계정으로 바뀌었으면 화면을 다시 열어 예전 계정의 친구·방 연결을 비운다 (검토 지적)
+        if (r.changed) window.location.reload();
+      }
       else setError(r.error);
     });
     return () => {

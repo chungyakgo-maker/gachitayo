@@ -13,6 +13,10 @@ const TOKEN_URL = 'https://appleid.apple.com/auth/token';
 const REVOKE_URL = 'https://appleid.apple.com/auth/revoke';
 /** 애플 공개 키를 기억하는 시간 */
 const KEYS_TTL_MS = 3_600_000;
+/** 모르는 키 번호로 다시 받기는 이 간격에 한 번까지 (검토 지적: 아무 kid로 보내 애플 서버를 계속 부르게 하지 못하게) */
+const KEYS_REFRESH_MIN_MS = 60_000;
+/** 같은 애플 로그인을 다시 쓰지 못하게 기억하는 시간 (identityToken은 10분이면 만료) */
+const REPLAY_KEEP_MS = 3_600_000;
 
 const bundleId = (env: Cloudflare.Env) => env.APPLE_BUNDLE_ID || 'com.dgo.app';
 
@@ -30,7 +34,7 @@ export function resetAppleKeysForTest(): void {
   keyCache = null;
 }
 async function appleKeys(now: number, fresh = false): Promise<AppleJwk[]> {
-  if (!fresh && keyCache && now - keyCache.at < KEYS_TTL_MS) return keyCache.keys;
+  if (keyCache && now - keyCache.at < (fresh ? KEYS_REFRESH_MIN_MS : KEYS_TTL_MS)) return keyCache.keys;
   const r = await fetch(KEYS_URL);
   if (!r.ok) throw new HttpError(502, '애플 서버에 연결하지 못했어요');
   const keys = ((await r.json()) as { keys?: AppleJwk[] }).keys ?? [];
@@ -50,9 +54,11 @@ export async function verifyAppleToken(env: Cloudflare.Env, idToken: string, non
   if (parts.length !== 3) throw bad();
   let header: { alg?: string; kid?: string };
   let payload: { iss?: string; aud?: string | string[]; exp?: number; sub?: string; nonce?: string; email?: string };
+  let signature: Uint8Array;
   try {
     header = JSON.parse(new TextDecoder().decode(b64urlToBytes(parts[0]!)));
     payload = JSON.parse(new TextDecoder().decode(b64urlToBytes(parts[1]!)));
+    signature = b64urlToBytes(parts[2]!);
   } catch {
     throw bad();
   }
@@ -62,7 +68,7 @@ export async function verifyAppleToken(env: Cloudflare.Env, idToken: string, non
   if (!jwk) jwk = (await appleKeys(now, true)).find((k) => k.kid === header.kid);
   if (!jwk) throw bad();
   const key = await crypto.subtle.importKey('jwk', { kty: jwk.kty, n: jwk.n, e: jwk.e }, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
-  const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64urlToBytes(parts[2]!), new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
+  const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature, new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
   if (!ok) throw bad();
   const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
   if (payload.iss !== APPLE_ISS || !aud.includes(bundleId(env)) || typeof payload.exp !== 'number' || payload.exp * 1000 < now) throw bad();
@@ -85,8 +91,9 @@ async function clientSecret(env: Cloudflare.Env, now: number): Promise<string> {
   return `${head}.${body}.${b64url(sig)}`;
 }
 
-/** authorizationCode → refresh token (비밀값이 없거나 실패하면 null: 로그인은 막지 않는다) */
-export async function exchangeAppleCode(env: Cloudflare.Env, code: string, now = Date.now()): Promise<string | null> {
+/** authorizationCode → refresh token (비밀값이 없거나 실패하면 null: 로그인은 막지 않는다).
+ *  애플이 함께 준 id_token의 사용자 번호가 이 로그인과 같을 때만 쓴다 (검토 지적: 다른 사람의 code를 섞어 보내는 것 막기) */
+export async function exchangeAppleCode(env: Cloudflare.Env, code: string, sub: string, now = Date.now()): Promise<string | null> {
   if (!appleRevokeConfigured(env) || !code) return null;
   try {
     const r = await fetch(TOKEN_URL, {
@@ -95,8 +102,16 @@ export async function exchangeAppleCode(env: Cloudflare.Env, code: string, now =
       body: new URLSearchParams({ client_id: bundleId(env), client_secret: await clientSecret(env, now), code, grant_type: 'authorization_code' }).toString(),
     });
     if (!r.ok) return null;
-    const t = ((await r.json()) as { refresh_token?: unknown }).refresh_token;
-    return typeof t === 'string' && t ? t : null;
+    const j = (await r.json()) as { refresh_token?: unknown; id_token?: unknown };
+    // 애플 서버에서 바로 받은 id_token이라 서명은 따로 확인하지 않고 사용자 번호만 맞춘다
+    let tokenSub: unknown = null;
+    try {
+      tokenSub = typeof j.id_token === 'string' ? (JSON.parse(new TextDecoder().decode(b64urlToBytes(j.id_token.split('.')[1] ?? ''))) as { sub?: unknown }).sub : null;
+    } catch {
+      tokenSub = null;
+    }
+    if (tokenSub !== sub) return null;
+    return typeof j.refresh_token === 'string' && j.refresh_token ? j.refresh_token : null;
   } catch {
     return null;
   }
@@ -132,7 +147,12 @@ export async function finishApple(req: Request, env: Cloudflare.Env, body: unkno
   const caller = token ? await userOfToken(env, token) : null;
   if (token && !caller) throw new HttpError(401, '로그인 필요');
   const claims = await verifyAppleToken(env, b.identityToken, b.nonce, now);
-  const refresh = await exchangeAppleCode(env, code, now);
+  // 같은 애플 로그인(identityToken)은 한 번만 (검토 지적: 가로챈 요청을 다시 보내는 것 막기)
+  const tokenHash = await sha256Hex(b.identityToken);
+  await env.DB.prepare('DELETE FROM apple_seen WHERE at < ?').bind(now - REPLAY_KEEP_MS).run();
+  const fresh = await env.DB.prepare('INSERT OR IGNORE INTO apple_seen (token_hash, at) VALUES (?, ?)').bind(tokenHash, now).run();
+  if (!fresh.meta.changes) throw new HttpError(401, '애플 로그인을 확인하지 못했어요');
+  const refresh = await exchangeAppleCode(env, code, claims.sub, now);
   return signInWithIdentity(
     env,
     {

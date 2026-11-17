@@ -59,7 +59,7 @@ describe('카카오 로그인 시작·마치기 (앱)', () => {
     k.setAfterKakaoLogin(after);
     fetchMock.mockResolvedValueOnce(json(200, { userId: 'u9', token: 'n'.repeat(43), nickname: '드리프트왕', kind: 'created' }));
     const r = await k.finishKakaoLogin(STATE, '123456');
-    expect(r).toEqual({ ok: true, kind: 'created' });
+    expect(r).toMatchObject({ ok: true, kind: 'created' });
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ state: STATE, verifier: 'v'.repeat(43), pin: '123456' });
     expect(a.getAuth()).toEqual({ userId: 'u9', token: 'n'.repeat(43) });
     expect(a.getAccountState()).toMatchObject({ status: 'ready', kakao: true, onboarded: true, nickname: '드리프트왕', lost: false });

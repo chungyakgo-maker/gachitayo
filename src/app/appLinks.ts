@@ -3,6 +3,7 @@
 //   dgo://join/482917                                  (앱 주소 체계)
 //   kakao{네이티브 앱 키}://kakaolink?code=482917        (카톡 카드의 "앱에서 열기")
 //   https://chungyakgo-maker.github.io/gachitayo/#/join/482917 (웹 초대 링크)
+// 카카오 로그인 돌아오기 dgo://auth/kakao?state&pin 은 마치기 화면으로
 import { App } from '@capacitor/app';
 import { isApp } from '../platform';
 
@@ -22,7 +23,14 @@ export function parseJoinLink(url: string): string | null {
 }
 
 function go(url: string | undefined): void {
-  const code = url ? parseJoinLink(url) : null;
+  if (!url) return;
+  // 카카오 로그인이 카카오톡 앱을 거쳐 돌아오면 로그인 창 대신 앱 링크로 온다 (검토 지적): 마치기 화면으로.
+  // 이 폰의 verifier와 번호가 둘 다 있어야 마치므로 남이 보낸 링크로는 마칠 수 없다
+  if (url.startsWith('dgo://auth/kakao?')) {
+    window.location.hash = `#/auth/kakao?${url.slice('dgo://auth/kakao?'.length)}`;
+    return;
+  }
+  const code = parseJoinLink(url);
   if (code) window.location.hash = `#/join/${code}`;
 }
 

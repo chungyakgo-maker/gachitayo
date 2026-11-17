@@ -21,9 +21,10 @@ export function setAfterAppleLogin(fn: () => void): void {
   afterLogin = fn;
 }
 
-export type AppleResult = { ok: true; kind: string } | { ok: false; error: string } | { ok: false; cancelled: true };
+export type AppleResult = { ok: true; kind: string; changed: boolean } | { ok: false; error: string } | { ok: false; cancelled: true };
 
-export async function startAppleLogin(): Promise<AppleResult> {
+/** nickname: 첫 화면에 적은 닉네임 (있으면 애플이 준 이름보다 먼저, 검토 지적) */
+export async function startAppleLogin(nickname?: string): Promise<AppleResult> {
   const nonce = b64url(crypto.getRandomValues(new Uint8Array(32)));
   let res: Awaited<ReturnType<typeof DgoAuth.appleSignIn>>;
   try {
@@ -36,12 +37,12 @@ export async function startAppleLogin(): Promise<AppleResult> {
     const r = await whileFinishingLogin(() =>
       apiFetch<{ userId: string; token: string; nickname: string; kind: string }>('POST', '/auth/apple', {
         token: getAuth()?.token,
-        body: { identityToken: res.identityToken, authorizationCode: res.authorizationCode ?? '', nonce, nickname: res.name || undefined },
+        body: { identityToken: res.identityToken, authorizationCode: res.authorizationCode ?? '', nonce, nickname: nickname?.trim() || res.name || undefined },
       }),
     );
-    adoptLogin({ userId: r.userId, token: r.token, nickname: r.nickname, apple: true });
+    const changed = adoptLogin({ userId: r.userId, token: r.token, nickname: r.nickname, apple: true });
     afterLogin();
-    return { ok: true, kind: r.kind };
+    return { ok: true, kind: r.kind, changed };
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return { ok: false, error: '애플 로그인을 확인하지 못했어요. 다시 시도해 주세요' };
     return { ok: false, error: friendlyServerError(e) };

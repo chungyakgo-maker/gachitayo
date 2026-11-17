@@ -5,3 +5,9 @@ CREATE TABLE IF NOT EXISTS apple_tokens (
   refresh_token TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+
+-- 한 번 쓴 애플 로그인(identityToken 해시): 다시 보내면 거절 (1시간 보관)
+CREATE TABLE IF NOT EXISTS apple_seen (
+  token_hash TEXT PRIMARY KEY,
+  at INTEGER NOT NULL
+);

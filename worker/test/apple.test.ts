@@ -31,23 +31,30 @@ async function sha256Hex(s: string) {
 }
 async function idToken(o: { sub: string; nonce: string; aud?: string; exp?: number; key?: CryptoKey; alg?: string; iss?: string }) {
   const h = enc({ alg: o.alg ?? 'RS256', kid: 'k1' });
-  const p = enc({ iss: o.iss ?? 'https://appleid.apple.com', aud: o.aud ?? 'com.dgo.app', exp: o.exp ?? Math.floor(Date.now() / 1000) + 600, iat: Math.floor(Date.now() / 1000), sub: o.sub, nonce: await sha256Hex(o.nonce) });
+  const p = enc({ iss: o.iss ?? 'https://appleid.apple.com', aud: o.aud ?? 'com.dgo.app', exp: o.exp ?? Math.floor(Date.now() / 1000) + 600, iat: Math.floor(Date.now() / 1000), sub: o.sub, nonce: await sha256Hex(o.nonce), jti: crypto.randomUUID() });
   const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', o.key ?? rsa.privateKey, new TextEncoder().encode(`${h}.${p}`)));
   return `${h}.${p}.${b64url(sig)}`;
 }
 
 const tokenCalls: URLSearchParams[] = [];
 const revokeCalls: URLSearchParams[] = [];
+let keyFetches = 0;
+/** 애플 code 교환이 돌려줄 사용자 번호 (보통 로그인한 사람 것) */
+let codeSub = '';
 beforeEach(() => {
   resetAppleKeysForTest();
   tokenCalls.length = 0;
   revokeCalls.length = 0;
+  keyFetches = 0;
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (url === 'https://appleid.apple.com/auth/keys') return Response.json({ keys: [jwk] });
+    if (url === 'https://appleid.apple.com/auth/keys') {
+      keyFetches++;
+      return Response.json({ keys: [jwk] });
+    }
     if (url === 'https://appleid.apple.com/auth/token') {
       tokenCalls.push(new URLSearchParams(String(init?.body)));
-      return Response.json({ refresh_token: 'rt-1', access_token: 'at', id_token: 'x' });
+      return Response.json({ refresh_token: 'rt-1', access_token: 'at', id_token: `${enc({ alg: 'RS256' })}.${enc({ sub: codeSub })}.sig` });
     }
     if (url === 'https://appleid.apple.com/auth/revoke') {
       revokeCalls.push(new URLSearchParams(String(init?.body)));
@@ -61,7 +68,8 @@ afterEach(() => vi.restoreAllMocks());
 let subSeq = 0;
 const nextSub = () => `001234.apple${++subSeq}.0001`;
 const NONCE = 'n'.repeat(32);
-async function apple(o: { sub: string; token?: string; nickname?: string; e?: Cloudflare.Env; idt?: string; nonce?: string }) {
+async function apple(o: { sub: string; token?: string; nickname?: string; e?: Cloudflare.Env; idt?: string; nonce?: string; codeSub?: string }) {
+  codeSub = o.codeSub ?? o.sub;
   const body = { identityToken: o.idt ?? (await idToken({ sub: o.sub, nonce: NONCE })), authorizationCode: 'code-1', nonce: o.nonce ?? NONCE, nickname: o.nickname };
   return handle(req('POST', '/auth/apple', { token: o.token, body }), o.e ?? env);
 }
@@ -126,10 +134,31 @@ describe('애플 로그인', () => {
       await idToken({ sub, nonce: NONCE, iss: 'https://evil.example' }),
       await idToken({ sub, nonce: NONCE, alg: 'none' }),
       'not.a.jwt',
+      `${(await idToken({ sub, nonce: NONCE })).split('.').slice(0, 2).join('.')}.%%%`,
     ];
     for (const idt of bad) expect((await apple({ sub, idt })).status).toBe(401);
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM identities WHERE provider = 'apple' AND subject = ?").bind(sub).first<{ n: number }>();
     expect(n!.n).toBe(0);
+  });
+
+  it('같은 애플 로그인(identityToken)을 다시 보내면 401 (가로챈 요청 재사용 막기)', async () => {
+    const sub = nextSub();
+    const idt = await idToken({ sub, nonce: NONCE });
+    await ok(await apple({ sub, idt }));
+    expect((await apple({ sub, idt })).status).toBe(401);
+  });
+
+  it('모르는 키 번호로 계속 보내도 애플 공개 키는 1분에 한 번만 다시 받는다', async () => {
+    const h = enc({ alg: 'RS256', kid: 'nope' });
+    const p = enc({ sub: 'x' });
+    for (let i = 0; i < 5; i++) expect((await apple({ sub: 'x', idt: `${h}.${p}.AAAA` })).status).toBe(401);
+    expect(keyFetches).toBeLessThanOrEqual(2);
+  });
+
+  it('code 교환에서 애플이 다른 사용자 번호를 주면 연결 끊기 토큰을 두지 않는다', async () => {
+    const r = await ok(await apple({ sub: nextSub(), e: withKeys, codeSub: 'someone-else' }));
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM apple_tokens WHERE user_id = ?').bind(r.userId).first<{ n: number }>();
+    expect(row!.n).toBe(0);
   });
 
   it('모르는 폰 열쇠로 오면 401', async () => {

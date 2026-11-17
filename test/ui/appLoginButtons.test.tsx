@@ -38,6 +38,18 @@ describe('첫 화면', () => {
     await waitFor(() => expect(h.apple).toHaveBeenCalled());
   });
 
+  it('카카오 로그인 창을 닫으면 버튼을 다시 누를 수 있다', async () => {
+    const k = await import('../../src/app/kakaoLogin');
+    vi.spyOn(k, 'startKakaoLogin').mockResolvedValue('cancelled');
+    const { WelcomeScreen } = await import('../../src/ui/screens/WelcomeScreen');
+    render(<WelcomeScreen />);
+    fireEvent.click(screen.getByRole('checkbox'));
+    const btn = await screen.findByRole('button', { name: '카카오로 시작하기' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(k.startKakaoLogin).toHaveBeenCalled());
+    await waitFor(() => expect(btn).toBeEnabled());
+  });
+
   it('애플 로그인이 실패하면 그 말을 보여 준다', async () => {
     h.apple.mockResolvedValueOnce({ ok: false, error: '애플 로그인을 확인하지 못했어요. 다시 시도해 주세요' });
     const { WelcomeScreen } = await import('../../src/ui/screens/WelcomeScreen');
@@ -74,7 +86,7 @@ describe('설정 계정 칸', () => {
     await waitFor(() => expect(h.apple).toHaveBeenCalled());
   });
 
-  it('Apple로 연결된 계정: "Apple 연결됨"과 로그아웃, 로그인 버튼은 없다', async () => {
+  it('Apple로 연결된 계정: "Apple 연결됨"과 로그아웃, Apple 로그인 버튼은 없다', async () => {
     ready({ 'gachitayo.apple': '1' });
     const { SettingsScreen } = await import('../../src/ui/screens/SettingsScreen');
     render(<SettingsScreen />);
@@ -82,6 +94,14 @@ describe('설정 계정 칸', () => {
     expect(screen.getByRole('button', { name: '로그아웃' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Apple로 로그인' })).toBeNull();
     expect(screen.getByText(/Apple 계정에 연결돼 있어요/)).toBeInTheDocument();
+  });
+
+  it('Apple만 연결된 계정은 "카카오도 연결하기"를 보여 준다 (웹에서도 들어오게)', async () => {
+    ready({ 'gachitayo.apple': '1' });
+    const { SettingsScreen } = await import('../../src/ui/screens/SettingsScreen');
+    render(<SettingsScreen />);
+    expect(await screen.findByRole('button', { name: '카카오도 연결하기' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apple도 연결하기' })).toBeNull();
   });
 
   it('카카오·애플 둘 다 연결: "카카오 · Apple 연결됨"', async () => {

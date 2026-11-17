@@ -40,16 +40,19 @@ export function WelcomeScreen() {
   const appleStart = async () => {
     setKakaoBusy(true);
     setKakaoError(null);
-    const r = await startAppleLogin();
+    // 적은 닉네임이 있으면 애플이 준 이름보다 먼저 (검토 지적)
+    const r = await startAppleLogin(name);
     // 마치면 계정이 생겨 첫 화면을 벗어난다. 실패·취소면 여기 그대로
     setKakaoBusy(false);
+    if (r.ok && r.changed) window.location.reload();
     if (!r.ok && 'error' in r) setKakaoError(r.error);
   };
   const kakaoStart = async () => {
     setKakaoBusy(true);
     setKakaoError(null);
     try {
-      await startKakaoLogin('#/');
+      // 앱에서 로그인 창을 닫으면 버튼을 다시 쓸 수 있게 (검토 지적)
+      if ((await startKakaoLogin('#/')) === 'cancelled') setKakaoBusy(false);
     } catch (e) {
       setKakaoError(friendlyServerError(e));
       setKakaoBusy(false);

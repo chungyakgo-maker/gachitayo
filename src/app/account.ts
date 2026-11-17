@@ -111,7 +111,9 @@ export async function whileFinishingLogin<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** 로그인으로 받은 계정을 이 폰의 계정으로 쓴다 (카카오·애플 로그인 마치기). 다른 쪽 연결 여부는 서버에서 다시 받는다 */
-export function adoptLogin(r: { userId: string; token: string; nickname: string; kakao?: boolean; apple?: boolean }): void {
+export function adoptLogin(r: { userId: string; token: string; nickname: string; kakao?: boolean; apple?: boolean }): boolean {
+  // 이 폰에 있던 다른 계정에서 바뀌었는지 (앱은 화면을 다시 열어 예전 계정의 친구·방 연결을 비운다)
+  const changed = state.userId !== null && state.userId !== r.userId;
   token = r.token;
   write(TOKEN_KEY, r.token);
   write(USER_KEY, r.userId);
@@ -121,6 +123,7 @@ export function adoptLogin(r: { userId: string; token: string; nickname: string;
   write(APPLE_KEY, r.apple ? '1' : null);
   set({ status: 'ready', userId: r.userId, nickname: r.nickname, onboarded: true, lost: false, kakao: !!r.kakao, apple: !!r.apple, busy: false, error: null });
   void refreshMe().catch(() => {});
+  return changed;
 }
 
 /** 서버에서 닉네임·카카오·애플 연결 여부를 다시 받는다 (통신이 안 되면 그대로) */
@@ -181,8 +184,11 @@ export function initAccount(): Promise<void> {
   initPromise ??= (async () => {
     if (state.status === 'none') return ensureAccount();
     if (state.status !== 'ready' || !token) return;
+    // 보낸 열쇠를 기억한다: 그사이 로그인으로 열쇠가 바뀌면 이 결과는 버린다 (검토 지적)
+    const used = token;
     try {
-      const me = await apiFetch<{ userId: string; nickname: string; kakao?: boolean; apple?: boolean }>('GET', '/api/me', { token });
+      const me = await apiFetch<{ userId: string; nickname: string; kakao?: boolean; apple?: boolean }>('GET', '/api/me', { token: used });
+      if (used !== token) return;
       if (me.nickname && me.nickname !== state.nickname) {
         write(NICKNAME_KEY, me.nickname);
         set({ nickname: me.nickname });
@@ -198,7 +204,7 @@ export function initAccount(): Promise<void> {
         set({ apple });
       }
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) markAccountLost(token);
+      if (e instanceof ApiError && e.status === 401) markAccountLost(used);
     }
   })();
   return initPromise;
