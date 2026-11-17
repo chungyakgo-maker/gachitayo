@@ -1,7 +1,9 @@
 // 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useEffect, useState } from 'react';
-import { friendlyServerError, recreateAccount, updateNickname, useAccount } from '../../app/account';
+import { friendlyServerError, recreateAccount, signedIn, updateNickname, useAccount } from '../../app/account';
+import { startAppleLogin } from '../../app/appleLogin';
+import { AppleButton } from '../components/AppleButton';
 import { deleteAccount } from '../../app/deleteAccount';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
 import { logout, logoutCheck } from '../../app/logout';
@@ -31,16 +33,21 @@ const PALETTES: Array<[DeltaPalette, string, string, string]> = [
   ['blue-orange', '파랑·주황', '#5CB8FF', '#E8690F'],
 ];
 
-/** 카카오 로그인·로그아웃 (설계 5.6) */
-function KakaoAccount() {
+/** 카카오·애플 로그인·로그아웃 (카카오 설계 5.6, 앱 로그인 설계 2026-11-17: 애플은 아이폰 앱만) */
+function LoginAccount() {
   const acc = useAccount();
   const [on, setOn] = useState(false);
+  const [apple, setApple] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ask, setAsk] = useState<{ localOnly: number } | null>(null);
   useEffect(() => {
     let alive = true;
-    void getProviders().then((p) => alive && setOn(p.kakao));
+    void getProviders().then((p) => {
+      if (!alive) return;
+      setOn(p.kakao);
+      setApple(p.apple);
+    });
     return () => {
       alive = false;
     };
@@ -54,6 +61,13 @@ function KakaoAccount() {
       setError(friendlyServerError(e));
       setBusy(false);
     }
+  };
+  const appleLogin = async () => {
+    setBusy(true);
+    setError(null);
+    const r = await startAppleLogin();
+    setBusy(false);
+    if (!r.ok && 'error' in r) setError(r.error);
   };
   const askLogout = async () => {
     setBusy(true);
@@ -75,19 +89,22 @@ function KakaoAccount() {
   return (
     <>
       <KakaoPendingCard />
-      {acc.kakao ? (
+      {signedIn(acc) ? (
         <div className="card-row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <span style={{ fontWeight: 600 }}>카카오 연결됨</span>
+          <span style={{ fontWeight: 600 }}>{[acc.kakao && '카카오', acc.apple && 'Apple'].filter(Boolean).join(' · ')} 연결됨</span>
           <button type="button" className="btn" disabled={busy} onClick={() => void askLogout()}>
             로그아웃
           </button>
         </div>
       ) : (
-        on &&
+        (on || apple) &&
         (acc.status === 'ready' || acc.lost) && (
-          <div className="card-col" style={{ gap: 6 }}>
-            <KakaoButton label="카카오로 로그인" disabled={busy} onClick={() => void login()} />
-            <span className="sub">{acc.lost ? '예전에 카카오로 연결했다면 이걸로 돌아와요' : '로그인하면 폰을 바꿔도 기록이 돌아와요'}</span>
+          <div className="card-col" style={{ gap: 8 }}>
+            {on && <KakaoButton label="카카오로 로그인" disabled={busy} onClick={() => void login()} />}
+            {apple && <AppleButton label="Apple로 로그인" disabled={busy} onClick={() => void appleLogin()} />}
+            <span className="sub">
+              {acc.lost ? `예전에 ${apple ? '카카오나 Apple로' : '카카오로'} 연결했다면 이걸로 돌아와요` : '로그인하면 폰을 바꿔도 기록이 돌아와요'}
+            </span>
           </div>
         )
       )}
@@ -148,12 +165,12 @@ function AccountSection() {
         </div>
       )}
       {acc.error && <div className="notice warn">{acc.error}</div>}
-      <KakaoAccount />
+      <LoginAccount />
       <span className="sub" style={{ lineHeight: 1.6 }}>
         {acc.status === 'disabled'
           ? '서버 연결 전이라 기록은 이 폰에만 있어요.'
-          : acc.kakao
-            ? '카카오 계정에 연결돼 있어요. 폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요.'
+          : signedIn(acc)
+            ? `${acc.kakao ? '카카오' : 'Apple'} 계정에 연결돼 있어요. 폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요.`
             : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요(서버 기록은 남아요). 홈 화면 앱으로 쓰고 자주 올려 주세요.'}
       </span>
     </section>

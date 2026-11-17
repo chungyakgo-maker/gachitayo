@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { finishOnboarding, friendlyServerError, useAccount } from '../../app/account';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
 import { KakaoButton } from '../components/KakaoButton';
+import { AppleButton } from '../components/AppleButton';
+import { startAppleLogin } from '../../app/appleLogin';
 import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { IconPhone, IconPin, IconWarn } from '../icons';
 import { isApp } from '../../platform';
@@ -19,17 +21,30 @@ export function WelcomeScreen() {
   const [name, setName] = useState(acc.nickname ?? '');
   const [agree, setAgree] = useState(false);
   const ok = name.trim().length >= 1 && name.trim().length <= 20 && agree && !acc.busy;
-  // 카카오로 시작하기 (설계 5.6): 서버가 켜 두었을 때만
+  // 카카오로 시작하기 (설계 5.6): 서버가 켜 두었을 때만. 아이폰 앱은 Apple로 계속하기도 (앱 로그인 설계 2026-11-17)
   const [kakao, setKakao] = useState(false);
+  const [apple, setApple] = useState(false);
   const [kakaoBusy, setKakaoBusy] = useState(false);
   const [kakaoError, setKakaoError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    void getProviders().then((p) => alive && setKakao(p.kakao));
+    void getProviders().then((p) => {
+      if (!alive) return;
+      setKakao(p.kakao);
+      setApple(p.apple);
+    });
     return () => {
       alive = false;
     };
   }, []);
+  const appleStart = async () => {
+    setKakaoBusy(true);
+    setKakaoError(null);
+    const r = await startAppleLogin();
+    // 마치면 계정이 생겨 첫 화면을 벗어난다. 실패·취소면 여기 그대로
+    setKakaoBusy(false);
+    if (!r.ok && 'error' in r) setKakaoError(r.error);
+  };
   const kakaoStart = async () => {
     setKakaoBusy(true);
     setKakaoError(null);
@@ -108,11 +123,12 @@ export function WelcomeScreen() {
         </div>
       )}
       <div style={{ flex: 1 }} />
-      {kakao && (
-        <div className="card-col" style={{ gap: 6 }}>
-          <KakaoButton label="카카오로 시작하기" disabled={!agree || kakaoBusy || acc.busy} onClick={() => void kakaoStart()} />
+      {(kakao || apple) && (
+        <div className="card-col" style={{ gap: 8 }}>
+          {kakao && <KakaoButton label="카카오로 시작하기" disabled={!agree || kakaoBusy || acc.busy} onClick={() => void kakaoStart()} />}
+          {apple && <AppleButton label="Apple로 계속하기" disabled={!agree || kakaoBusy || acc.busy} onClick={() => void appleStart()} />}
           <span className="sub" style={{ textAlign: 'center' }}>
-            폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요
+            {apple ? '폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요' : '폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요'}
           </span>
         </div>
       )}

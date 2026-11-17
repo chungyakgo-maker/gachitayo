@@ -6,6 +6,7 @@ import { useSyncExternalStore } from 'react';
 import { ApiError, apiFetch } from '../server/api';
 import { accountEnabled } from '../server/config';
 import { adoptLogin, friendlyServerError, getAuth, whileFinishingLogin } from './account';
+import { DgoAuth } from './nativeAuth';
 
 const PENDING_KEY = 'gachitayo.kakaoLogin';
 /** 진행 중 로그인의 유효 시간 (서버 state와 같게) */
@@ -89,19 +90,21 @@ export function cancelKakaoLogin(): void {
   writeStored(null);
 }
 
-let providers: Promise<{ kakao: boolean }> | null = null;
-/** 서버가 카카오 로그인을 켜 두었는지 (한 번 받아 기억, 실패면 false이고 다음에 다시 묻는다) */
-export function getProviders(): Promise<{ kakao: boolean }> {
-  // 아이폰 앱 첫 버전은 카카오 로그인 없이 (애플 심사: 다른 회사 로그인을 넣으면 애플 로그인도 요구될 수 있어, 출시 준비 결정)
-  if (!accountEnabled() || isApp()) return Promise.resolve({ kakao: false });
-  providers ??= apiFetch<{ kakao?: boolean }>('GET', '/auth/providers')
-    .then((r) => ({ kakao: r.kakao === true }))
+let providers: Promise<{ kakao: boolean; apple: boolean }> | null = null;
+/** 서버가 켜 둔 로그인 (한 번 받아 기억, 실패면 없음이고 다음에 다시 묻는다). 애플 로그인은 아이폰 앱에서만 (사용자 결정 2026-11-17) */
+export function getProviders(): Promise<{ kakao: boolean; apple: boolean }> {
+  if (!accountEnabled()) return Promise.resolve({ kakao: false, apple: false });
+  providers ??= apiFetch<{ kakao?: boolean; apple?: boolean }>('GET', '/auth/providers')
+    .then((r) => ({ kakao: r.kakao === true, apple: r.apple === true && isApp() }))
     .catch(() => {
       providers = null;
-      return { kakao: false };
+      return { kakao: false, apple: false };
     });
   return providers;
 }
+
+/** 아이폰 앱: 카카오가 돌려보내는 앱 주소 (서버 kakao.ts APP_RETURN과 같게) */
+export const APP_KAKAO_RETURN = 'dgo://auth/kakao';
 
 const b64url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes))
@@ -113,14 +116,25 @@ async function sha256Hex(s: string): Promise<string> {
   return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** 카카오 로그인 시작: 서버에서 카카오 주소를 받아 이동한다. from: 마친 뒤 돌아갈 화면 */
+/** 카카오 로그인 시작: 서버에서 카카오 주소를 받아 이동한다. from: 마친 뒤 돌아갈 화면.
+ *  아이폰 앱은 iOS 로그인 창으로 열고, 돌아온 dgo://auth/kakao?state&pin 을 마치기 화면(#/auth/kakao)으로 넘긴다 */
 export async function startKakaoLogin(from: string): Promise<void> {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
-  const returnTo = `${window.location.origin}${window.location.pathname}`;
+  const returnTo = isApp() ? APP_KAKAO_RETURN : `${window.location.origin}${window.location.pathname}`;
   const r = await apiFetch<{ url: string }>('POST', '/auth/kakao/start', { token: getAuth()?.token, body: { returnTo, verifierHash: await sha256Hex(verifier) } });
   const state = new URL(r.url).searchParams.get('state') ?? '';
   writeStored({ state, verifier, from, startedAt: Date.now() });
-  kakaoNav.go(r.url);
+  if (!isApp()) {
+    kakaoNav.go(r.url);
+    return;
+  }
+  const res = await DgoAuth.webAuth({ url: r.url, scheme: 'dgo' });
+  if (res.cancelled || !res.url) {
+    writeStored(null);
+    return;
+  }
+  const back = new URL(res.url);
+  window.location.hash = `#/auth/kakao${back.search}`;
 }
 
 let afterLogin: () => void = () => {};
