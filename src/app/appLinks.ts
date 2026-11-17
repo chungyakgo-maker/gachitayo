@@ -5,7 +5,7 @@
 //   https://chungyakgo-maker.github.io/gachitayo/#/join/482917 (웹 초대 링크)
 // 카카오 로그인 돌아오기 dgo://auth/kakao?state&pin 은 마치기 화면으로
 import { App } from '@capacitor/app';
-import { isApp } from '../platform';
+import { isApp, nativeCall } from '../platform';
 
 /** 링크에서 방 코드 6자리 (없으면 null) */
 export function parseJoinLink(url: string): string | null {
@@ -38,5 +38,5 @@ function go(url: string | undefined): void {
 export function startAppLinks(): void {
   if (!isApp()) return;
   void App.addListener('appUrlOpen', (e) => go(e.url));
-  void App.getLaunchUrl().then((r) => go(r?.url), () => {});
+  void nativeCall(App.getLaunchUrl()).then((r) => go(r?.url), () => {});
 }

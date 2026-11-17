@@ -1,0 +1,60 @@
+# 디고(같이타요 아이폰 앱) 빌드 → TestFlight (Codemagic, 메리고와 같은 방식, 2026-11-17).
+#
+# 왜 Codemagic 인가: 세영은 맥이 없고, 메리고에서 이미 이 방식으로 TestFlight 까지 갔다. Codemagic 개인 계정 맥 M2 한 달 500분 무료(메리고와 같이 씀).
+#
+# 손으로만 돈다 — Codemagic 웹 화면에서 [Start new build]. (triggering 을 안 적으면 저절로 돌지 않는다)
+# 메리고와 다른 점: 같이타요는 사이트를 앱 안에 통째로 넣는다(산길처럼 통신이 없는 곳에서도 열리게).
+#   그래서 빌드 때 웹앱을 앱용으로 만들고(npm run build:app → dist-app) 그것을 아이폰 프로젝트에 넣는다.
+#
+# ── 미리 해 둘 것(세영, Codemagic 웹 화면) ──
+#   1. 이 저장소(chungyakgo-maker/gachitayo) 추가
+#   2. App Store Connect API 키는 메리고 것("marrygo")을 그대로 쓴다 (같은 애플 개발자 계정)
+#   3. 배포 인증서도 메리고 것(marrygo_dist)을 그대로 쓴다. 번들 ID kr.dgo.app 의 App Store 배포 프로필만
+#      애플 개발자 사이트에서 새로 만들고 Codemagic → iOS provisioning profiles [Fetch profiles]
+# 비밀값(.p8 키·인증서)은 Codemagic 이 암호화해 보관한다 — 저장소에는 아무 비밀도 안 들어간다.
+workflows:
+  ios-testflight:
+    name: 디고 아이폰 → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 40
+    integrations:
+      app_store_connect: marrygo
+    # 아이폰 부품(Swift 패키지)을 다음 빌드부터 다시 쓴다 (빌드 시간 = 무료 분)
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/org.swift.swiftpm
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: kr.dgo.app
+      # 애플은 Xcode 26(iOS 26 SDK)으로 만든 빌드만 받는다. Capacitor 8 도 Xcode 26 이상이 필요하다
+      xcode: latest
+      # Capacitor 8 명령어(cap)·Vite 8 은 Node 22 이상
+      node: 22
+      vars:
+        # 같이타요 서버(Cloudflare Worker) 주소 — 비밀 아님(웹앱에도 그대로 보이는 주소)
+        VITE_API_URL: https://gachitayo-api.chungyakgo.workers.dev
+    scripts:
+      - name: 부품 받기
+        script: npm ci
+      - name: 웹앱을 앱용으로 만들기 (dist-app)
+        script: npm run build:app
+      - name: 아이폰 프로젝트에 넣기
+        script: npx cap sync ios
+      - name: 서명 프로필 적용
+        script: xcode-project use-profiles --project ios/App/App.xcodeproj
+      - name: 앱 묶기
+        # 빌드 번호(CURRENT_PROJECT_VERSION)는 Codemagic 빌드 횟수로 — 같은 번호는 TestFlight 가 거절한다
+        script: |
+          xcode-project build-ipa \
+            --project ios/App/App.xcodeproj \
+            --scheme App \
+            --archive-xcargs "CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # 내부 테스트(세영 본인)는 심사 없이 바로 받는다. 외부 테스터용 베타 심사는 내지 않는다
+        submit_to_testflight: false

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const keepAwake = vi.fn(async () => {});
 const allowSleep = vi.fn(async () => {});
 vi.mock('@capacitor-community/keep-awake', () => ({ KeepAwake: { keepAwake: (...a: unknown[]) => keepAwake(...(a as [])), allowSleep: (...a: unknown[]) => allowSleep(...(a as [])) } }));
-vi.mock('../../src/platform', () => ({ isApp: () => true }));
+vi.mock('../../src/platform', async (orig) => ({ ...(await orig<typeof import('../../src/platform')>()), isApp: () => true }));
 
 describe('화면 꺼짐 방지 (아이폰 앱)', () => {
   beforeEach(() => {

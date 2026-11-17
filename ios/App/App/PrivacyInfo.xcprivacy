@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  애플 개인정보 사용 이유 파일 (메리고와 같게, 2026-11-17). 애플은 "이유를 밝혀야 하는 기능"을 쓰는 앱에 이 파일이 없으면 올리기를 거절한다(ITMS-91053).
+  - 기기 저장소(UserDefaults): CA92.1 = 이 앱 안에서만 읽고 쓴다
+  - 파일 날짜(FileTimestamp): @capacitor/filesystem — 기록 내보내기 전 임시 파일. C617.1 = 앱 안 파일의 날짜만 본다
+  추적은 하지 않는다 (광고 없음).
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -1,17 +1,18 @@
 # 디고 앱스토어 등록 자료 (초안)
 
-2026-11-16 · 출시 준비. App Store Connect → 디고 → 앱 정보 / 1.0 버전 화면에 그대로 붙여 넣는다.
+2026-11-16 · 출시 준비 (2026-11-17 갱신: 이름·번들 ID·연락처·로그인·영어 심사 메모). App Store Connect → 디고 → 앱 정보 / 1.0 버전 화면에 그대로 붙여 넣는다.
 법적 문구(약관·개인정보)는 초안이며 확인은 사용자가 한다.
 
 ## 기본 정보
 
 | 칸 | 넣을 값 |
 |---|---|
-| 이름 | 디고 (이미 쓰이면 사용자가 정한 이름) |
-| 부제 (30자) | 와인딩 랩타이머 · 주행 기록 |
+| 이름 | 디고: 드라이브 코스 추천 (홈 화면 이름은 "디고") |
+| 번들 ID | kr.dgo.app |
+| 부제 (30자) | 와인딩 랩타이머 · 그룹 주행 |
 | 카테고리 | 주: 내비게이션 · 부: 스포츠 |
 | 개인정보처리방침 URL | https://chungyakgo-maker.github.io/gachitayo/privacy.html |
-| 지원 URL | https://chungyakgo-maker.github.io/gachitayo/privacy.html (문의 이메일이 들어 있는 페이지) |
+| 지원 URL | https://chungyakgo-maker.github.io/gachitayo/privacy.html (문의 이메일 chungyakgo@gmail.com 이 들어 있는 페이지) |
 | 저작권 | 2026 (사용자 이름 또는 상호) |
 | 가격 | 무료 |
 
@@ -71,22 +72,33 @@
 | 종류 | 항목 | 왜 |
 |---|---|---|
 | 위치 | 정확한 위치 | 주행 기록·랩타임, 친구·그룹 위치 공유(켰을 때만) |
-| 식별자 | 사용자 ID | 익명 계정 번호 |
+| 식별자 | 사용자 ID | 익명 계정 번호, 카카오 회원번호·애플 사용자 번호(그 로그인을 고른 경우) |
 | 사용자 콘텐츠 | 기타 사용자 콘텐츠 | 닉네임, 직접 만든 코스, 즐겨찾기 |
 | 검색 기록 | 검색 기록 | 장소 검색어 (서버는 저장하지 않고 네이버로 바로 보냄, 하루 횟수만 셈) — 보수적으로 표시 |
 | 기타 데이터 | 기타 데이터 유형 | 모션 센서 값(G값), 기기 종류 |
 
 수집하지 않음: 연락처, 건강, 금융, 사진, 광고 데이터, 진단(충돌) 데이터.
 
-## 심사 메모 (App Review Information → 메모)
+## 심사 메모 (App Review Information → 메모, 영어)
+
+메리고처럼 영어로. 데모 계정 대신 "로그인 없이 시작" 또는 "Apple로 로그인" 안내.
 
 ```
-- 로그인 없이 사용합니다. 첫 화면에서 닉네임을 적고 약관에 동의한 뒤 "로그인 없이 시작"을 누르면 됩니다. 데모 계정이 필요 없습니다.
-- 백그라운드 위치: 사용자가 "주행 시작"으로 주행 기록을 시작했을 때만 씁니다. 주행 중 화면이 꺼지거나 다른 앱으로 가도 랩타임 기록이 이어지게 하려는 것이며, 주행을 끝내면 바로 멈춥니다. 메인 지도의 현재 위치는 앱이 화면에 있을 때만 씁니다.
-- 모션 센서: 주행 중 가속·제동·코너 G값을 보여 주고 기록합니다.
-- 그룹 주행: 메인 → 주행 시작 → 그룹 주행 → 방 만들기로 혼자서도 대기실을 볼 수 있습니다.
-- 계정 삭제: 설정 → "계정과 모든 기록 지우기"에서 서버와 폰의 모든 데이터를 지웁니다.
-- 연락처: (사용자 이메일)
+Thank you for reviewing DGO, a lap timer and drive-course app for Korean winding roads.
+
+Sign-in: No demo account is needed.
+- On the first screen, type any nickname, tick the safety/terms checkbox and tap "로그인 없이 시작" (Start without login), or
+- Tap "로그인" (Log in) and choose "Apple로 로그인" (Sign in with Apple). Kakao login is also offered.
+
+Background location: Used only after the user taps "주행 시작" (Start driving) and starts recording a drive, so lap timing continues while the screen is off or another app is in front (the phone is mounted in the car). Recording stops as soon as the drive ends. The location on the main map is used only while the app is on screen.
+
+Motion sensors: Used during a drive to show and record acceleration/braking/cornering G-forces.
+
+Group drive: Main → "주행 시작" → "그룹 주행" → "방 만들기" (Create room) shows the room lobby even alone.
+
+Account deletion: Settings (설정) → "계정과 모든 기록 지우기" deletes all data on the phone and the server. If the account used Sign in with Apple, the Apple token is revoked.
+
+Contact: chungyakgo@gmail.com
 ```
 
 ## 스크린샷

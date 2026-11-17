@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import { finishOnboarding, friendlyServerError, useAccount } from '../../app/account';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
-import { KakaoButton } from '../components/KakaoButton';
-import { AppleButton } from '../components/AppleButton';
+import { LoginChooser } from '../components/LoginChooser';
 import { startAppleLogin } from '../../app/appleLogin';
 import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { IconPhone, IconPin, IconWarn } from '../icons';
@@ -128,8 +127,14 @@ export function WelcomeScreen() {
       <div style={{ flex: 1 }} />
       {(kakao || apple) && (
         <div className="card-col" style={{ gap: 8 }}>
-          {kakao && <KakaoButton label="카카오로 시작하기" disabled={!agree || kakaoBusy || acc.busy} onClick={() => void kakaoStart()} />}
-          {apple && <AppleButton label="Apple로 계속하기" disabled={!agree || kakaoBusy || acc.busy} onClick={() => void appleStart()} />}
+          <LoginChooser
+            kakao={kakao}
+            apple={apple}
+            kakaoLabel="카카오로 시작하기"
+            disabled={!agree || kakaoBusy || acc.busy}
+            onKakao={() => void kakaoStart()}
+            onApple={() => void appleStart()}
+          />
           <span className="sub" style={{ textAlign: 'center' }}>
             {apple ? '폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요' : '폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요'}
           </span>

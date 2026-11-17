@@ -1,7 +1,7 @@
 // 화면 꺼짐 방지 (사양서 8.4): 켜고, 화면이 다시 보이면 다시 요청한다.
 // 화면이 가려지면 시스템이 자동으로 해제하기 때문이다.
 import { KeepAwake } from '@capacitor-community/keep-awake';
-import { isApp } from '../platform';
+import { isApp, nativeCall } from '../platform';
 
 export type WakeLockState = 'off' | 'active' | 'unsupported' | 'failed';
 
@@ -96,14 +96,14 @@ export function createWakeLockManager(
 export function nativeWakeLockApi(): WakeLockApiLike {
   return {
     async request() {
-      await KeepAwake.keepAwake();
+      await nativeCall(KeepAwake.keepAwake());
       const listeners: Array<() => void> = [];
       const sentinel: SentinelLike = {
         released: false,
         async release() {
           if (sentinel.released) return;
           sentinel.released = true;
-          await KeepAwake.allowSleep();
+          await nativeCall(KeepAwake.allowSleep());
           listeners.forEach((l) => l());
         },
         addEventListener(_type, cb) {

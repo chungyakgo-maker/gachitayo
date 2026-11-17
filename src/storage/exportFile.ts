@@ -2,7 +2,7 @@
 //
 // 아이폰 사파리는 공유 창을 버튼 탭 직후에만 열어 준다. 그래서 파일 만들기(시간이 걸림)와
 // 공유하기(탭에서 바로 호출)를 두 단계로 나눈다.
-import { isApp } from '../platform';
+import { isApp, nativeCall } from '../platform';
 import { buildRawFile } from './rawFile';
 import { gzipJson } from './gzip';
 import type { SessionRepo } from './sessionRepo';
@@ -49,7 +49,7 @@ async function toBase64(file: File): Promise<string> {
 /** 아이폰 앱(사양서 13.3): 앱 안에서는 내려받기 링크가 안 되므로 앱 임시 폴더에 쓰고 아이폰 공유창으로 연다 */
 async function shareInApp(file: File): Promise<'shared' | 'cancelled'> {
   const [{ Filesystem, Directory }, { Share }] = await Promise.all([import('@capacitor/filesystem'), import('@capacitor/share')]);
-  const { uri } = await Filesystem.writeFile({ path: file.name, data: await toBase64(file), directory: Directory.Cache });
+  const { uri } = await nativeCall(Filesystem.writeFile({ path: file.name, data: await toBase64(file), directory: Directory.Cache }), 15_000);
   try {
     await Share.share({ title: file.name, files: [uri] });
     return 'shared';

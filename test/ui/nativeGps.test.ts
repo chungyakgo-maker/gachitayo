@@ -14,7 +14,7 @@ const plugin = {
 };
 vi.mock('@capacitor/core', () => ({ registerPlugin: () => plugin }));
 let app = true;
-vi.mock('../../src/platform', () => ({ isApp: () => app }));
+vi.mock('../../src/platform', async (orig) => ({ ...(await orig<typeof import('../../src/platform')>()), isApp: () => app }));
 
 const clock = { now: () => 1234 } as unknown as Parameters<typeof import('../../src/sensors/gps').startGps>[0];
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));

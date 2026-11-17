@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 // 아이폰 앱 디고 (사양서 13.3): 첫 화면 안내, 개발자 메뉴, 개인정보처리방침·위치정보 이용약관
 let app = false;
-vi.mock('../../src/platform', () => ({ isApp: () => app }));
+vi.mock('../../src/platform', async (orig) => ({ ...(await orig<typeof import('../../src/platform')>()), isApp: () => app }));
 const openUrl = vi.fn(async (_o: unknown) => ({ completed: true }));
 vi.mock('@capacitor/app-launcher', () => ({ AppLauncher: { openUrl: (o: unknown) => openUrl(o) } }));
 // 서버가 있는 계정 화면 (서버 연결 전이면 다른 안내가 나온다)

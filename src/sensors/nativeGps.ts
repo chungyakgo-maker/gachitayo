@@ -9,6 +9,7 @@ import { toGpsSample } from '../normalize/sensorSamples';
 import type { SessionClock } from '../normalize/sessionClock';
 import type { GpsSample } from '../types/samples';
 import type { GpsErrorKind } from './gps';
+import { nativeCall } from '../platform';
 
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation');
 
@@ -71,7 +72,7 @@ export function startNativeGps(clock: SessionClock, onSample: (s: GpsSample) => 
     const w = id;
     id = null;
     writeIds(readIds().filter((x) => x !== w));
-    void BackgroundGeolocation.removeWatcher({ id: w });
+    void nativeCall(BackgroundGeolocation.removeWatcher({ id: w })).catch(() => {});
   };
   void BackgroundGeolocation.addWatcher(opts.background ? BACKGROUND : FOREGROUND, (position, error) => {
     if (stopped) return;
@@ -102,5 +103,5 @@ export function startNativeGps(clock: SessionClock, onSample: (s: GpsSample) => 
 export async function cleanupNativeGps(): Promise<void> {
   const ids = readIds();
   writeIds([]);
-  await Promise.all(ids.map((w) => BackgroundGeolocation.removeWatcher({ id: w }).catch(() => {})));
+  await Promise.all(ids.map((w) => nativeCall(BackgroundGeolocation.removeWatcher({ id: w })).catch(() => {})));
 }

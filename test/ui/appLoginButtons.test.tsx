@@ -27,14 +27,16 @@ afterEach(() => {
 });
 
 describe('첫 화면', () => {
-  it('앱: 카카오로 시작하기와 Apple로 계속하기, 안전 안내에 체크해야 눌린다', async () => {
+  it('앱: "로그인" 하나 → 카카오·Apple 고르는 창, 안전 안내에 체크해야 눌린다', async () => {
     const { WelcomeScreen } = await import('../../src/ui/screens/WelcomeScreen');
     render(<WelcomeScreen />);
-    const apple = await screen.findByRole('button', { name: 'Apple로 계속하기' });
-    expect(screen.getByRole('button', { name: '카카오로 시작하기' })).toBeInTheDocument();
-    expect(apple).toBeDisabled();
+    const login = await screen.findByRole('button', { name: '로그인' });
+    expect(screen.queryByRole('button', { name: '카카오로 시작하기' })).toBeNull();
+    expect(login).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(apple);
+    fireEvent.click(login);
+    expect(screen.getByRole('button', { name: '카카오로 로그인' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Apple로 로그인' }));
     await waitFor(() => expect(h.apple).toHaveBeenCalled());
   });
 
@@ -44,8 +46,9 @@ describe('첫 화면', () => {
     const { WelcomeScreen } = await import('../../src/ui/screens/WelcomeScreen');
     render(<WelcomeScreen />);
     fireEvent.click(screen.getByRole('checkbox'));
-    const btn = await screen.findByRole('button', { name: '카카오로 시작하기' });
+    const btn = await screen.findByRole('button', { name: '로그인' });
     fireEvent.click(btn);
+    fireEvent.click(screen.getByRole('button', { name: '카카오로 로그인' }));
     await waitFor(() => expect(k.startKakaoLogin).toHaveBeenCalled());
     await waitFor(() => expect(btn).toBeEnabled());
   });
@@ -55,7 +58,8 @@ describe('첫 화면', () => {
     const { WelcomeScreen } = await import('../../src/ui/screens/WelcomeScreen');
     render(<WelcomeScreen />);
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(await screen.findByRole('button', { name: 'Apple로 계속하기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '로그인' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apple로 로그인' }));
     expect(await screen.findByText('애플 로그인을 확인하지 못했어요. 다시 시도해 주세요')).toBeInTheDocument();
   });
 
@@ -64,7 +68,7 @@ describe('첫 화면', () => {
     const { WelcomeScreen } = await import('../../src/ui/screens/WelcomeScreen');
     render(<WelcomeScreen />);
     await screen.findByRole('button', { name: '카카오로 시작하기' });
-    expect(screen.queryByRole('button', { name: 'Apple로 계속하기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '로그인' })).toBeNull();
   });
 });
 
@@ -77,12 +81,13 @@ describe('설정 계정 칸', () => {
     for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
   }
 
-  it('익명 계정: 카카오로 로그인 + Apple로 로그인', async () => {
+  it('익명 계정: "로그인" → 카카오로 로그인 / Apple로 로그인', async () => {
     ready();
     const { SettingsScreen } = await import('../../src/ui/screens/SettingsScreen');
     render(<SettingsScreen />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Apple로 로그인' }));
+    fireEvent.click(await screen.findByRole('button', { name: '로그인' }));
     expect(screen.getByRole('button', { name: '카카오로 로그인' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Apple로 로그인' }));
     await waitFor(() => expect(h.apple).toHaveBeenCalled());
   });
 

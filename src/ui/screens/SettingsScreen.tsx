@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { friendlyServerError, recreateAccount, signedIn, updateNickname, useAccount } from '../../app/account';
 import { startAppleLogin } from '../../app/appleLogin';
 import { AppleButton } from '../components/AppleButton';
+import { LoginChooser } from '../components/LoginChooser';
 import { deleteAccount } from '../../app/deleteAccount';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
 import { logout, logoutCheck } from '../../app/logout';
@@ -113,8 +114,7 @@ function LoginAccount() {
         (on || apple) &&
         (acc.status === 'ready' || acc.lost) && (
           <div className="card-col" style={{ gap: 8 }}>
-            {on && <KakaoButton label="카카오로 로그인" disabled={busy} onClick={() => void login()} />}
-            {apple && <AppleButton label="Apple로 로그인" disabled={busy} onClick={() => void appleLogin()} />}
+            <LoginChooser kakao={on} apple={apple} kakaoLabel="카카오로 로그인" disabled={busy} onKakao={() => void login()} onApple={() => void appleLogin()} />
             <span className="sub">
               {acc.lost ? `예전에 ${apple ? '카카오나 Apple로' : '카카오로'} 연결했다면 이걸로 돌아와요` : '로그인하면 폰을 바꿔도 기록이 돌아와요'}
             </span>

@@ -9,7 +9,7 @@ const openUrl = vi.fn(async (_o: unknown) => ({ completed: true }));
 vi.mock('@capacitor/filesystem', () => ({ Filesystem: { writeFile: (o: unknown) => writeFile(o) }, Directory: { Cache: 'CACHE' } }));
 vi.mock('@capacitor/share', () => ({ Share: { share: (o: unknown) => share(o) } }));
 vi.mock('@capacitor/app-launcher', () => ({ AppLauncher: { canOpenUrl: (o: unknown) => canOpenUrl(o), openUrl: (o: unknown) => openUrl(o) } }));
-vi.mock('../../src/platform', () => ({ isApp: () => true }));
+vi.mock('../../src/platform', async (orig) => ({ ...(await orig<typeof import('../../src/platform')>()), isApp: () => true }));
 
 describe('아이폰 앱: 공유창과 바깥 내비 (사양서 13.3)', () => {
   beforeEach(() => {
