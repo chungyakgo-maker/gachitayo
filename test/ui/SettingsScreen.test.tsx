@@ -41,6 +41,19 @@ describe('커브 방향 화면 색 고르기 (사용자 요청 "abcd 다 넣어 
   });
 });
 
+describe('내 차 표시 고르기 (사용자 요청 시안 2026-11-17: 화살표·흰 차·파란 점·빨간 차)', () => {
+  it('설정에서 네 가지 중 하나, 처음은 화살표', () => {
+    updateSettings(DEFAULT_SETTINGS);
+    render(<SettingsScreen />);
+    const sec = screen.getByRole('region', { name: '내 차 표시' });
+    expect(within(sec).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['화살표', '흰 차', '파란 점', '빨간 차']);
+    expect(within(sec).getByRole('button', { name: '화살표' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(sec).getByRole('button', { name: '빨간 차' }));
+    expect(getSettings().carMarker).toBe('red');
+    expect(within(sec).getByRole('button', { name: '빨간 차' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
 describe('상단 표시 값 (시안 Widgets): 칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽 (사용자 요청)', () => {
   it('칸 3에서 칸 2와 같은 값을 고르면 두 칸이 바뀐다. 앞 친구 간격·표지판도 고를 수 있다', () => {
     updateSettings(DEFAULT_SETTINGS);

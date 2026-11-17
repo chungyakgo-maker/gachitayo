@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeCtx } from './fakeCtx';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../../../src/ui/overlay/draw';
-import { frameFromLive, headline, widgetValue, type OverlayFrame } from '../../../src/ui/overlay/frame';
-import { anchorPadding, COURSE_DONE, COURSE_LINE, drawMiniMap, fitView, followView, mapModel, ME_ANCHOR, PATH_STYLE } from '../../../src/ui/overlay/minimap';
+import { frameFromLive, headline, widgetValue, type OverlayFrame, type XY } from '../../../src/ui/overlay/frame';
+import { anchorPadding, COURSE_DONE, COURSE_LINE, drawMiniMap, fitView, followView, mapModel, drawMeIcon, ME_ANCHOR, ME_MARKER, PATH_STYLE, routeDoneS } from '../../../src/ui/overlay/minimap';
 import { overlayTheme } from '../../../src/ui/overlay/theme';
 import type { Course } from '../../../src/types/course';
 
@@ -201,9 +201,9 @@ describe('미니맵 (지도 모드, 사양서 8.4)', () => {
     drawMiniMap(ctx, 390, 500, mapModel(course), frame(), th, { insetBottom: 120 });
     expect(texts().map((x) => x.text)).toEqual(['베스트 고스트']);
     expect(calls.some((c) => c.op === 'stroke' && c.lineDash.join() === '3,2')).toBe(true);
-    // 내 위치: 화살표(채우기 + 주황 테두리)
-    const last = calls.filter((c) => c.op === 'stroke').at(-1)!;
-    expect(last.strokeStyle).toBe(th.accent);
+    // 내 위치: 기본은 큰 흰 화살표(검은 테두리, 사용자 요청 시안 A)
+    expect(calls.some((c) => c.op === 'fill' && c.fillStyle === ME_MARKER.arrow.body)).toBe(true);
+    expect(calls.some((c) => c.op === 'stroke' && c.strokeStyle === ME_MARKER.arrow.edge)).toBe(true);
   });
 
   it('고스트가 없으면 이름표도 없고, 코스가 없으면 지나온 경로를 그린다', () => {
@@ -240,10 +240,75 @@ describe('지도 선 (사용자 요청 "빨간 지나온 길은 처음 기록할
     expect(styles(calls).has(PATH_STYLE.line)).toBe(false);
   });
 
+  it('목적지 주행: 지나온 경로 선은 그리지 않고 내 위치부터 앞쪽만 (사용자 요청 "경로대로 가면 지나온 경로는 지워져야")', () => {
+    const { ctx, calls } = fakeCtx();
+    const route = { line: [[0, 0], [0, 50], [0, 100]] as XY[], loop: false, start: null, finish: null };
+    const view = { P: (x: number, y: number) => [x, y] as [number, number], rot: 0 };
+    drawMiniMap(ctx, 390, 500, route, frame({ ghost: null, me: null, routeS: 60 }), th, { view });
+    const pts = calls.filter((c) => c.op === 'moveTo' || c.op === 'lineTo').map((c) => (c.args as number[]).join());
+    expect(pts).toContain('0,60');
+    expect(pts).not.toContain('0,0');
+    expect(pts).not.toContain('0,50');
+    expect(styles(calls).has(COURSE_DONE.line)).toBe(false);
+    expect(styles(calls).has(COURSE_LINE.line)).toBe(true);
+  });
+
+  it('목적지 주행 진행 거리: 이탈 중(s 없음)에는 마지막 값, 다시 찾아 경로가 바뀌면 처음부터', () => {
+    const g1 = {};
+    const g2 = {};
+    let k = routeDoneS(null, g1, 120);
+    expect(k).toEqual({ guide: g1, s: 120 });
+    k = routeDoneS(k, g1, null);
+    expect(k?.s).toBe(120);
+    k = routeDoneS(k, g1, 180);
+    expect(k?.s).toBe(180);
+    expect(routeDoneS(k, g2, null)).toBeNull();
+    expect(routeDoneS(k, g2, 5)).toEqual({ guide: g2, s: 5 });
+  });
+
   it('처음 기록(코스 없음): 빨간 지나온 길 그대로', () => {
     const { ctx, calls } = fakeCtx();
     drawMiniMap(ctx, 390, 500, mapModel(null), frame({ ghost: null, path, me: { x: 0, y: 100 } }), th);
     expect(styles(calls).has(PATH_STYLE.line)).toBe(true);
+  });
+});
+
+describe('내 차 표시 (사용자 요청 "내 차 너무 작아서 안 보여", 시안 2026-11-17)', () => {
+  // 화면 좌표 = 평면 좌표 (내 위치 0,0 이 화면 0,0)
+  const view = { P: (x: number, y: number) => [x, y] as [number, number], rot: 0 };
+  const fills = (kind?: 'arrow' | 'white' | 'blue' | 'red', me: OverlayFrame['me'] = { x: 0, y: 0, psi: 0.5 }) => {
+    const { ctx, calls } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, { line: [], loop: false, start: null, finish: null }, frame({ ghost: null, me }), th, kind ? { marker: kind, view } : { view });
+    return { fill: new Set(calls.filter((c) => c.op === 'fill').map((c) => String(c.fillStyle))), calls };
+  };
+
+  it('화살표·흰 차·파란 점·빨간 차를 각자의 색으로 그린다 (기본 화살표)', () => {
+    expect(fills().fill.has(ME_MARKER.arrow.body)).toBe(true);
+    expect(fills('white').fill.has(ME_MARKER.white.body)).toBe(true);
+    expect(fills('blue').fill.has(ME_MARKER.blue.body)).toBe(true);
+    expect(fills('red').fill.has(ME_MARKER.red.body)).toBe(true);
+    expect(fills('red').fill.has(ME_MARKER.white.body)).toBe(false);
+  });
+
+  it('예전 작은 화살표보다 크다 (그림의 가장 먼 끝이 지금 위치에서 20 px 넘게)', () => {
+    for (const k of ['arrow', 'white', 'red'] as const) {
+      const { calls } = fills(k, { x: 0, y: 0, psi: Math.PI / 2 });
+      const far = Math.max(...calls.filter((c) => c.op === 'moveTo' || c.op === 'lineTo').map((c) => Math.abs((c.args as number[])[1]!)));
+      expect(far).toBeGreaterThan(20);
+    }
+  });
+
+  it('설정 화면 미리보기: 칸 가운데에 그 모양을 그린다', () => {
+    const { ctx, calls } = fakeCtx();
+    drawMeIcon(ctx, 64, 64, 'red');
+    expect(calls.some((c) => c.op === 'fill' && c.fillStyle === ME_MARKER.red.body)).toBe(true);
+    expect((calls.find((c) => c.op === 'translate')!.args as number[])[0]).toBe(32);
+  });
+
+  it('진행 방향을 모르면 방향 없는 큰 점 (같은 색)', () => {
+    const { fill, calls } = fills('red', { x: 0, y: 0 });
+    expect(fill.has(ME_MARKER.red.body)).toBe(true);
+    expect(calls.some((c) => c.op === 'rotate')).toBe(false);
   });
 });
 
@@ -323,9 +388,14 @@ describe('앞 친구 간격 (M9): 델타 자리에 목표와의 차이', () => {
     const { ctx, calls, texts } = fakeCtx();
     drawMiniMap(ctx, 390, 500, mapModel(course), frame({ me, ghost: null }), th, { view: v, insetBottom: 120 });
     expect(texts().map((t) => t.text)).toContain('N');
-    // 내 화살표 꼭짓점이 위쪽 (moveTo y < 중심)
+    // 내 화살표: 내 자리로 옮겨 돌리지 않고(= 위) 그린다, 꼭짓점은 위쪽
+    const at = calls.filter((c) => c.op === 'translate').at(-1)!;
+    expect(at.args[0] as number).toBeCloseTo(195, 6);
+    expect(at.args[1] as number).toBeCloseTo(v.P(0, 0)[1], 6);
+    const turn = calls.filter((c) => c.op === 'rotate').at(-1)!;
+    expect(Math.abs(Math.sin(turn.args[0] as number))).toBeLessThan(1e-9);
+    expect(Math.cos(turn.args[0] as number)).toBeGreaterThan(0);
     const tip = calls.filter((c) => c.op === 'moveTo').at(-1)!;
-    expect(tip.args[1] as number).toBeLessThan(190 - 10);
-    expect(tip.args[0] as number).toBeCloseTo(195, 6);
+    expect(tip.args[1] as number).toBeLessThan(-10);
   });
 });

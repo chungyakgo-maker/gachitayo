@@ -410,6 +410,46 @@ html.app-h .modal-backdrop {
   background: var(--bg);
 }
 
+/* 설정: 내 차 표시 고르기 (그림 4개, 고른 칸은 흰 테두리 — 흰 화살표·흰 차가 흰 바탕에 묻히지 않게) */
+.marker-pick {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+}
+
+.marker-pick button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0 7px;
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.marker-pick button[aria-pressed='true'] {
+  border-color: var(--fg);
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.marker-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-map-drive);
+}
+
 .list-link {
   display: flex;
   align-items: center;

@@ -30,7 +30,7 @@ import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
-import { mapModel, routeMapModel, type MapPerson } from '../overlay/minimap';
+import { mapModel, routeDoneS, routeMapModel, type MapPerson } from '../overlay/minimap';
 import { frontMember, groupColor, useGroup, useGroupPoints, type GroupPoints, type GroupState } from '../../app/group';
 import { useNavLive, type NavLive } from '../../app/routeNav';
 import { useSmoothAngle } from '../hooks/useSmoothView';
@@ -122,6 +122,9 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   trailBuf.current.push(snap?.t ?? 0, st?.gx ?? null, st?.gy ?? null);
   // 목적지 경로는 코스가 없을 때만 (코스 주행은 그대로)
   const route = course ? null : nav;
+  // 경로에서 지나온 거리 (지도에서 그만큼 지운다, 사용자 요청). 잠깐 벗어나도 지운 선이 다시 나타나지 않게 마지막 값을 기억한다
+  const routeDone = useRef<{ guide: object; s: number } | null>(null);
+  routeDone.current = route ? routeDoneS(routeDone.current, route.guide, route.step?.s ?? null) : null;
   const frame: OverlayFrame = {
     ...frameFromLive(snap, course !== null, refLap !== null),
     gap,
@@ -129,6 +132,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
     gTrail: trailBuf.current.points(),
     free: noRecord,
     nav: route ? { remainingM: route.step?.remainingM ?? route.guide.lengthM, status: route.status } : null,
+    routeS: routeDone.current?.s ?? null,
   };
   // 칸 1 델타의 기준 (주행 중 칸 1을 눌러 바꾼다): 베스트면 앞 친구가 있어도 베스트 대비
   const frameTop: OverlayFrame = settings.deltaSource === 'best' ? { ...frame, gap: null } : frame;
@@ -422,6 +426,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
           tiles={replay !== null || settings.mapTiles}
           speedKmh={st?.speedKmh ?? null}
           zoom={settings.driveZoom}
+          marker={settings.carMarker}
         />
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
         <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />

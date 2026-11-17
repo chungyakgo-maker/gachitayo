@@ -42,6 +42,8 @@ export interface OverlayFrame {
   path?: ReadonlyArray<XY>;
   /** 코스 주행 진행: 랩 안이면 지금 코스 위치 s (m). 지도에서 지나온 코스 선을 옅게 그린다 (사용자 요청) */
   courseS?: number | null;
+  /** 목적지 주행 진행: 경로에서 지나온 거리 s (m). 지도에서 그 앞쪽 경로만 그린다 (사용자 요청 "경로대로 가면 지나온 경로는 지워져야") */
+  routeS?: number | null;
   /** 앞 친구 간격 (M9). 앞 친구를 고르지 않았으면 없음 */
   gap?: GapInfo | null;
   /** 목적지로 주행 (코스 없이 카카오 경로를 따라갈 때): 칸 1 제목에 남은 거리·상태 */

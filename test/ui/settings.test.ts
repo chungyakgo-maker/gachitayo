@@ -8,7 +8,7 @@ describe('설정 (폰 보관)', () => {
   });
 
   it('기본값: 지도 모드, 상단 칸 델타·G미터·표지판, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m, 주행 중 바탕 지도 보이기, G미터 최대 2g', () => {
-    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D', courseFilter: 'all', popularPeriod: '30d', driveZoom: 0 });
+    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D', courseFilter: 'all', popularPeriod: '30d', driveZoom: 0, carMarker: 'arrow' });
   });
 
   it('G미터 최대값은 1.5·2·2.5·3 g만 (저장된 값이 이상하면 2g)', async () => {
@@ -32,6 +32,18 @@ describe('설정 (폰 보관)', () => {
       localStorage.setItem('gachitayo.settings', JSON.stringify({ curveTint: saved }));
       vi.resetModules();
       expect((await import('../../src/app/settings')).getSettings().curveTint).toBe(want);
+    }
+    localStorage.removeItem('gachitayo.settings');
+  });
+
+  it('내 차 표시: 화살표·흰 차·파란 점·빨간 차 (기본 화살표, 사용자 요청 "내 차 너무 작아서 안 보여")', async () => {
+    updateSettings({ carMarker: 'red' });
+    expect(getSettings().carMarker).toBe('red');
+    const { vi } = await import('vitest');
+    for (const [saved, want] of [['white', 'white'], ['blue', 'blue'], ['x', 'arrow'], [3, 'arrow']] as const) {
+      localStorage.setItem('gachitayo.settings', JSON.stringify({ carMarker: saved }));
+      vi.resetModules();
+      expect((await import('../../src/app/settings')).getSettings().carMarker).toBe(want);
     }
     localStorage.removeItem('gachitayo.settings');
   });

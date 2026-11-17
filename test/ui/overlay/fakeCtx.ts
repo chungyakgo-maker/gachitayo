@@ -19,6 +19,12 @@ export function fakeCtx() {
       if (prop === 'measureText') return (s: string) => ({ width: s.length * (parseFloat(/(\d+(?:\.\d+)?)px/.exec(String(state.font))?.[1] ?? '10') * 0.6) });
       if (prop === 'setLineDash') return (d: number[]) => (dash = [...d]);
       if (prop === 'getLineDash') return () => dash;
+      // 그라데이션: 색 칸만 받는 물건 (만든 것은 기록)
+      if (prop === 'createRadialGradient' || prop === 'createLinearGradient')
+        return (...args: unknown[]) => {
+          calls.push({ op: prop, args, fillStyle: state.fillStyle, strokeStyle: state.strokeStyle, font: state.font, lineDash: dash });
+          return { gradient: prop, addColorStop: () => {} };
+        };
       return (...args: unknown[]) => {
         calls.push({ op: prop, args, fillStyle: state.fillStyle, strokeStyle: state.strokeStyle, font: state.font, lineDash: dash });
       };

@@ -34,6 +34,8 @@ export interface LiveMapProps {
   speedKmh?: number | null;
   /** 확대 단계 (+ / −, 사용자 요청). 0이 기본, +면 가깝게 */
   zoom?: number;
+  /** 내 차 표시 모양 (설정) */
+  marker?: MiniMapOpts['marker'];
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine !== false);
@@ -225,6 +227,7 @@ export function LiveMap(props: LiveMapProps) {
       friend: friend && p.friend ? { ...p.friend, x: friend.x, y: friend.y } : null,
       friends: p.friends,
       north: false,
+      marker: p.marker,
     });
   };
   const drawRef = useRef(drawFrame);

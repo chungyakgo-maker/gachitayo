@@ -14,7 +14,9 @@ import { RestoreBanner } from '../components/RestoreBanner';
 import { Overlay } from '../components/Overlay';
 import { isApp } from '../../platform';
 import { LegalLink } from '../legal';
-import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CAR_MARKER_LABEL, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CarMarker, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { OverlayCanvas } from '../components/OverlayCanvas';
+import { drawMeIcon } from '../overlay/minimap';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
@@ -316,6 +318,19 @@ export function SettingsScreen() {
             ))}
           </div>
           <span className="sub">통신이 없으면 저절로 코스 선만 그려요. 끄면 데이터와 배터리를 덜 써요.</span>
+        </section>
+        {/* 내 차 표시 (사용자 요청 시안 2026-11-17 "내 차 너무 작아서 안 보여"): 그림을 눌러 고른다 */}
+        <section className="card-col" style={{ gap: 8 }} aria-label="내 차 표시">
+          <span className="label">내 차 표시 (주행 지도)</span>
+          <div className="marker-pick">
+            {(Object.keys(CAR_MARKER_LABEL) as CarMarker[]).map((k) => (
+              <button key={k} type="button" aria-label={CAR_MARKER_LABEL[k]} aria-pressed={s.carMarker === k} onClick={() => updateSettings({ carMarker: k })}>
+                <OverlayCanvas className="marker-icon" label={CAR_MARKER_LABEL[k]} draw={(ctx, w, h) => drawMeIcon(ctx, w, h, k)} />
+                <span aria-hidden="true">{CAR_MARKER_LABEL[k]}</span>
+              </button>
+            ))}
+          </div>
+          <span className="sub">주행 화면 지도에서 내 위치를 이 모양으로 그려요. 처음에는 화살표예요.</span>
         </section>
         <DriveFriendsToggle />
         <section className="card-col" style={{ gap: 8 }} aria-label="커브 방향 화면 색">
