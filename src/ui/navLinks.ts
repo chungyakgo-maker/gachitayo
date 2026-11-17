@@ -55,7 +55,7 @@ export function navUrl(app: NavApp, p: NavPoint, platform: Platform, appname: st
 }
 
 /** 아이폰 앱(사양서 13.3)의 길안내 앱 이름 표시 (네이버 지도 appname) */
-export const APP_BUNDLE_ID = 'com.dgo.app';
+export const APP_BUNDLE_ID = 'kr.dgo.app';
 
 /** 아이폰 앱: 내비 앱이 있으면 그 앱으로 길안내, 없으면 앱스토어를 연다 (앱 안 화면에서 열리지 않게 바깥으로) */
 export async function openNavApp(app: NavApp, p: NavPoint): Promise<'opened' | 'store'> {

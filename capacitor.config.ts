@@ -2,7 +2,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.dgo.app',
+  appId: 'kr.dgo.app',
   appName: '디고',
   webDir: 'dist-app',
   backgroundColor: '#000000',

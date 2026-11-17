@@ -22,7 +22,7 @@
 
 - 앱: 아이폰 기본 애플 로그인 창(AuthenticationServices). 시작 때 임의 값(nonce)을 만들어 해시만 애플에 주고, 받은 identityToken·authorizationCode와 원래 nonce를 서버로.
 - `POST /auth/apple {identityToken, authorizationCode, nonce, nickname?}` (+ 지금 폰 열쇠가 있으면 그 계정에서 시작한 로그인)
-  - identityToken 확인: 애플 공개 키(https://appleid.apple.com/auth/keys, 1시간 기억)로 RS256 서명, iss `https://appleid.apple.com`, aud = 번들 ID `com.dgo.app`, 만료, nonce = sha256(보낸 nonce).
+  - identityToken 확인: 애플 공개 키(https://appleid.apple.com/auth/keys, 1시간 기억)로 RS256 서명, iss `https://appleid.apple.com`, aud = 번들 ID `kr.dgo.app`, 만료, nonce = sha256(보낸 nonce).
   - 계정 규칙은 카카오와 같다 (카카오 설계 5.3): 처음 보는 애플 계정 + 지금 익명 계정 → 그 계정에 연결(linked), 지금 계정이 없거나 이미 다른 로그인 → 새 계정(created), 아는 애플 계정 → 로그인(login), 지금 익명 계정이면 합치기(merged), 다른 로그인 계정이면 바꾸기(switched). `identities.provider = 'apple'`, subject = 애플 사용자 번호(sub).
   - 닉네임: 새 계정이면 애플이 준 이름(처음 로그인 때만 옴) 또는 "드라이버".
   - 애플 비밀값(APPLE_SIGNIN_KEY_P8, APPLE_SIGNIN_KEY_ID, APPLE_TEAM_ID)이 있으면 authorizationCode를 애플에 바꿔 refresh token을 D1 `apple_tokens`에 둔다 (계정 삭제 때 애플 연결을 끊으려고, 애플 규칙). 없으면 로그인은 되고 끊기만 못 한다.

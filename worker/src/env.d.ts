@@ -27,7 +27,7 @@ declare namespace Cloudflare {
     APPLE_SIGNIN_KEY_P8?: string;
     APPLE_SIGNIN_KEY_ID?: string;
     APPLE_TEAM_ID?: string;
-    /** 아이폰 앱 번들 ID (없으면 com.dgo.app) */
+    /** 아이폰 앱 번들 ID (없으면 kr.dgo.app) */
     APPLE_BUNDLE_ID?: string;
     /** 테스트에서만: 적용할 D1 마이그레이션 */
     TEST_MIGRATIONS?: import('cloudflare:test').D1Migration[];

@@ -31,7 +31,7 @@ async function sha256Hex(s: string) {
 }
 async function idToken(o: { sub: string; nonce: string; aud?: string; exp?: number; key?: CryptoKey; alg?: string; iss?: string }) {
   const h = enc({ alg: o.alg ?? 'RS256', kid: 'k1' });
-  const p = enc({ iss: o.iss ?? 'https://appleid.apple.com', aud: o.aud ?? 'com.dgo.app', exp: o.exp ?? Math.floor(Date.now() / 1000) + 600, iat: Math.floor(Date.now() / 1000), sub: o.sub, nonce: await sha256Hex(o.nonce), jti: crypto.randomUUID() });
+  const p = enc({ iss: o.iss ?? 'https://appleid.apple.com', aud: o.aud ?? 'kr.dgo.app', exp: o.exp ?? Math.floor(Date.now() / 1000) + 600, iat: Math.floor(Date.now() / 1000), sub: o.sub, nonce: await sha256Hex(o.nonce), jti: crypto.randomUUID() });
   const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', o.key ?? rsa.privateKey, new TextEncoder().encode(`${h}.${p}`)));
   return `${h}.${p}.${b64url(sig)}`;
 }
@@ -172,12 +172,12 @@ describe('애플 로그인', () => {
 
   it('비밀값이 있으면 refresh token을 두고, 계정을 지우면 애플 연결을 끊는다', async () => {
     const r = await ok(await apple({ sub: nextSub(), e: withKeys }));
-    expect(tokenCalls[0]!.get('client_id')).toBe('com.dgo.app');
+    expect(tokenCalls[0]!.get('client_id')).toBe('kr.dgo.app');
     expect(tokenCalls[0]!.get('code')).toBe('code-1');
     const secret = tokenCalls[0]!.get('client_secret')!;
     const [h, p] = secret.split('.').slice(0, 2).map((x) => JSON.parse(atob(x.replace(/-/g, '+').replace(/_/g, '/'))));
     expect(h).toMatchObject({ alg: 'ES256', kid: 'KID1' });
-    expect(p).toMatchObject({ iss: 'TEAM1', aud: 'https://appleid.apple.com', sub: 'com.dgo.app' });
+    expect(p).toMatchObject({ iss: 'TEAM1', aud: 'https://appleid.apple.com', sub: 'kr.dgo.app' });
     const row = await env.DB.prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?').bind(r.userId).first<{ refresh_token: string }>();
     expect(row!.refresh_token).toBe('rt-1');
 

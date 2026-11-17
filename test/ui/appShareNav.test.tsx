@@ -42,7 +42,7 @@ describe('아이폰 앱: 공유창과 바깥 내비 (사양서 13.3)', () => {
     expect(await openNavApp('naver', p)).toBe('opened');
     const url = (openUrl.mock.calls[0]![0] as { url: string }).url;
     expect(url).toMatch(/^nmap:\/\/navigation\?/);
-    expect(url).toContain('appname=com.dgo.app');
+    expect(url).toContain('appname=kr.dgo.app');
     canOpenUrl.mockResolvedValue({ value: false });
     expect(await openNavApp('kakao', p)).toBe('store');
     expect((openUrl.mock.calls[1]![0] as { url: string }).url).toBe('https://apps.apple.com/kr/app/id304608425');

@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 const root = new URL('../../', import.meta.url);
 
 describe('아이폰 앱 설정 (사양서 13.3)', () => {
-  it('Capacitor 설정: 번들 ID com.dgo.app, 이름 디고, 앱 빌드 폴더 dist-app', async () => {
+  it('Capacitor 설정: 번들 ID kr.dgo.app, 이름 디고, 앱 빌드 폴더 dist-app', async () => {
     const config = (await import('../../capacitor.config')).default;
-    expect(config).toMatchObject({ appId: 'com.dgo.app', appName: '디고', webDir: 'dist-app' });
+    expect(config).toMatchObject({ appId: 'kr.dgo.app', appName: '디고', webDir: 'dist-app' });
   });
 
   it('iOS 설정(Info.plist): 홈 화면 이름 디고, 위치·모션 권한 문구, 백그라운드 위치, 내비 앱 주소, 암호화 해당 없음', () => {

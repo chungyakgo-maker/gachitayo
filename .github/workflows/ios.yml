@@ -84,7 +84,7 @@ jobs:
           xcrun simctl boot "$dev"
           xcrun simctl bootstatus "$dev" -b
           xcrun simctl install "$dev" build/Build/Products/Debug-iphonesimulator/App.app
-          xcrun simctl launch "$dev" com.dgo.app
+          xcrun simctl launch "$dev" kr.dgo.app
           sleep 15
           xcrun simctl io "$dev" screenshot ios-launch.png
           # 내려받기가 막힌 곳에서도 볼 수 있게 작게 줄여 로그에 글자로 남긴다

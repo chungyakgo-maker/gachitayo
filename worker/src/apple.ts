@@ -18,7 +18,7 @@ const KEYS_REFRESH_MIN_MS = 60_000;
 /** 같은 애플 로그인을 다시 쓰지 못하게 기억하는 시간 (identityToken은 10분이면 만료) */
 const REPLAY_KEEP_MS = 3_600_000;
 
-const bundleId = (env: Cloudflare.Env) => env.APPLE_BUNDLE_ID || 'com.dgo.app';
+const bundleId = (env: Cloudflare.Env) => env.APPLE_BUNDLE_ID || 'kr.dgo.app';
 
 function b64urlToBytes(s: string): Uint8Array {
   const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4));
