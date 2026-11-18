@@ -499,6 +499,24 @@ html.app-h .modal-backdrop {
   font-weight: 700;
 }
 
+.pill.bike {
+  background: rgba(58, 134, 255, 0.16);
+  color: #9cc4ff;
+}
+
+/* 바이크 경로에 자동차 전용 도로가 섞였을 때 (막는 오류가 아니라 확인해 달라는 알림이라 노란 테) */
+.notice.caution {
+  border-color: rgba(255, 196, 61, 0.55);
+  background: rgba(255, 196, 61, 0.08);
+  color: var(--fg);
+}
+
+.link-btn.inline {
+  min-height: 0;
+  display: inline;
+  font-size: inherit;
+}
+
 .pill.fast {
   background: var(--fast-bg);
   color: var(--fast);

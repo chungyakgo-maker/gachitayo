@@ -15,6 +15,7 @@ const startRouteDrive = vi.fn();
 const setRecord = vi.fn();
 const clearPlan = vi.fn();
 let places: Array<{ name: string; category: string; address: string; lat: number; lon: number }> | Error = [];
+const planOtherRoute = vi.fn(async (_f: { lat: number; lon: number }) => {});
 const findPlaces = vi.fn(async (_q: string) => {
   if (places instanceof Error) throw places;
   return places;
@@ -30,6 +31,7 @@ vi.mock('../../src/app/routeNav', async (orig) => ({
   setRecord: (on: boolean) => setRecord(on),
   clearPlan: () => clearPlan(),
   findPlaces: (q: string) => findPlaces(q),
+  planOtherRoute: (f: { lat: number; lon: number }) => planOtherRoute(f),
 }));
 vi.mock('../../src/app/drive', async (orig) => ({
   ...(await orig<typeof import('../../src/app/drive')>()),
@@ -283,5 +285,38 @@ describe('목적지 고르기', () => {
     expect(back).toHaveAttribute('href', '#/');
     fireEvent.click(back);
     expect(clearPlan).toHaveBeenCalled();
+  });
+});
+
+describe('바이크 경로 (2026-11-18 바이크 모드 시안)', () => {
+  const bikePlan = (over: Record<string, unknown>): RoutePlan => {
+    const p = readyPlan();
+    return { ...p, route: { ...p.route!, vehicle: 'bike', warnRoads: [], alt: 0, alts: 2, ...over } };
+  };
+
+  it('바이크 경로면 "바이크 경로 · 고속도로·자동차전용도로 피함" 표시, 섞인 도로가 없으면 경고 없음', () => {
+    plan = bikePlan({});
+    render(<DestinationScreen />);
+    expect(screen.getByText('바이크 경로 · 고속도로·자동차전용도로 피함')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('자동차 전용 도로가 섞였으면 도로 이름과 "다른 길로 다시 찾기"', () => {
+    plan = bikePlan({ warnRoads: ['내부순환로'] });
+    render(<DestinationScreen />);
+    expect(screen.getByRole('alert')).toHaveTextContent('경로에 자동차 전용 도로가 섞였을 수 있어요 (내부순환로).');
+    fireEvent.click(screen.getByRole('button', { name: '다른 길로 다시 찾기' }));
+    expect(planOtherRoute).toHaveBeenCalledWith({ lat: 37.39, lon: 127 });
+  });
+
+  it('다른 후보가 없으면 확인해 달라는 글만, 자동차 경로에는 바이크 표시 없음', () => {
+    plan = bikePlan({ warnRoads: ['올림픽대로'], alts: 1 });
+    const v = render(<DestinationScreen />);
+    expect(screen.getByRole('alert')).toHaveTextContent('출발 전에 경로를 확인해 주세요');
+    expect(screen.queryByRole('button', { name: '다른 길로 다시 찾기' })).toBeNull();
+    v.unmount();
+    plan = readyPlan();
+    render(<DestinationScreen />);
+    expect(screen.queryByText(/바이크 경로/)).toBeNull();
   });
 });

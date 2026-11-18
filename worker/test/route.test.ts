@@ -144,6 +144,60 @@ describe('목적지 길찾기 /api/route (네이버)', () => {
   });
 });
 
+describe('바이크 길찾기 (2026-11-18 바이크 모드: 고속도로·자동차전용도로 피함)', () => {
+  const R = (lon: number, roads: string[], distance: number) => ({
+    summary: { distance, duration: distance * 100 },
+    path: [
+      [127, 37.5],
+      [lon, 37.501],
+    ],
+    section: roads.map((name) => ({ name, distance: 10 })),
+  });
+  const naver = (route: Record<string, unknown[]>) => ({ status: 200, body: { code: 0, message: 'ok', route } });
+
+  it('자동차 전용 도로 회피·무료 우선·편한 길 세 옵션을 한 번에 묻고, 전용 도로 없는 경로를 고른다', async () => {
+    const u = await newUser();
+    directions = naver({
+      traavoidcaronly: [R(127.003, ['북악산로', '내부순환로'], 5000)],
+      traavoidtoll: [R(127.004, ['북악산로', '평창문화로'], 6000)],
+      tracomfort: [R(127.005, ['경부고속도로'], 7000)],
+    });
+    const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO, vehicle: 'bike' } });
+    expect(r.status).toBe(200);
+    const j = (await r.json()) as Record<string, unknown>;
+    expect(calls[0]!.url.searchParams.get('option')).toBe('traavoidcaronly:traavoidtoll:tracomfort');
+    expect(j).toMatchObject({ distanceM: 6000, vehicle: 'bike', warnRoads: [], alt: 0, alts: 3, destName: '평창문화로' });
+  });
+
+  it('모두 섞였으면 회피 우선 경로 + 섞인 도로 이름, alt로 다음 후보 (같은 경로는 한 번만)', async () => {
+    const u = await newUser();
+    directions = naver({
+      traavoidcaronly: [R(127.003, ['북악산로', '내부순환로', '내부순환로'], 5000)],
+      traavoidtoll: [R(127.003, ['북악산로', '내부순환로'], 5000)],
+      tracomfort: [R(127.005, ['올림픽대로', '서울양양고속도로'], 7000)],
+    });
+    const first = (await (await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO, vehicle: 'bike' } })).json()) as Record<string, unknown>;
+    expect(first).toMatchObject({ distanceM: 5000, warnRoads: ['내부순환로'], alt: 0, alts: 2 });
+    const next = (await (await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO, vehicle: 'bike', alt: 1 } })).json()) as Record<string, unknown>;
+    expect(next).toMatchObject({ distanceM: 7000, warnRoads: ['올림픽대로', '서울양양고속도로'], alt: 1, alts: 2 });
+    const wrap = (await (await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO, vehicle: 'bike', alt: 2 } })).json()) as Record<string, unknown>;
+    expect(wrap).toMatchObject({ distanceM: 5000, alt: 0 });
+  });
+
+  it('자동차는 옵션 없이 예전과 같은 응답 (바이크 칸 없음)', async () => {
+    const u = await newUser();
+    const r = await call('POST', '/api/route', { token: u.token, body: { from: FROM, to: TO, vehicle: 'car' } });
+    expect(calls[0]!.url.searchParams.get('option')).toBeNull();
+    expect(Object.keys((await r.json()) as object).sort()).toEqual(['destName', 'distanceM', 'durationS', 'points']);
+  });
+
+  it('도로 이름으로 자동차 전용 도로를 알아본다', async () => {
+    const { isCarOnlyRoad } = await import('../src/route');
+    for (const n of ['경부고속도로', '수도권제1순환고속도로', '제3경인고속화도로', '올림픽대로', '강변북로', '자유로', '동부간선도로']) expect(isCarOnlyRoad(n)).toBe(true);
+    for (const n of ['북악산로', '남산공원길', '자유로운길', '번영로', '국도44호선', '']) expect(isCarOnlyRoad(n)).toBe(false);
+  });
+});
+
 describe('장소 검색 /api/places (네이버 지역 검색)', () => {
   it('finds places by name with coordinates', async () => {
     const u = await newUser();
