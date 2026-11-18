@@ -1071,6 +1071,12 @@ html.app-h .modal-backdrop {
   padding: 8px calc(16px + var(--safe-r)) calc(16px + var(--safe-b)) calc(16px + var(--safe-l));
 }
 
+/* 주행 지도: 두 손가락 확대·돌리기는 지도가 받는다 (페이지가 커지거나 밀리지 않게, 2026-11-17) */
+.drive-map .live-map,
+.drive-map .replay-map {
+  touch-action: none;
+}
+
 .drive-map .drive-bottom {
   position: absolute;
   left: 0;

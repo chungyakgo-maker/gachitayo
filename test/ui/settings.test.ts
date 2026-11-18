@@ -145,4 +145,11 @@ describe('주행 중 칸을 누르면 다음 값으로', () => {
     expect(m2.getSettings()).toMatchObject({ courseFilter: 'all', popularPeriod: '30d', driveZoom: 0 });
     localStorage.clear();
   });
+
+  it('주행 지도 확대는 두 손가락으로 고른 소수도 남는다 (0.01 단위, 2026-11-17 "부드럽게 확대·축소")', async () => {
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ driveZoom: 0.537 }));
+    vi.resetModules();
+    expect((await import('../../src/app/settings')).getSettings().driveZoom).toBe(0.54);
+    localStorage.removeItem('gachitayo.settings');
+  });
 });
