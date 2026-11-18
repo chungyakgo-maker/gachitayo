@@ -11,7 +11,7 @@ import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
 import { makePolyline } from '../../engine/course/polyline';
 import { cycleDriveMode, cycleReplaySpeed, endDrive, getDriveState, seekReplay, setReplayPlaying, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN, driveZoomOf, effectiveSettings } from '../../app/settings';
+import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN, driveZoomOf, effectiveSettings, meMarker } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
@@ -430,7 +430,7 @@ export function DriveView({ snap, gap: gapIn = null, front: frontIn = null, frie
           tiles={replay !== null || settings.mapTiles}
           speedKmh={st?.speedKmh ?? null}
           zoom={settings.driveZoom}
-          marker={settings.carMarker}
+          marker={meMarker(settings)}
           onAway={onAway}
           recenter={recenter}
           zoomNudge={nudge}

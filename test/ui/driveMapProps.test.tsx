@@ -84,4 +84,9 @@ describe('내 차 표시 (설정)', () => {
     render(<DriveView {...props({ settings: { ...DEFAULT_SETTINGS, carMarker: 'red' } })} />);
     expect(seen.markers.at(-1)).toBe('red');
   });
+
+  it('탈것이 바이크면 고른 바이크 모양을 넘긴다 (2026-11-18)', () => {
+    render(<DriveView {...props({ settings: { ...DEFAULT_SETTINGS, carMarker: 'red', vehicle: 'bike', bikeMarker: 'naked' } })} />);
+    expect(seen.markers.at(-1)).toBe('naked');
+  });
 });

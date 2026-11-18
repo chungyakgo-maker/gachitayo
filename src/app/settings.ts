@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import { liveGap } from '../features';
 import { FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from './courseFilter';
 import { G_MAX_DEFAULT, G_MAX_OPTIONS } from '../ui/overlay/gmeter';
+import type { BikeMarker } from '../ui/overlay/bikeMarks';
 
 export { G_MAX_DEFAULT, G_MAX_OPTIONS };
 
@@ -18,6 +19,16 @@ const CURVE_TINTS = Object.keys(CURVE_TINT_LABEL) as CurveTint[];
 export type CarMarker = 'arrow' | 'white' | 'blue' | 'red';
 export const CAR_MARKER_LABEL: Record<CarMarker, string> = { arrow: '화살표', white: '흰 차', blue: '파란 점', red: '빨간 차' };
 const CAR_MARKERS = Object.keys(CAR_MARKER_LABEL) as CarMarker[];
+/** 탈것 (2026-11-18 세영 "바이크 모드"): 바이크면 내 위치를 바이크 그림으로, 길찾기는 고속도로·자동차전용도로를 피한다 */
+export type Vehicle = 'car' | 'bike';
+export const VEHICLE_LABEL: Record<Vehicle, string> = { car: '자동차', bike: '바이크' };
+export type { BikeMarker };
+/** 내 바이크 표시 5종 (시안 docs/mock/2026-11-18-bike-mode.png, "할리"는 상표라 크루저) */
+export const BIKE_MARKER_LABEL: Record<BikeMarker, string> = { scooter: '스쿠터', sport: 'R차', cruiser: '크루저', naked: '네이키드', motard: '모타드' };
+const BIKE_MARKERS = Object.keys(BIKE_MARKER_LABEL) as BikeMarker[];
+/** 주행 지도에 그릴 내 위치 모양 */
+export type MeMarker = CarMarker | BikeMarker;
+export const meMarker = (s: Pick<Settings, 'vehicle' | 'carMarker' | 'bikeMarker'>): MeMarker => (s.vehicle === 'bike' ? s.bikeMarker : s.carMarker);
 /** 주행 지도 모드의 보기 (사용자 요청): 전체 코스 / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼) */
 export type MapViewMode = 'fit' | 'follow' | 'heading';
 export const MAP_VIEW_LABEL: Record<MapViewMode, string> = { fit: '전체 코스', follow: '나를 가운데', heading: '진행 방향 위' };
@@ -55,6 +66,10 @@ export interface Settings {
   driveZoom: number;
   /** 주행 지도의 내 차 표시 (기본 화살표) */
   carMarker: CarMarker;
+  /** 탈것 (기본 자동차) */
+  vehicle: Vehicle;
+  /** 탈것이 바이크일 때 내 위치 모양 (기본 R차) */
+  bikeMarker: BikeMarker;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -81,6 +96,8 @@ export const DEFAULT_SETTINGS: Settings = {
   popularPeriod: '30d',
   driveZoom: 0,
   carMarker: 'arrow',
+  vehicle: 'car',
+  bikeMarker: 'sport',
 };
 
 export const DRIVE_ZOOM_MIN = -4;
@@ -149,6 +166,8 @@ function load(): Settings {
       driveZoom:
         typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom) ? driveZoomOf(raw.driveZoom) : 0,
       carMarker: CAR_MARKERS.includes(raw.carMarker as CarMarker) ? raw.carMarker! : 'arrow',
+      vehicle: raw.vehicle === 'bike' ? 'bike' : 'car',
+      bikeMarker: BIKE_MARKERS.includes(raw.bikeMarker as BikeMarker) ? raw.bikeMarker! : 'sport',
     };
   } catch {
     return DEFAULT_SETTINGS;

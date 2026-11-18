@@ -54,6 +54,26 @@ describe('내 차 표시 고르기 (사용자 요청 시안 2026-11-17: 화살�
   });
 });
 
+describe('바이크 모드 (2026-11-18 시안)', () => {
+  it('탈것을 바이크로 바꾸면 내 바이크 표시 5종이 나오고, 고른 것이 저장된다', () => {
+    updateSettings(DEFAULT_SETTINGS);
+    render(<SettingsScreen />);
+    const veh = screen.getByRole('region', { name: '탈것' });
+    expect(within(veh).getByRole('button', { name: '자동차' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('region', { name: '내 바이크 표시' })).toBeNull();
+    fireEvent.click(within(veh).getByRole('button', { name: '바이크' }));
+    expect(getSettings().vehicle).toBe('bike');
+    expect(screen.queryByRole('region', { name: '내 차 표시' })).toBeNull();
+    const sec = screen.getByRole('region', { name: '내 바이크 표시' });
+    expect(within(sec).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['스쿠터', 'R차', '크루저', '네이키드', '모타드']);
+    expect(within(sec).getByRole('button', { name: 'R차' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(sec).getByRole('button', { name: '크루저' }));
+    expect(getSettings().bikeMarker).toBe('cruiser');
+    expect(screen.getByText(/고속도로·자동차전용도로를 피해요/)).toBeInTheDocument();
+    updateSettings(DEFAULT_SETTINGS);
+  });
+});
+
 describe('상단 표시 값 (시안 Widgets): 칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽 (사용자 요청)', () => {
   it('칸 3에서 칸 2와 같은 값을 고르면 두 칸이 바뀐다. 앞 친구 간격·표지판도 고를 수 있다', () => {
     updateSettings(DEFAULT_SETTINGS);

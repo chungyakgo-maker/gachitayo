@@ -8,7 +8,7 @@ describe('설정 (폰 보관)', () => {
   });
 
   it('기본값: 지도 모드, 상단 칸 델타·G미터·표지판, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m, 주행 중 바탕 지도 보이기, G미터 최대 2g', () => {
-    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D', courseFilter: 'all', popularPeriod: '30d', driveZoom: 0, carMarker: 'arrow' });
+    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D', courseFilter: 'all', popularPeriod: '30d', driveZoom: 0, carMarker: 'arrow', vehicle: 'car', bikeMarker: 'sport' });
   });
 
   it('G미터 최대값은 1.5·2·2.5·3 g만 (저장된 값이 이상하면 2g)', async () => {
@@ -44,6 +44,25 @@ describe('설정 (폰 보관)', () => {
       localStorage.setItem('gachitayo.settings', JSON.stringify({ carMarker: saved }));
       vi.resetModules();
       expect((await import('../../src/app/settings')).getSettings().carMarker).toBe(want);
+    }
+    localStorage.removeItem('gachitayo.settings');
+  });
+
+  it('탈것: 자동차·바이크 (기본 자동차), 바이크 표시 5종 (기본 R차, 2026-11-18 바이크 모드)', async () => {
+    const { meMarker, VEHICLE_LABEL, BIKE_MARKER_LABEL } = await import('../../src/app/settings');
+    expect(VEHICLE_LABEL).toEqual({ car: '자동차', bike: '바이크' });
+    expect(Object.values(BIKE_MARKER_LABEL)).toEqual(['스쿠터', 'R차', '크루저', '네이키드', '모타드']);
+    expect(meMarker(getSettings())).toBe('arrow');
+    updateSettings({ vehicle: 'bike', bikeMarker: 'cruiser', carMarker: 'red' });
+    expect(meMarker(getSettings())).toBe('cruiser');
+    updateSettings({ vehicle: 'car' });
+    expect(meMarker(getSettings())).toBe('red');
+    const { vi } = await import('vitest');
+    for (const [saved, want] of [[{ vehicle: 'bike', bikeMarker: 'motard' }, ['bike', 'motard']], [{ vehicle: 'boat', bikeMarker: 'harley' }, ['car', 'sport']], [{}, ['car', 'sport']]] as const) {
+      localStorage.setItem('gachitayo.settings', JSON.stringify(saved));
+      vi.resetModules();
+      const s = (await import('../../src/app/settings')).getSettings();
+      expect([s.vehicle, s.bikeMarker]).toEqual(want);
     }
     localStorage.removeItem('gachitayo.settings');
   });
