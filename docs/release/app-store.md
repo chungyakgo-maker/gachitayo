@@ -121,3 +121,14 @@ Contact: chungyakgo@gmail.com
 
 6.9인치(1320×2868) 세로, **정식 빌드 화면**(친구 위치·앞 차 간격 없음). 만들어 둠: `docs/release/screenshots/` (2026-11-18, 지도는 실제 서버 지도, 이름·사진은 예시)
 1-메인 · 2-코스 · 3-주행-커브표지판 · 4-팀-대기실 · 5-팀-만들기 · 6-목적지 · 7-바이크-기울기(2026-11-18, 바이크 모드: R차 표시·기울기 칸, 모의주행 화면) — App Store Connect → 디고 → 1.0.0 → 6.9인치 디스플레이에 이 순서로 끌어다 놓는다.
+
+6.3인치(중형, Dynamic Island) 1206×2622: `docs/release/screenshots-6.3/` — 위 7장을 그대로 줄인 것 (2026-11-18 제출 때 App Store Connect 가 "Dynamic Island 탑재 iPhone(중형 디스플레이)용 스크린샷"을 따로 요구)
+
+## 콘텐츠 권한 (앱 정보)
+
+"제3자 콘텐츠를 포함하거나 표시하거나 접근합니까?" → **예**, "필요한 권리를 갖고 있음" 체크. 지도는 OpenStreetMap 자료(ODbL, 화면에 "© OpenStreetMap" 표시), 장소 검색·길찾기는 네이버 클라우드 API 이용 약관에 따라 쓴다.
+
+## 개인정보 처리방침 URL (앱 개인정보 보호 화면)
+
+App Store Connect 가 "앱 개인정보 보호" 화면에도 개인정보 처리방침 URL 을 따로 요구한다 (계정 관리자만 입력 가능): https://chungyakgo-maker.github.io/gachitayo/privacy.html
+
