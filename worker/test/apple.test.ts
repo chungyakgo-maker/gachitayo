@@ -91,7 +91,7 @@ describe('애플 로그인', () => {
     const r = await ok(await apple({ sub: nextSub(), nickname: '홍길동' }));
     expect(r.kind).toBe('created');
     expect(r.nickname).toBe('홍길동');
-    expect(await me(r.token)).toEqual({ userId: r.userId, nickname: '홍길동', kakao: false, apple: true });
+    expect(await me(r.token)).toEqual({ userId: r.userId, nickname: '홍길동', avatar: null, kakao: false, apple: true });
     expect((await ok(await apple({ sub: nextSub() }))).nickname).toBe('드라이버');
   });
 

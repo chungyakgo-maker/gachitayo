@@ -13,6 +13,7 @@
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
 //   DELETE /api/sessions/{id}            기록 지우기 (랩·세션 행, 원본·처리된 파일) (M10)
 //   PUT/GET/HEAD /files/{userId}/{sessionId}.{raw|processed}.json.gz
+//   GET /avatar/{id}.jpg                 프로필 사진 (열쇠 없음, 무작위 id) · PUT/DELETE /api/me/avatar 내 사진 올리기·지우기
 //   GET /api/friends                     내 친구 코드와 친구 목록 (M8)
 //   POST /api/friends {code}             친구 코드로 친구 맺기 (바로 서로 친구)
 //   DELETE /api/friends/{id}             친구 끊기 (양쪽 모두)
@@ -25,6 +26,7 @@
 //   GET /api/popular?period=             인기 도로 (기본 코스별 달린 사람 수)
 //   POST /api/driving {builtin}          기본 코스로 주행 중 신호 (실시간 인기, 위치 없음)
 //   /api/rooms…, 웹소켓 /group/{id}      그룹 주행 방 (group.ts)
+//   /api/teams…                          팀·팀 주행 (teams.ts)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
@@ -40,6 +42,8 @@ import { searchPlaces } from './places';
 import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 import { finishApple } from './apple';
+import { deleteAvatar, getAvatar, putAvatar } from './avatar';
+import { createTeam, deleteTeam, getTeam, leaveTeam, listTeams, teamDrive, updateTeam } from './teams';
 
 export { LiveRoom } from './live';
 export { GroupRoom } from './group';
@@ -72,6 +76,13 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
 
   if (path.startsWith('/files/')) return handleFiles(req, env, path, headers);
   if (path.startsWith('/map/')) return handleMap(req, env, path, headers, ctx);
+
+  // 프로필 사진: 열쇠 없이 (주소를 아는 친구·팀원만 볼 수 있다, avatar.ts)
+  const avatar = /^\/avatar\/([^/]+)\.jpg$/.exec(path);
+  if (avatar) {
+    if (method !== 'GET') throw new HttpError(405);
+    return getAvatar(env, avatar[1]!, headers);
+  }
 
   const group = /^\/group\/([^/]+)$/.exec(path);
   if (group) {
@@ -162,6 +173,26 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     return json(200, headers, await roomAction(env, id!, userId, act, body));
   }
 
+  if (path === '/api/teams') {
+    const userId = await authenticate(req, env);
+    if (method === 'GET') return json(200, headers, await listTeams(env, userId));
+    if (method === 'POST') return json(200, headers, await createTeam(env, userId, await readJson(req, 8192)));
+    throw new HttpError(405);
+  }
+  const tm = /^\/api\/teams\/([^/]+)(?:\/(leave|drive))?$/.exec(path);
+  if (tm) {
+    const userId = await authenticate(req, env);
+    const [, id, act] = tm;
+    if (act) {
+      if (method !== 'POST') throw new HttpError(405);
+      return json(200, headers, act === 'leave' ? await leaveTeam(env, userId, id!) : await teamDrive(env, userId, id!));
+    }
+    if (method === 'GET') return json(200, headers, await getTeam(env, userId, id!));
+    if (method === 'PUT') return json(200, headers, await updateTeam(env, userId, id!, await readJson(req, 8192)));
+    if (method === 'DELETE') return json(200, headers, await deleteTeam(env, userId, id!));
+    throw new HttpError(405);
+  }
+
   if (path === '/api/prefs') {
     const userId = await authenticate(req, env);
     if (method === 'GET') return json(200, headers, await getPrefs(env, userId));
@@ -189,6 +220,13 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     if (method !== 'POST') throw new HttpError(405);
     const userId = await authenticate(req, env);
     return json(200, headers, await findRoute(env, userId, await readJson(req, 1024)));
+  }
+
+  if (path === '/api/me/avatar') {
+    const userId = await authenticate(req, env);
+    if (method === 'PUT') return json(200, headers, await putAvatar(env, userId, req));
+    if (method === 'DELETE') return json(200, headers, await deleteAvatar(env, userId));
+    throw new HttpError(405);
   }
 
   if (path === '/api/me') {

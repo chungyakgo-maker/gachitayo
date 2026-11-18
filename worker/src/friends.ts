@@ -50,14 +50,19 @@ export async function myCode(env: Cloudflare.Env, userId: string): Promise<strin
 interface FriendRow {
   id: string;
   nickname: string;
+  avatar: string | null;
   created_at: string;
   at: number | null;
+  teams: number;
 }
+
+/** 한 사람이 속할 수 있는 팀 수 (사용자 결정 "팀은 최대 5개", B-가: 만든 팀 + 들어간 팀) */
+export const TEAM_MAX = 5;
 
 export async function listFriends(env: Cloudflare.Env, userId: string, now = Date.now()) {
   const code = await myCode(env, userId);
   const { results } = await env.DB.prepare(
-    `SELECT u.id, u.nickname, f.created_at, p.at FROM friends f
+    `SELECT u.id, u.nickname, u.avatar, f.created_at, p.at, (SELECT COUNT(*) FROM team_members tm WHERE tm.user_id = f.friend_id) AS teams FROM friends f
        JOIN users u ON u.id = f.friend_id
        LEFT JOIN presence p ON p.user_id = f.friend_id
      WHERE f.user_id = ? ORDER BY u.nickname`,
@@ -66,7 +71,8 @@ export async function listFriends(env: Cloudflare.Env, userId: string, now = Dat
     .all<FriendRow>();
   return {
     code,
-    friends: results.map((r) => ({ userId: r.id, nickname: r.nickname, since: r.created_at, sharing: r.at !== null && now - r.at < PRESENCE_FRESH_MS })),
+    // full: 그 친구가 이미 팀 5개라 새 팀에 넣을 수 없다 (팀 만들기에서 "팀이 가득 찬 친구")
+    friends: results.map((r) => ({ userId: r.id, nickname: r.nickname, avatar: r.avatar ?? null, since: r.created_at, sharing: r.at !== null && now - r.at < PRESENCE_FRESH_MS, full: r.teams >= TEAM_MAX })),
   };
 }
 
