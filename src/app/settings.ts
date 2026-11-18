@@ -1,5 +1,6 @@
 // 설정 (사양서 8.8 일부): 기본 화면 모드, 상단 표시 값 세 칸(칸 1 델타, 칸 2 왼쪽, 칸 3 오른쪽), 델타 색. 폰(localStorage)에 보관한다.
 import { useSyncExternalStore } from 'react';
+import { liveGap } from '../features';
 import { FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from './courseFilter';
 import { G_MAX_DEFAULT, G_MAX_OPTIONS } from '../ui/overlay/gmeter';
 
@@ -158,6 +159,12 @@ let current: Settings = load();
 const listeners = new Set<() => void>();
 
 export const getSettings = (): Settings => current;
+
+/** 정식 빌드(간격 끔, features.ts): 저장된 값은 지우지 않고(다시 켜면 그대로) 읽을 때만 친구 델타 → 베스트 델타, "앞 친구 간격" 칸 → 표시 안 함 */
+export function effectiveSettings(s: Settings): Settings {
+  if (liveGap() || (s.deltaSource !== 'friend' && !s.widgets.includes('gap'))) return s;
+  return { ...s, deltaSource: 'best', widgets: s.widgets.map((w) => (w === 'gap' ? 'none' : w)) as [WidgetId, WidgetId] };
+}
 
 export function updateSettings(patch: Partial<Settings>): void {
   current = { ...current, ...patch };

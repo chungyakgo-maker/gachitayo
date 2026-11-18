@@ -143,6 +143,23 @@ describe('그룹 주행 상태', () => {
     expect(group.getGroup().room?.teamId).toBe('team-1');
   });
 
+  it('정식 빌드(위치 공유 끔): 팀 방에 붙어 순서·목적지는 받지만 내 위치는 안 보내고 남의 위치는 버린다', async () => {
+    vi.stubEnv('VITE_LOCATION_SHARING', 'off');
+    try {
+      await group.joinGroupRoom('482917');
+      h.phase = 'driving';
+      // 다른 테스트의 "마지막으로 보낸 시각"에 영향을 주지 않게 오래전 시각
+      h.sampleCb!({ kind: 'gps', s: { tFix: 1.0e12, lat: 37.5, lon: 127, speed: 10, heading: 90, hAcc: 5 } });
+      expect(socks[0]!.sent).toEqual([]);
+      msg({ type: 'pos', userId: 'host', t: 1.8e12, lat: 37.5, lon: 127, speed: 10, heading: 90, hAcc: 5 });
+      expect(group.getGroupPoints()).toEqual({});
+      msg({ type: 'state', ...ROOM({ gapS: 3 }) });
+      expect(group.getGroup().room!.gapS).toBe(3);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('front member is the one right before me; first has none', async () => {
     await group.joinGroupRoom('482917');
     expect(group.frontMember(group.getGroup())!.nickname).toBe('방장');

@@ -2,6 +2,7 @@
 // - 보내기(앞차): 주행 중 위치 공유를 켰으면 내 GPS를 받을 때마다(1초에 한 번쯤) 내 방으로 보낸다
 // - 받기(뒤차): 주행 준비에서 고른 앞 친구의 방에서 위치를 받아 모은다 → 화면이 간격을 계산한다
 // 끊기면 2·4·8…초(최대 15초) 뒤 다시 붙는다. 주행이 끝나면 닫는다.
+import { liveGap } from '../features';
 import { useSyncExternalStore } from 'react';
 import { serverConfig } from '../server/config';
 import { getAuth } from './account';
@@ -122,6 +123,8 @@ let follower: { close: () => void } | null = null;
 /** 주행을 시작하거나 이어서 할 때: 앞 친구 받기, (위치 공유 중이면) 내 위치 보내기 */
 export function startLiveLinks(opts: { friend: { id: string; nickname: string } | null; publish: boolean }): void {
   stopLiveLinks();
+  // 정식 빌드(간격 끔): 앞 친구 실시간 연결을 열지 않는다 (features.ts). 앞 친구를 골라 둔 채 주행해도
+  if (!liveGap()) return;
   const auth = getAuth();
   if (!auth || !serverConfig.apiUrl) return;
   if (opts.publish) {

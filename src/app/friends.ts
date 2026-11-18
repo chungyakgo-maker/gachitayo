@@ -3,6 +3,7 @@
 // - 내 위치는 내가 공유를 켠 동안, 앱이 화면에 보일 때만 5초마다 보낸다. 앱을 다시 열면 꺼져 있다
 // - 메인 지도가 보일 때 5초마다 공유 중인 친구 위치를 받아 온다 (서버는 2분 안에 받은 위치만 준다)
 import { useSyncExternalStore } from 'react';
+import { liveGap, locationSharing } from '../features';
 import { ApiError, apiFetch } from '../server/api';
 import { friendlyServerError, getAuth, markAccountLost, subscribeAccount } from './account';
 import { startGps } from '../sensors/gps';
@@ -177,6 +178,8 @@ export function reportMyFix(fix: MyFix): void {
 }
 
 async function sendOnce(now = Date.now()): Promise<void> {
+  // 정식 빌드(지도 위치 공유 끔): 친구 지도용 위치를 서버에 올리지 않는다 (features.ts)
+  if (!locationSharing()) return;
   if (!state.sharing || sending || !isVisible() || !myFix || now - myFix.at > MY_FIX_MAX_AGE_MS) return;
   sending = true;
   try {
@@ -198,6 +201,8 @@ async function sendOnce(now = Date.now()): Promise<void> {
 
 export async function setSharing(on: boolean): Promise<void> {
   if (on === state.sharing) return;
+  // 정식 빌드: 위치를 주고받는 기능이 모두 꺼져 있으면 켤 수 없다
+  if (on && !locationSharing() && !liveGap()) return;
   set(on ? { sharing: true, error: null } : { sharing: false });
   if (on) {
     stopGps ??= gpsStarter(reportMyFix, () => {
@@ -213,7 +218,7 @@ export async function setSharing(on: boolean): Promise<void> {
     stopGps = null;
     set({ lastSentAt: null });
     try {
-      await call('DELETE', '/api/presence');
+      if (locationSharing()) await call('DELETE', '/api/presence');
     } catch {
       // 못 지워도 2분 뒤에는 친구에게 보이지 않는다
     }
@@ -237,6 +242,8 @@ async function pollOnce(): Promise<void> {
 
 /** 메인 지도가 보이는 동안 친구 위치를 받아 온다. 멈추는 함수를 돌려준다 */
 export function watchFriendPositions(): () => void {
+  // 정식 빌드: 친구 위치를 받아 오지 않는다
+  if (!locationSharing()) return () => {};
   watchers++;
   if (watchers === 1) {
     void pollOnce();

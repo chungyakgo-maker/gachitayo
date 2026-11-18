@@ -2,6 +2,7 @@
 // 방 만들기·코드로 들어가기, 방 상태와 다른 사람 위치 받기(웹소켓), 주행 중 내 GPS 보내기, 방장 동작(순서·차 간격·목적지),
 // 방장이 정한 목적지 경로를 참가자에게 "이 경로로 진행"으로 묻고, 받으면 경로 안내를 켠다.
 import { useSyncExternalStore } from 'react';
+import { shareAnyLocation } from '../features';
 import { ApiError, apiFetch } from '../server/api';
 import { friendlyServerError, getAuth } from './account';
 import { getDriveState, subscribeDrive } from './drive';
@@ -162,6 +163,8 @@ function onMessage(data: string): void {
     });
     void checkRoute();
   } else if (m.type === 'pos' && typeof m.userId === 'string') {
+    // 정식 빌드: 남의 위치는 버린다 (순서·간격 안내·목적지만 쓴다, features.ts)
+    if (!shareAnyLocation()) return;
     const p = m as unknown as LivePoint & { userId: string };
     if (!Number.isFinite(p.t) || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return;
     const pts = (points[p.userId] ?? []).filter((q) => q.t > p.t - KEEP_MS && q.t < p.t).slice(-(KEEP_POINTS - 1));
@@ -245,6 +248,8 @@ function connect(roomId: string): void {
   unsubGps = subscribeSamples((e) => {
     const ev = e as { kind: string; s: { tFix: number; lat: number; lon: number; speed: number | null; heading: number | null; hAcc: number | null } };
     if (ev.kind !== 'gps' || getDriveState().phase !== 'driving') return;
+    // 정식 빌드: 내 위치를 팀 방으로 보내지 않는다
+    if (!shareAnyLocation()) return;
     const g = ev.s;
     if (g.tFix - lastSent < 900) return;
     lastSent = g.tFix;
