@@ -14,13 +14,17 @@ describe('지도 버튼 크기 (나침반·GPS 32 px, 모든 지도 같게)', ()
     expect([px(dial.body, 'width'), px(dial.body, 'height')]).toEqual([32, 32]);
   });
 
-  it('GPS 버튼 기본 규칙이 32 px이고, 다른 크기로 덮는 규칙이 없다 (메인 지도 포함)', () => {
+  it('GPS 버튼 기본 규칙이 32 px이고, 다른 크기로 덮는 규칙이 없다 (메인 지도 포함). "내 위치로" 알약만 예외 (2026-11-18 시안)', () => {
     const base = rules.find((r) => r.sel === '.map-gps')!;
     expect([px(base.body, 'width'), px(base.body, 'height')]).toEqual([32, 32]);
     const other = rules
       .filter((r) => /\.map-gps\b(?![\w-])(?!\s+svg)/.test(r.sel) && r.sel !== '.map-gps')
+      .filter((r) => !/\.gps-pill\b/.test(r.sel))
       .filter((r) => /(^|[;\s])(width|height):/.test(r.body));
     expect(other.map((r) => r.sel)).toEqual([]);
+    // 알약은 메인·주행 모두 같은 한 규칙 (높이 34 px)
+    const pill = rules.find((r) => r.sel === '.map-gps.gps-pill')!;
+    expect(px(pill.body, 'height')).toBe(34);
   });
 
   it('종료 버튼: 지금의 1/3 너비로 가운데, 지도 모드에서는 맨 아래 10 px (사용자 요청)', () => {

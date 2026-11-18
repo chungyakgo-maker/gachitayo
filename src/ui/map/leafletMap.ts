@@ -103,11 +103,21 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
   let haveMe = false;
   let userMoved = false;
   let programmatic = false;
+  // 사진 지도는 돌리지 않는다 (방위 늘 0). 손으로 옮기면 GPS 버튼이 "내 위치로" (2026-11-18)
+  let viewCb: ((v: { away: boolean; bearing: number }) => void) | null = null;
+  let told: boolean | null = null;
+  const report = () => {
+    if (!viewCb || told === userMoved) return;
+    told = userMoved;
+    viewCb({ away: userMoved, bearing: 0 });
+  };
   map.on('dragstart', () => {
     if (!programmatic) userMoved = true;
+    report();
   });
   map.on('zoomstart', () => {
     if (!programmatic) userMoved = true;
+    report();
   });
   const move = (f: () => void) => {
     programmatic = true;
@@ -196,6 +206,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       if (courseChanged || (firstFix && !userMoved)) {
         if (courseChanged) userMoved = false;
         fit(course, me);
+        report();
       } else if (me && !course && !userMoved) {
         // 코스가 없으면 내 위치를 따라간다 (사용자가 지도를 옮기면 멈추고, "내 위치"를 누르면 다시)
         move(() => map.panTo(centerFor([me.lat, me.lon], map.getZoom()), { animate: false }));
@@ -232,6 +243,7 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       if (pts && key !== routeKey) {
         // 경로가 다 보이게, 그 뒤로는 내 위치를 따라가지 않는다 (GPS 아이콘을 누르면 다시)
         userMoved = true;
+        report();
         move(() =>
           map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(44, 44 + inset.top + PIN_TOP_PX), paddingBottomRight: L.point(44, 44 + inset.bottom), maxZoom: 17, animate: false }),
         );
@@ -272,15 +284,22 @@ export function createMainMap(el: HTMLElement, onTiles?: (shown: boolean) => voi
       if (me) pts.push(L.latLng(me.lat, me.lon));
       if (pts.length === 0) return;
       userMoved = true; // 친구를 보는 동안은 내 위치를 따라가지 않는다 ("내 위치"를 누르면 다시)
+      report();
       move(() => {
         if (pts.length === 1) map.setView(centerFor(pts[0]!, 16), 16, { animate: false });
         else map.fitBounds(L.latLngBounds(pts), { ...pad(56), maxZoom: 16, animate: false });
       });
     },
     locate(me) {
+      // 내 위치로 (2026-11-18): 내 위치 · 기본 확대
       userMoved = false;
-      const z = Math.max(map.getZoom(), 16);
-      move(() => map.setView(centerFor([me.lat, me.lon], z), z, { animate: false }));
+      move(() => map.setView(centerFor([me.lat, me.lon], 16), 16, { animate: false }));
+      report();
+    },
+    onView(cb) {
+      viewCb = cb;
+      told = null;
+      report();
     },
     setInsets(top, bottom) {
       if (top === inset.top && bottom === inset.bottom) return;

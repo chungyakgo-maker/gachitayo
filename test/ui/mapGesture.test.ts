@@ -1,7 +1,7 @@
 // 주행 지도 두 손가락 (사용자 요청 2026-11-17 "부드럽게 확대·축소", "손으로 지도 회전"):
 // 벌리고 오므리는 만큼 연속으로 확대, 비틀면(10° 넘게부터) 지도를 돌린다
 import { describe, expect, it } from 'vitest';
-import { TwoFingerGesture, upBearing } from '../../src/ui/map/mapGesture';
+import { screenToLocal, TwoFingerGesture, upBearing } from '../../src/ui/map/mapGesture';
 
 /** 가운데 (200, 300) 에서 거리 d, 화면 각도 deg(시계 방향 +) 로 두 손가락 */
 const fingers = (d: number, deg = 0) => {
@@ -58,5 +58,18 @@ describe('지도 위쪽 방위', () => {
     expect(upBearing('heading', null, 0)).toBeCloseTo(90, 6); // 동쪽으로 가면 위가 동쪽
     expect(upBearing('heading', null, null)).toBeNull();
     expect(upBearing('follow', null, 0)).toBeNull();
+  });
+});
+
+describe('화면에서 끈 만큼 → 지도 평면 거리 (한 손가락 끌기, 2026-11-18)', () => {
+  it('돌리고 확대한 지도에서도 화면 이동을 평면 거리로 바꾼다', () => {
+    // 2 px = 1 m, 지도를 90° 돌려서 평면 +x(동쪽)가 화면 위(−y)
+    const P = (x: number, y: number): [number, number] => [200 + 2 * y, 300 - 2 * x];
+    const [dx, dy] = screenToLocal(P, [10, 20], 0, -40);
+    expect(dx).toBeCloseTo(20, 6);
+    expect(dy).toBeCloseTo(0, 6);
+    const [ex, ey] = screenToLocal(P, [10, 20], 30, 0);
+    expect(ex).toBeCloseTo(0, 6);
+    expect(ey).toBeCloseTo(15, 6);
   });
 });

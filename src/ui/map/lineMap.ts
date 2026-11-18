@@ -14,8 +14,9 @@ setWorkerUrl(workerUrl);
 
 export type { MapLibreMap };
 
-/** 선 지도 하나 (북쪽 위, 기울이기 없음). interactive=false면 손으로 못 움직인다 (주행·재생) */
-export function newLineMap(el: HTMLElement, cfg: LineMapConfig, opts: { interactive?: boolean; attribution?: boolean } = {}): MapLibreMap {
+/** 선 지도 하나 (북쪽 위, 기울이기 없음). interactive=false면 손으로 못 움직인다 (주행·재생).
+ *  rotate: 두 손가락 비틀기로 돌리기 (메인 지도, 2026-11-18 "메인·주행 똑같이") */
+export function newLineMap(el: HTMLElement, cfg: LineMapConfig, opts: { interactive?: boolean; attribution?: boolean; rotate?: boolean } = {}): MapLibreMap {
   const interactive = opts.interactive ?? true;
   const map = new MapLibreMap({
     container: el,
@@ -34,7 +35,7 @@ export function newLineMap(el: HTMLElement, cfg: LineMapConfig, opts: { interact
     fadeDuration: 0,
   });
   if (interactive) {
-    map.touchZoomRotate.disableRotation();
+    if (!opts.rotate) map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
   }
   return map;

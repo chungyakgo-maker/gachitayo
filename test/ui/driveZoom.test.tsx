@@ -1,7 +1,7 @@
 // 주행 지도 확대·축소 (사용자 요청 "주행 모드중 지도 축소나 확대 할수 있게"): 오른쪽 + / −, 단계는 남고, 두 번 탭(모드 바꾸기)으로 치지 않는다.
 // 2026-11-17 "부드럽게 확대·축소가 안 되고 뚝뚝 끊겨", "손으로 지도 회전이 안 돼": 두 손가락은 손가락을 따라 연속으로, 비틀면 지도가 돈다
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { DriveView, type DriveViewProps } from '../../src/ui/screens/DriveScreen';
 import { getSettings, updateSettings } from '../../src/app/settings';
 import type { LiveSnapshot } from '../../src/engine/live/livePipeline';
@@ -138,3 +138,101 @@ describe('두 손가락으로 지도 돌리기', () => {
   });
 });
 
+
+// 지도 손 동작 메인·주행 똑같이 (사용자 요청·시안 2026-11-18): 한 손가락 끌기, 벗어나면 GPS 버튼이 "내 위치로",
+// 누르거나 3초 손을 안 대면 내 위치·평소 주행 확대·나침반 보기대로 (둘러보며 바꾼 확대·방향은 잠깐만)
+describe('주행 지도 끌어서 둘러보기', () => {
+  const one = (x: number, y: number) => [{ clientX: x, clientY: y, identifier: 0 }];
+  const mapEl = (c: HTMLElement) => c.querySelector('.drive-map .replay-map, .drive-map .live-map')!;
+  const drag = (m: Element) => {
+    fireEvent.touchStart(m, { touches: one(200, 400) });
+    fireEvent.touchMove(m, { touches: one(230, 440) });
+    fireEvent.touchMove(m, { touches: one(260, 480) });
+    fireEvent.touchEnd(m, { touches: [] });
+  };
+  const gps = () => screen.getByRole('button', { name: /^내 위치로/ });
+
+  it('오른쪽 위 GPS 아이콘은 누를 수 있는 버튼, 끌어서 벗어나면 "내 위치로"가 보이고 누르면 돌아온다', () => {
+    updateSettings({ mapView: 'follow' });
+    const { container } = render(<DriveView {...props()} />);
+    expect(gps()).not.toHaveTextContent('내 위치로');
+    drag(mapEl(container));
+    expect(gps()).toHaveTextContent('내 위치로');
+    fireEvent.click(gps());
+    expect(gps()).not.toHaveTextContent('내 위치로');
+    expect(onCycle).not.toHaveBeenCalled();
+  });
+
+  it('손을 떼고 3초 동안 안 대면 저절로 내 위치로, 그 전에 다시 대면 기다림을 새로', () => {
+    vi.useFakeTimers();
+    try {
+      updateSettings({ mapView: 'heading' });
+      const { container } = render(<DriveView {...props()} />);
+      const m = mapEl(container);
+      drag(m);
+      act(() => vi.advanceTimersByTime(2500));
+      expect(gps()).toHaveTextContent('내 위치로');
+      drag(m);
+      act(() => vi.advanceTimersByTime(2500));
+      expect(gps()).toHaveTextContent('내 위치로');
+      act(() => vi.advanceTimersByTime(600));
+      expect(gps()).not.toHaveTextContent('내 위치로');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('둘러보며 바꾼 확대는 저장하지 않는다 (돌아오면 평소 주행 크기)', () => {
+    updateSettings({ mapView: 'follow', driveZoom: 0.5 });
+    const { container } = render(<DriveView {...props()} />);
+    const m = mapEl(container);
+    drag(m);
+    const two = (d: number) => [
+      { clientX: 100, clientY: 300, identifier: 0 },
+      { clientX: 100 + d, clientY: 300, identifier: 1 },
+    ];
+    fireEvent.touchStart(m, { touches: two(100) });
+    fireEvent.touchMove(m, { touches: two(200) });
+    fireEvent.touchEnd(m, { touches: [] });
+    expect(getSettings().driveZoom).toBe(0.5);
+    fireEvent.click(screen.getByRole('button', { name: '지도 확대' }));
+    expect(getSettings().driveZoom).toBe(0.5);
+  });
+
+  it('손으로 돌려 둔 방향도 GPS 버튼을 누르면 나침반 보기대로', () => {
+    updateSettings({ mapView: 'heading' });
+    const { container, rerender } = render(<DriveView {...props()} />);
+    const m = mapEl(container);
+    const t = (deg: number) => {
+      const a = (deg * Math.PI) / 180;
+      return [
+        { clientX: 200 - Math.cos(a) * 60, clientY: 300 - Math.sin(a) * 60, identifier: 0 },
+        { clientX: 200 + Math.cos(a) * 60, clientY: 300 + Math.sin(a) * 60, identifier: 1 },
+      ];
+    };
+    fireEvent.touchStart(m, { touches: t(0) });
+    fireEvent.touchMove(m, { touches: t(40) });
+    fireEvent.touchEnd(m, { touches: [] });
+    expect(screen.getByRole('button', { name: /^지도 보기/ })).toHaveAccessibleName('지도 보기: 손으로 돌림 (누르면 진행 방향 위)');
+    fireEvent.click(gps());
+    rerender(<DriveView {...props()} />);
+    expect(screen.getByRole('button', { name: /^지도 보기/ })).toHaveAccessibleName('지도 보기: 진행 방향 위 (누르면 전체 코스)');
+  });
+
+  it('끌기 뒤에 바로 누른 것은 두 번 탭(화면 모드 바꾸기)으로 치지 않는다', () => {
+    updateSettings({ mapView: 'follow' });
+    const { container } = render(<DriveView {...props()} />);
+    const root = container.querySelector('[data-testid="drive"]')!;
+    fireEvent.pointerDown(root, { clientX: 200, clientY: 400 });
+    fireEvent.pointerMove(root, { clientX: 260, clientY: 470 });
+    fireEvent.pointerDown(root, { clientX: 205, clientY: 405 });
+    expect(onCycle).not.toHaveBeenCalled();
+  });
+
+  it('전체 코스 보기에서는 끌어도 옮기지 않는다', () => {
+    updateSettings({ mapView: 'fit' });
+    const { container } = render(<DriveView {...props()} />);
+    drag(mapEl(container));
+    expect(gps()).not.toHaveTextContent('내 위치로');
+  });
+});

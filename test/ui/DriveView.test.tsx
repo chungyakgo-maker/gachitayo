@@ -88,9 +88,9 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByRole('img', { name: /G미터: 좌 0.82g, 제동 0.31g/ })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '속도 142 km/h' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '코스 지도: 내 위치와 베스트 고스트' })).toBeInTheDocument();
-    // 아래 상태 줄은 없고(사용자 요청) GPS 아이콘만
+    // 아래 상태 줄은 없고(사용자 요청) GPS 아이콘만. 지도 모드에서는 누르면 내 위치로 (메인 지도와 같게, 2026-11-18)
     expect(screen.queryByText(/두 번 탭하면/)).toBeNull();
-    expect(screen.getByRole('img', { name: /^GPS / })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^내 위치로 \(GPS / })).toBeInTheDocument();
   });
 
   it('지도가 화면 전체이고 델타·고른 값·종료 버튼은 위에 얹는다 (사용자 요청)', () => {
@@ -351,7 +351,7 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
 
   it('GPS 약함은 글자 대신 아이콘 색(빨강)으로만 (사용자 요청: 아래 안내 글자 모두 없앰)', () => {
     const r = render(<DriveView {...props({ snap: snap(state({ status: { gpsWeak: true, offCourse: true, gNotCalibrated: false, courseRecording: false } })) })} />);
-    expect(screen.getByRole('img', { name: /^GPS 약함/ })).toHaveAttribute('data-gps', 'weak');
+    expect(screen.getByRole('button', { name: /^내 위치로 \(GPS 약함/ })).toHaveAttribute('data-gps', 'weak');
     expect(screen.queryByText('코스 이탈')).toBeNull();
     expect(r.container.querySelector('.drive-status')).toBeNull();
   });
