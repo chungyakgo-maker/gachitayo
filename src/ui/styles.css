@@ -3565,8 +3565,8 @@ a.team-item {
   border-radius: 16px;
   background: var(--card);
   border: 1px solid var(--card-line);
-  /* 칩으로 내려왔을 때 맨 위에 붙어 가리지 않게 */
-  scroll-margin-top: 12px;
+  /* 칩으로 내려왔을 때 맨 위에 붙어 가리지 않게 (아이폰 상태 표시줄·다이내믹 아일랜드 아래로, 최종 검토 지적) */
+  scroll-margin-top: calc(12px + var(--safe-t));
 }
 
 .help-card h2 {

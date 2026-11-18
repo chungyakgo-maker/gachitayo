@@ -1,5 +1,5 @@
 // 도움말 · 기능 알아보기 그림 만들기 (설계 docs/superpowers/specs/2026-11-18-help-design.md) → public/help/
-// 실제 앱 화면을 정식 빌드 스위치로 띄워 필요한 부분만 잘라 찍는다. 이름·사진·팀은 예시, 지도는 실제 서버 지도.
+// 실제 앱 화면을 정식 빌드 스위치로 띄워 필요한 부분만 잘라 찍는다. 이름·사진·팀은 예시(내 이름은 "디고" — 모든 사용자가 보는 그림이라 실제 사람 이름을 쓰지 않는다), 지도는 실제 서버 지도.
 //
 // 쓰는 법 (개발용, 앱·웹 빌드와 상관없음):
 //   1) 정식 스위치로 개발 서버:  VITE_API_URL=https://gachitayo-api.chungyakgo.workers.dev VITE_LOCATION_SHARING=off VITE_LIVE_GAP=off npx vite --port 5194
@@ -23,12 +23,12 @@ const T1 = '11111111-1111-4111-8111-111111111111', ROOM = '99999999-9999-4999-89
 const POS = { lat: 37.5937, lon: 126.9784 };
 const DEST = { name: '북악스카이웨이 팔각정', lat: 37.6033, lon: 126.9819 };
 const mem = (userId, nickname, avatar) => ({ userId, nickname, avatar });
-const team = { id: T1, name: '북악 새벽팀', ownerId: ME, members: [mem(ME, '세영', A('a')), mem(B, '민수', A('b')), mem(C, '지훈', null), mem(D, '서연', A('d'))], gapS: 2, drive: null };
+const team = { id: T1, name: '북악 새벽팀', ownerId: ME, members: [mem(ME, '디고', A('a')), mem(B, '민수', A('b')), mem(C, '지훈', null), mem(D, '서연', A('d'))], gapS: 2, drive: null };
 const room = {
   roomId: ROOM, code: '', teamId: T1, teamName: '북악 새벽팀', max: 15, gapS: 2, routeVersion: 0,
   dest: { name: '팔각정', lat: DEST.lat, lon: DEST.lon },
   members: [
-    { userId: ME, nickname: '세영', color: 0, order: 1, host: true, avatar: A('a') },
+    { userId: ME, nickname: '디고', color: 0, order: 1, host: true, avatar: A('a') },
     { userId: B, nickname: '민수', color: 1, order: 2, host: false, avatar: A('b') },
     { userId: D, nickname: '서연', color: 2, order: 3, host: false, avatar: A('d') },
   ],
@@ -61,7 +61,7 @@ async function page(b, o = {}) {
   await c.addInitScript((o) => {
     localStorage.setItem('gachitayo.token', 't'.repeat(43));
     localStorage.setItem('gachitayo.userId', o.me);
-    localStorage.setItem('gachitayo.nickname', '세영');
+    localStorage.setItem('gachitayo.nickname', '디고');
     localStorage.setItem('gachitayo.onboarded', '1');
     localStorage.setItem('gachitayo.helpNudge.v1', '1');
     localStorage.setItem('gachitayo.driveZoom.v', '2');
@@ -84,7 +84,7 @@ async function page(b, o = {}) {
       }
     }
     if (/^\/avatar\//.test(p)) return route.fulfill({ status: 200, contentType: 'image/svg+xml', headers: cors, body: avatarSvg(p[8]) });
-    if (p === '/api/me') return j({ userId: ME, nickname: '세영', avatar: A('a'), kakao: true, apple: false });
+    if (p === '/api/me') return j({ userId: ME, nickname: '디고', avatar: A('a'), kakao: true, apple: false });
     if (p === '/api/friends') return j({ code: 'K7QX29MD', friends: [] });
     if (p === '/api/teams') return j({ teams: [team] });
     if (p === `/api/rooms/${ROOM}`) return j(room);

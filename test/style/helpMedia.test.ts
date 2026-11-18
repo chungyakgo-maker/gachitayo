@@ -23,3 +23,18 @@ describe('도움말 그림 (public/help)', () => {
     expect(files.reduce((a, f) => a + size(f), 0)).toBeLessThanOrEqual(4 * 1024 * 1024);
   });
 });
+
+describe('도움말 검토 고침 (2026-11-18 최종 검토)', () => {
+  it('칩으로 내려온 카드 제목이 아이폰 상태 표시줄 밑에 가리지 않는다 (scroll-margin-top 에 위쪽 안전 영역)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync(new URL('../../src/ui/styles.css', import.meta.url), 'utf8');
+    const block = /\.help-card \{[^}]*\}/.exec(css)?.[0] ?? '';
+    expect(block).toMatch(/scroll-margin-top: calc\(12px \+ var\(--safe-t\)\)/);
+  });
+
+  it('그림 예시 이름에 운영자 이름을 쓰지 않는다 (모든 사용자가 보는 그림)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const script = readFileSync(new URL('../../scripts/help-media.cjs', import.meta.url), 'utf8');
+    expect(script).not.toMatch(/세영/);
+  });
+});

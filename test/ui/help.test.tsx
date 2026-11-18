@@ -80,6 +80,7 @@ describe('메인: 처음 한 번 알림', () => {
     expect(screen.getByText('디고 처음이세요?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: '기능 알아보기' }));
     expect(localStorage.getItem(HELP_NUDGE_KEY)).toBe('1');
+    expect(window.location.hash).toBe('#/help');
     expect(screen.queryByText('디고 처음이세요?')).toBeNull();
   });
 
