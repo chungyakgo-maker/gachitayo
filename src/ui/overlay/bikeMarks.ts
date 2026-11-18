@@ -1,4 +1,4 @@
-// 주행 지도의 내 바이크 표시 (2026-11-18 세영 승인 시안 docs/mock/2026-11-18-bike-mode.png):
+// 주행 지도의 내 바이크 표시 (2026-11-18 세영 승인 시안 docs/mock/2026-11-18-bike-mode.jpg):
 // 위에서 내려다본 바이크 + 탄 사람 헬멧. 종류마다 색이 달라 작게 봐도 구별된다. "할리"는 상표라 이름은 크루저.
 // 시안 SVG(64 × 64, 앞이 위)를 그대로 옮긴 그림 목록을 캔버스에 그린다.
 import type { Ctx } from './draw';
@@ -7,6 +7,8 @@ export type BikeMarker = 'scooter' | 'sport' | 'cruiser' | 'naked' | 'motard';
 
 const TIRE = '#1b1d21';
 const DARK = '#14161a';
+/** 핸들: 어두운 바탕 원 위에서도 보이게 시안보다 조금 밝게 (모타드처럼 핸들 폭으로 구별되는 종류가 있다) */
+const BAR = '#5a6068';
 const GLASS = '#20252c';
 const SEAT = '#4a3426';
 const CHROME = '#c9cdd2';
@@ -45,7 +47,7 @@ function shapes(kind: BikeMarker): Shape[] {
         rect(28, 45, 8, 12, 3.5, TIRE),
         { e: [32, 19, 10, 5.5], fill: b },
         rect(23.5, 18, 17, 30, 8, b),
-        rect(20, 15.5, 24, 3.2, 1.6, DARK),
+        rect(20, 15.5, 24, 3.2, 1.6, BAR),
         rect(27, 33, 10, 15, 4.5, SEAT),
         ...helmet(34),
       ];
@@ -55,7 +57,7 @@ function shapes(kind: BikeMarker): Shape[] {
         rect(28.5, 48, 7, 14, 3.2, TIRE),
         { p: [[32, 5], [39, 19], [38, 31], [26, 31], [25, 19]], fill: b },
         { p: [[32, 9], [35.5, 17], [28.5, 17]], fill: GLASS },
-        rect(25, 20, 14, 2.2, 1, DARK),
+        rect(25, 20, 14, 2.2, 1, BAR),
         rect(27, 29, 10, 13, 4, b),
         { p: [[28, 41], [36, 41], [33.5, 57], [30.5, 57]], fill: b },
         rect(29, 36, 6, 9, 2.5, GLASS),
@@ -80,7 +82,7 @@ function shapes(kind: BikeMarker): Shape[] {
         rect(28.75, 3, 6.5, 12, 3, TIRE),
         rect(28.25, 46, 7.5, 14, 3.4, TIRE),
         { c: [32, 15.5, 3.6], fill: '#fff4c2' },
-        rect(18, 19, 28, 3, 1.5, DARK),
+        rect(18, 19, 28, 3, 1.5, BAR),
         rect(24.5, 22, 15, 15, 6.5, b),
         rect(28, 36, 8, 11, 3, GLASS),
         { p: [[29.5, 46], [34.5, 46], [33.5, 55], [30.5, 55]], fill: b },
@@ -91,7 +93,7 @@ function shapes(kind: BikeMarker): Shape[] {
         rect(29.5, 2, 5, 13, 2.5, TIRE),
         rect(29, 48, 6, 14, 2.8, TIRE),
         rect(27.5, 13.5, 9, 5.5, 1.2, WHITE),
-        rect(14, 19, 36, 2.6, 1.3, DARK),
+        rect(14, 19, 36, 2.6, 1.3, BAR),
         rect(28.5, 21, 7, 12, 3, b),
         rect(29.2, 26, 5.6, 25, 2.8, GLASS),
         rect(25.5, 44, 3, 7, 1, b),

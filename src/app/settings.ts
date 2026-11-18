@@ -23,7 +23,7 @@ const CAR_MARKERS = Object.keys(CAR_MARKER_LABEL) as CarMarker[];
 export type Vehicle = 'car' | 'bike';
 export const VEHICLE_LABEL: Record<Vehicle, string> = { car: '자동차', bike: '바이크' };
 export type { BikeMarker };
-/** 내 바이크 표시 5종 (시안 docs/mock/2026-11-18-bike-mode.png, "할리"는 상표라 크루저) */
+/** 내 바이크 표시 5종 (시안 docs/mock/2026-11-18-bike-mode.jpg, "할리"는 상표라 크루저) */
 export const BIKE_MARKER_LABEL: Record<BikeMarker, string> = { scooter: '스쿠터', sport: 'R차', cruiser: '크루저', naked: '네이키드', motard: '모타드' };
 const BIKE_MARKERS = Object.keys(BIKE_MARKER_LABEL) as BikeMarker[];
 /** 주행 지도에 그릴 내 위치 모양 */

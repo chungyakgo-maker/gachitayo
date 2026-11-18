@@ -1,4 +1,4 @@
-// 바이크 모드 화면 (2026-11-18 세영 승인 시안 docs/mock/2026-11-18-bike-mode.png):
+// 바이크 모드 화면 (2026-11-18 세영 승인 시안 docs/mock/2026-11-18-bike-mode.jpg):
 // 탈것(자동차·바이크), 내 바이크 표시 5종, 바이크 경로(고속도로·자동차전용도로 피함)
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
