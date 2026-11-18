@@ -1,20 +1,26 @@
 // 팀 주행 시작 (사용자 요청 "팀 주행 → 팀이 여러 개면 선택 후 해당 팀으로 주행", 시안 ② 팀 고르기):
-// 팀이 하나면 고르지 않고 바로 그 팀 대기실, 없으면 팀 만들기, 여러 개면 여기서 고른다.
+// 팀 목록을 새로 받은 다음, 팀이 하나면 고르지 않고 바로 그 팀 대기실, 없으면 팀 만들기, 여러 개면 여기서 고른다.
+// (검토 지적: 저장된 옛 목록으로 고르면 틀린 팀으로 가거나, 목록을 못 받으면 "불러오는 중"에 멈췄다)
 import { useEffect, useRef, useState } from 'react';
 import { getAuth } from '../../app/account';
-import { loadTeams, openTeamDrive, teamErrorText, TEAM_MAX, useTeams, type Team } from '../../app/teams';
+import { getTeams, loadTeams, openTeamDrive, teamErrorText, TEAM_MAX, useTeams, type Team } from '../../app/teams';
 import { Sheet } from './Sheet';
 
 export function TeamSheet({ onClose }: { onClose: () => void }) {
   const ts = useTeams();
   const me = getAuth()?.userId ?? null;
+  /** 이번에 목록을 새로 받았나 */
+  const [fresh, setFresh] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 다시 해 보기가 할 일 */
+  const [retry, setRetry] = useState<(() => void) | null>(null);
   const auto = useRef(false);
 
   const pick = (t: Team) => {
     setBusy(t.id);
     setError(null);
+    setRetry(null);
     openTeamDrive(t.id).then(
       () => {
         onClose();
@@ -23,31 +29,47 @@ export function TeamSheet({ onClose }: { onClose: () => void }) {
       (e: unknown) => {
         setError(teamErrorText(e));
         setBusy(null);
+        setRetry(() => () => pick(t));
+      },
+    );
+  };
+  const load = () => {
+    setError(null);
+    setRetry(null);
+    loadTeams().then(
+      () => setFresh(true),
+      (e: unknown) => {
+        setError(teamErrorText(e));
+        setRetry(() => load);
       },
     );
   };
 
   useEffect(() => {
-    void loadTeams().catch(() => undefined);
+    load();
+    // 처음 한 번
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // 팀이 하나면 바로, 없으면 팀 만들기로 (한 번만)
+  // 새로 받은 목록으로: 팀이 하나면 바로, 없으면 팀 만들기로 (한 번만)
   useEffect(() => {
-    if (!ts.loaded || auto.current) return;
+    if (!fresh || auto.current) return;
     auto.current = true;
-    if (ts.teams.length === 0) {
+    const teams = getTeams().teams;
+    if (teams.length === 0) {
       onClose();
       window.location.hash = '#/team/new';
-    } else if (ts.teams.length === 1) pick(ts.teams[0]!);
+    } else if (teams.length === 1) pick(teams[0]!);
     // pick·onClose는 처음 한 번만
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ts.loaded, ts.teams.length]);
+  }, [fresh]);
 
-  const single = ts.teams.length === 1;
+  const many = fresh && ts.teams.length > 1;
+  const single = fresh && ts.teams.length === 1;
   return (
-    <Sheet title={single ? '팀 주행' : '팀 주행 · 팀 고르기'} onClose={onClose}>
-      {!ts.loaded && <span className="sub">팀을 불러오는 중…</span>}
+    <Sheet title={many ? '팀 주행 · 팀 고르기' : '팀 주행'} onClose={onClose}>
+      {!fresh && !error && <span className="sub">팀을 불러오는 중…</span>}
       {single && busy && <span className="sub">{ts.teams[0]!.name} 대기실로 가는 중…</span>}
-      {ts.teams.length > 1 &&
+      {many &&
         ts.teams.map((t) => {
           const owner = t.ownerId === me;
           return (
@@ -67,7 +89,7 @@ export function TeamSheet({ onClose }: { onClose: () => void }) {
             </div>
           );
         })}
-      {ts.teams.length > 1 && (
+      {many && (
         <>
           <button
             type="button"
@@ -87,6 +109,11 @@ export function TeamSheet({ onClose }: { onClose: () => void }) {
         <span className="notice warn" role="alert">
           {error}
         </span>
+      )}
+      {retry && !many && (
+        <button type="button" className="btn" onClick={retry}>
+          다시 해 보기
+        </button>
       )}
     </Sheet>
   );

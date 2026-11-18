@@ -134,6 +134,15 @@ describe('그룹 주행 상태', () => {
     expect(group.getGroup().room).toMatchObject({ teamName: '북악 새벽팀', gapS: 3 });
   });
 
+  it('다른 방에 있다가 팀 주행 방으로 들어가면 예전 방은 서버에서도 나간다 (검토 지적)', async () => {
+    await group.joinGroupRoom('482917');
+    const other = '22222222-2222-4222-8222-222222222222';
+    fetchRoom = ROOM({ roomId: other, code: '', teamId: 'team-1', teamName: '팀' });
+    await group.enterGroupRoom(other);
+    expect(calls).toContainEqual(expect.objectContaining({ method: 'POST', url: `https://api.test/api/rooms/${ROOM().roomId}/leave` }));
+    expect(group.getGroup().room?.teamId).toBe('team-1');
+  });
+
   it('front member is the one right before me; first has none', async () => {
     await group.joinGroupRoom('482917');
     expect(group.frontMember(group.getGroup())!.nickname).toBe('방장');

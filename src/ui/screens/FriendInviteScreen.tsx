@@ -1,7 +1,8 @@
 // 카톡 친구 초대 링크 #/friend/{코드}/{이름} (사용자 결정 A-가 "카톡 초대는 친구 초대로", 시안 ⑥): 누르면 "○○님과 친구가 될까요?" → 바로 서로 친구
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount } from '../../app/account';
 import { addFriendByCode, useFriends } from '../../app/friends';
+import { takePendingLink } from '../../app/pendingJoin';
 import { IconBack } from '../icons';
 
 export function FriendInviteScreen({ code, name }: { code: string; name: string }) {
@@ -10,6 +11,8 @@ export function FriendInviteScreen({ code, name }: { code: string; name: string 
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const who = name.trim() || '친구';
+  // 이 화면이 열렸으면 들고 있던 링크는 다 썼다 (메인으로 돌아갈 때 다시 끌려오지 않게, 검토 지적)
+  useEffect(() => void takePendingLink(), []);
   const accept = () => {
     setBusy(true);
     void addFriendByCode(code).then((ok) => {

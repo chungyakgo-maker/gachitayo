@@ -356,6 +356,33 @@ describe('계정 합치기 (익명 B → 카카오 계정 A)', () => {
     expect(await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(b.userId).first()).toBeNull();
   });
 
+  it('B의 팀(팀장·팀원)이 A로 오고, 프사는 A에 없으면 옮기고 있으면 B 사진 파일을 지운다 (검토 지적)', async () => {
+    const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 0xff, 0xd9]);
+    const kid = nextKakaoId();
+    const a = await login({ kakaoId: kid });
+    const b = await newUser('익명비');
+    const c = await newUser('친구씨');
+    const codeOf = async (t: string) => (await friendsOf(t)).code;
+    await call('POST', '/api/friends', { token: b.token, body: { code: await codeOf(c.token) } });
+    const bt = (await (await call('POST', '/api/teams', { token: b.token, body: { name: 'b팀', memberIds: [c.userId] } })).json()) as { id: string };
+    const ct = (await (await call('POST', '/api/teams', { token: c.token, body: { name: 'c팀', memberIds: [b.userId] } })).json()) as { id: string };
+    const bAv = ((await (await call('PUT', '/api/me/avatar', { token: b.token, body: jpg })).json()) as { avatar: string }).avatar;
+    const r = await login({ token: b.token, kakaoId: kid });
+    expect(r.kind).toBe('merged');
+    const teams = ((await (await call('GET', '/api/teams', { token: r.token })).json()) as { teams: Array<{ id: string; ownerId: string }> }).teams;
+    expect(teams.map((t) => t.id).sort()).toEqual([bt.id, ct.id].sort());
+    expect(teams.find((t) => t.id === bt.id)!.ownerId).toBe(a.userId);
+    // A에 사진이 없었으니 B 사진을 옮긴다
+    expect(((await (await me(r.token)).json()) as { avatar: string | null }).avatar).toBe(bAv);
+    // 다시: A에 사진이 있으면 B 사진 파일은 지운다
+    const b2 = await newUser('익명둘');
+    const b2Av = ((await (await call('PUT', '/api/me/avatar', { token: b2.token, body: jpg })).json()) as { avatar: string }).avatar;
+    const r2 = await login({ token: b2.token, kakaoId: kid });
+    expect(r2.kind).toBe('merged');
+    expect(((await (await me(r2.token)).json()) as { avatar: string | null }).avatar).toBe(bAv);
+    expect((await call('GET', `/avatar/${b2Av}.jpg`)).status).toBe(404);
+  });
+
   it('합친 기록을 지우면 저장된 경로(B 폴더)의 파일도 지운다', async () => {
     const kid = nextKakaoId();
     await login({ kakaoId: kid });

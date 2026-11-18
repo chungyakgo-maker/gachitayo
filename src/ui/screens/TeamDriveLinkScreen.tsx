@@ -2,6 +2,7 @@
 // 팀원이 누르면 계정이 준비되는 대로 그 팀 대기실로. 팀원이 아니거나 주행이 닫혔으면 알려 준다
 import { useEffect, useRef, useState } from 'react';
 import { useAccount } from '../../app/account';
+import { takePendingLink } from '../../app/pendingJoin';
 import { openTeamDrive, teamErrorText } from '../../app/teams';
 import { IconBack } from '../icons';
 
@@ -9,6 +10,8 @@ export function TeamDriveLinkScreen({ teamId }: { teamId: string }) {
   const acc = useAccount();
   const [error, setError] = useState<string | null>(null);
   const tried = useRef(false);
+  // 이 화면이 열렸으면 들고 있던 링크는 다 썼다 (메인으로 돌아갈 때 다시 끌려오지 않게, 검토 지적)
+  useEffect(() => void takePendingLink(), []);
   useEffect(() => {
     if (acc.status !== 'ready' || tried.current) return;
     tried.current = true;

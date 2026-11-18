@@ -63,6 +63,21 @@ export async function deleteAccount(env: Cloudflare.Env, userId: string, now = D
       // 방이 이미 닫혔으면 그대로
     }
   }
+  // 팀 주행 방: 내가 팀장인 팀의 방은 닫고(팀이 지워지므로), 다른 팀 방에서는 빠진다 (검토 지적)
+  const { results: driveRooms } = await env.DB.prepare(
+    'SELECT t.owner_id, t.drive_room_id FROM teams t JOIN team_members tm ON tm.team_id = t.id WHERE tm.user_id = ? AND t.drive_room_id IS NOT NULL',
+  )
+    .bind(userId)
+    .all<{ owner_id: string; drive_room_id: string }>();
+  for (const r of driveRooms) {
+    try {
+      const g = env.GROUP.get(env.GROUP.idFromName(r.drive_room_id));
+      if (r.owner_id === userId) await g.shutdown();
+      else await g.leave(userId);
+    } catch {
+      // 방이 이미 닫힘
+    }
+  }
   // 프로필 사진 파일
   const av = await env.DB.prepare('SELECT avatar FROM users WHERE id = ?').bind(userId).first<{ avatar: string | null }>();
   if (av?.avatar) await env.SESSION_FILES.delete(`avatars/${av.avatar}.jpg`);

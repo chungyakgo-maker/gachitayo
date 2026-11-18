@@ -19,6 +19,12 @@ export function mergeUsers(env: Cloudflare.Env, from: string, into: string): D1P
     db.prepare('INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) SELECT user_id, ?, created_at FROM friends WHERE friend_id = ? AND user_id != ?').bind(into, from, into),
     db.prepare('DELETE FROM friends WHERE user_id = ? OR friend_id = ?').bind(from, from),
     db.prepare('DELETE FROM presence WHERE user_id = ?').bind(from),
+    // 팀: B가 팀장인 팀은 A가 팀장, B가 속한 팀에는 A가 들어간다 (검토 지적: 합치면 팀이 사라졌다)
+    db.prepare('UPDATE teams SET owner_id = ? WHERE owner_id = ?').bind(into, from),
+    db.prepare('INSERT OR IGNORE INTO team_members (team_id, user_id, added_at) SELECT team_id, ?, added_at FROM team_members WHERE user_id = ?').bind(into, from),
+    db.prepare('DELETE FROM team_members WHERE user_id = ?').bind(from),
+    // 프로필 사진: A에 없으면 B 사진을 쓴다 (A에 있으면 B 사진 파일은 합친 뒤 지운다, signInWithIdentity)
+    db.prepare('UPDATE users SET avatar = (SELECT avatar FROM users WHERE id = ?) WHERE id = ? AND avatar IS NULL').bind(from, into),
     db.prepare('DELETE FROM users WHERE id = ?').bind(from),
   ];
 }
@@ -50,6 +56,7 @@ export async function signInWithIdentity(
   const stmts: D1PreparedStatement[] = [];
   let userId: string;
   let kind: LoginKind;
+  let mergedAvatar: string | null = null;
   if (!known) {
     // 지금 계정에 같은 회사 로그인이 없으면 붙인다 (익명 계정, 또는 카카오 계정에 애플을 더 붙임).
     // 이미 같은 회사 로그인이 붙어 있으면(다른 카카오 계정 등) 새 계정
@@ -69,6 +76,7 @@ export async function signInWithIdentity(
     if (!startUser || startUser === userId) kind = 'login';
     else if (!startLinked) {
       kind = 'merged';
+      mergedAvatar = (await env.DB.prepare('SELECT avatar FROM users WHERE id = ?').bind(startUser).first<{ avatar: string | null }>())?.avatar ?? null;
       stmts.push(...mergeUsers(env, startUser, userId));
     } else kind = 'switched';
   }
@@ -78,6 +86,11 @@ export async function signInWithIdentity(
   const fresh = newToken();
   stmts.push(env.DB.prepare('INSERT INTO user_tokens (token_hash, user_id, created_at) VALUES (?, ?, ?)').bind(await sha256Hex(fresh), userId, iso));
   await env.DB.batch(stmts);
+  // 합친 B의 사진을 A가 쓰지 않으면 파일을 지운다 (아무도 가리키지 않는 사진이 남지 않게)
+  if (mergedAvatar) {
+    const cur = await env.DB.prepare('SELECT avatar FROM users WHERE id = ?').bind(userId).first<{ avatar: string | null }>();
+    if (cur?.avatar !== mergedAvatar) await env.SESSION_FILES.delete(`avatars/${mergedAvatar}.jpg`);
+  }
   const nick = await env.DB.prepare('SELECT nickname FROM users WHERE id = ?').bind(userId).first<{ nickname: string }>();
   return { userId, token: fresh, nickname: nick!.nickname, kind };
 }

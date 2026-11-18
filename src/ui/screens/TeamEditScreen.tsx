@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getAuth, useAccount } from '../../app/account';
 import { loadFriends, useFriends } from '../../app/friends';
-import { createTeam, deleteTeam, leaveTeam, loadTeams, teamErrorText, TEAM_MAX, TEAM_NAME_MAX, TEAM_SIZE, updateTeam, useTeams } from '../../app/teams';
+import { createTeam, deleteTeam, leaveTeam, loadTeam, loadTeams, teamErrorText, TEAM_MAX, TEAM_NAME_MAX, TEAM_SIZE, updateTeam, useTeams } from '../../app/teams';
 import { Avatar } from '../components/Avatar';
 import { IconBack } from '../icons';
 
@@ -37,18 +37,21 @@ export function TeamEditScreen({ teamId }: { teamId: string | null }) {
   useEffect(() => {
     if (acc.status !== 'ready') return;
     void loadFriends();
-    if (!ts.loaded) void loadTeams().catch(() => undefined);
+    // 편집은 이 팀을 새로 받는다 (검토 지적: 오래된 목록으로 저장하면 나간 사람이 다시 들어갔다)
+    if (teamId) void loadTeam(teamId).catch(() => (ts.loaded ? undefined : loadTeams().catch(() => undefined)));
     // 처음 한 번
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acc.status]);
-  // 팀을 늦게 받아 왔으면 그때 채운다
-  const [filled, setFilled] = useState(!!team || !teamId);
+  // 팀을 (새로) 받아 오면, 아직 손대지 않았을 때만 채운다
+  const [dirty, setDirty] = useState(false);
   useEffect(() => {
-    if (filled || !team) return;
-    setFilled(true);
+    if (dirty || !team) return;
     setName(team.name);
     setPicked(team.members.filter((m) => m.userId !== team.ownerId).map((m) => m.userId));
-  }, [team, filled]);
+  }, [team, dirty]);
+  // 서버의 지금 팀원 (팀장 빼고): 바뀌었을 때만 팀원 목록을 보낸다
+  const baseIds = team ? team.members.filter((m) => m.userId !== team.ownerId).map((m) => m.userId) : [];
+  const membersChanged = picked.length !== baseIds.length || picked.some((id) => !baseIds.includes(id));
 
   // 고를 수 있는 사람: 친구 + (편집이면) 이미 팀원인 사람 (친구를 끊었어도 남아 있다)
   const people = useMemo<Pickable[]>(() => {
@@ -72,7 +75,23 @@ export function TeamEditScreen({ teamId }: { teamId: string | null }) {
       },
     );
   };
-  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const toggle = (id: string) => {
+    setDirty(true);
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  };
+  const onName = (v: string) => {
+    setDirty(true);
+    setName(v);
+  };
+  // 팀원이 바뀌었을 때만 목록을 보낸다 (이름만 바꾸면 이름만)
+  const save = (id: string) =>
+    run(
+      () => updateTeam(id, membersChanged ? { name: name.trim(), memberIds: picked } : { name: name.trim() }),
+      () => {
+        setDirty(false);
+        setNote('저장했어요');
+      },
+    );
   const count = picked.length + 1;
   const nameOk = name.trim().length > 0;
 
@@ -94,7 +113,7 @@ export function TeamEditScreen({ teamId }: { teamId: string | null }) {
             <label htmlFor="team-name" className="label">
               팀 이름
             </label>
-            <input id="team-name" className="text-input" type="text" value={name} maxLength={TEAM_NAME_MAX} placeholder="예: 북악 새벽팀" onChange={(e) => setName(e.target.value)} />
+            <input id="team-name" className="text-input" type="text" value={name} maxLength={TEAM_NAME_MAX} placeholder="예: 북악 새벽팀" onChange={(e) => onName(e.target.value)} />
           </span>
           <section className="card card-col" style={{ gap: 0 }} aria-label="팀원 고르기">
             <div className="card-row" style={{ paddingBottom: 8 }}>
@@ -138,7 +157,7 @@ export function TeamEditScreen({ teamId }: { teamId: string | null }) {
             </button>
           ) : (
             <>
-              <button type="button" className="primary-btn" disabled={busy || !nameOk} onClick={() => run(() => updateTeam(teamId, { name: name.trim(), memberIds: picked }), () => setNote('저장했어요'))}>
+              <button type="button" className="primary-btn" disabled={busy || !nameOk} onClick={() => save(teamId)}>
                 저장
               </button>
               <button

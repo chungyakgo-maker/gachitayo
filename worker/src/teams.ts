@@ -78,12 +78,11 @@ async function view(env: Cloudflare.Env, t: TeamRow): Promise<TeamView> {
   )
     .bind(t.id, t.owner_id)
     .all<{ id: string; nickname: string; avatar: string | null }>();
+  // 닫힌 주행(24시간·모두 나감)은 보여 주지만 않는다. 목록 받기에서 지우면 동시에 누른 "팀 주행"과 부딪혔다 (검토 지적)
   let drive: TeamView['drive'] = null;
   if (t.drive_room_id) {
     const s = await room(env, t.drive_room_id).summary();
     if (s.alive) drive = { roomId: t.drive_room_id, count: s.count };
-    // 닫힌 주행은 잊는다 (24시간이 지났거나 모두 나감)
-    else await env.DB.prepare('UPDATE teams SET drive_room_id = NULL WHERE id = ? AND drive_room_id = ?').bind(t.id, t.drive_room_id).run();
   }
   return { id: t.id, name: t.name, ownerId: t.owner_id, members: results.map((r) => ({ userId: r.id, nickname: r.nickname, avatar: r.avatar ?? null })), gapS: t.gap_s, drive };
 }
@@ -139,6 +138,9 @@ export async function updateTeam(env: Cloudflare.Env, userId: string, teamId: st
     await checkNewMembers(env, userId, added);
     for (const id of removed) stmts.push(env.DB.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').bind(t.id, id));
     added.forEach((id, i) => stmts.push(env.DB.prepare('INSERT INTO team_members (team_id, user_id, added_at) VALUES (?, ?, ?)').bind(t.id, id, now + i)));
+    if (stmts.length) await env.DB.batch(stmts.splice(0));
+    // 뺀 사람은 열린 팀 주행 방에서도 뺀다 (검토 지적: 빠진 사람이 위치를 계속 받았다)
+    for (const id of removed) await leaveDriveRoom(env, t.drive_room_id, id);
   }
   if (stmts.length) await env.DB.batch(stmts);
   return view(env, await teamRow(env, t.id));
@@ -148,13 +150,26 @@ export async function deleteTeam(env: Cloudflare.Env, userId: string, teamId: st
   const t = await teamRow(env, teamId);
   if (t.owner_id !== userId) throw new HttpError(403, '팀장만 지울 수 있어요');
   await env.DB.batch([env.DB.prepare('DELETE FROM team_members WHERE team_id = ?').bind(t.id), env.DB.prepare('DELETE FROM teams WHERE id = ?').bind(t.id)]);
+  // 열린 팀 주행 방도 닫는다
+  if (t.drive_room_id) await room(env, t.drive_room_id).shutdown();
   return { ok: true };
+}
+
+/** 열린 팀 주행 방에서 한 사람 빼기 (방이 없거나 이미 없으면 그대로) */
+export async function leaveDriveRoom(env: Cloudflare.Env, roomId: string | null, userId: string): Promise<void> {
+  if (!roomId) return;
+  try {
+    await room(env, roomId).leave(userId);
+  } catch {
+    // 방이 이미 닫힘
+  }
 }
 
 export async function leaveTeam(env: Cloudflare.Env, userId: string, teamId: string): Promise<{ ok: true }> {
   const t = await teamRow(env, teamId);
   if (t.owner_id === userId) throw new HttpError(400, '팀장은 팀을 지워야 나갈 수 있어요');
   await env.DB.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').bind(t.id, userId).run();
+  await leaveDriveRoom(env, t.drive_room_id, userId);
   return { ok: true };
 }
 
@@ -167,23 +182,23 @@ export async function teamDrive(env: Cloudflare.Env, userId: string, teamId: str
     unwrap<RoomState>(await room(env, t.drive_room_id).join(userId, p.nickname, p.avatar));
     return { roomId: t.drive_room_id };
   }
-  const roomId = crypto.randomUUID();
-  // 먼저 자리를 차지한다: 두 사람이 동시에 열면 한 방만 남고 늦은 사람은 그 방으로 들어간다
-  const claim = await env.DB.prepare('UPDATE teams SET drive_room_id = ? WHERE id = ? AND drive_room_id IS ?').bind(roomId, t.id, t.drive_room_id).run();
-  if (claim.meta.changes !== 1) {
-    const again = await teamRow(env, t.id);
-    if (again.drive_room_id) {
-      unwrap<RoomState>(await room(env, again.drive_room_id).join(userId, p.nickname, p.avatar));
-      return { roomId: again.drive_room_id };
-    }
-    throw new HttpError(409, '잠시 뒤 다시 해 주세요');
-  }
   let pref: string[] = [];
   try {
     pref = t.order_json ? (JSON.parse(t.order_json) as string[]) : [];
   } catch {
     pref = [];
   }
+  // 방을 먼저 열고 자리를 차지한다 (검토 지적: 자리만 차지한 빈 방을 다른 사람이 닫힌 방으로 봤다).
+  // 두 사람이 동시에 열면 한 방만 남기고, 진 쪽은 내 방을 닫고 이긴 방으로 들어간다
+  const roomId = crypto.randomUUID();
   await room(env, roomId).init('', userId, p.nickname, now, p.avatar, { teamId: t.id, teamName: t.name, gapS: t.gap_s, pref });
-  return { roomId };
+  const claim = await env.DB.prepare('UPDATE teams SET drive_room_id = ? WHERE id = ? AND (drive_room_id IS NULL OR drive_room_id = ?)').bind(roomId, t.id, t.drive_room_id).run();
+  if (claim.meta.changes === 1) return { roomId };
+  await room(env, roomId).shutdown();
+  const again = await teamRow(env, t.id);
+  if (again.drive_room_id && (await room(env, again.drive_room_id).summary()).alive) {
+    unwrap<RoomState>(await room(env, again.drive_room_id).join(userId, p.nickname, p.avatar));
+    return { roomId: again.drive_room_id };
+  }
+  throw new HttpError(409, '잠시 뒤 다시 해 주세요');
 }

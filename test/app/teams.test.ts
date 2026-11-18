@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // 팀·프로필 사진 앱 상태 (설계 docs/superpowers/specs/2026-11-18-team-drive-design.md)
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,6 +90,20 @@ describe('팀 상태', () => {
   it('서버가 거절하면 서버가 준 말로 실패한다', async () => {
     const t = await import('../../src/app/teams');
     await expect(t.createTeam('여섯째', [])).rejects.toThrow('팀은 5개까지예요');
+  });
+
+  it('앱으로 돌아오면 바로 다시 받는다 (30초 기다리지 않게, 검토 지적)', async () => {
+    const t = await import('../../src/app/teams');
+    const stop = t.watchTeams();
+    await new Promise((r) => setTimeout(r, 0));
+    const before = calls.filter((c) => c.url.endsWith('/api/teams')).length;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls.filter((c) => c.url.endsWith('/api/teams')).length).toBe(before + 1);
+    stop();
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls.filter((c) => c.url.endsWith('/api/teams')).length).toBe(before + 1);
   });
 
   it('팀 수·인원 한도 (5개, 나 포함 15명)', async () => {

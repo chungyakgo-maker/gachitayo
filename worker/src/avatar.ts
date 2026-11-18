@@ -39,5 +39,6 @@ export async function getAvatar(env: Cloudflare.Env, id: string, headers: Header
   if (!obj) throw new HttpError(404, '없는 사진');
   headers.set('Content-Type', 'image/jpeg');
   headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  headers.set('X-Content-Type-Options', 'nosniff');
   return new Response(obj.body, { status: 200, headers });
 }

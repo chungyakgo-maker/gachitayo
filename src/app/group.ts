@@ -303,8 +303,8 @@ export function joinGroupRoom(code: string): Promise<void> {
 export function enterGroupRoom(roomId: string): Promise<void> {
   return explicit(async (seq) => {
     const keep = remembered();
-    // 다른 방에 있었으면 그 연결은 닫는다 (서버에서는 24시간 뒤·전원 나감에 닫힘)
-    if (state.room && state.room.roomId !== roomId) leaveGroupLocal();
+    // 다른 방에 있었으면 서버에서도 나간다 (검토 지적: 폰에서만 나가면 예전 방에 방장으로 남아 아무도 목적지를 못 정했다)
+    if (state.room && state.room.roomId !== roomId) await leaveGroupRoom();
     await open(roomId, seq, keep?.roomId === roomId ? keep.accepted : 0);
   });
 }

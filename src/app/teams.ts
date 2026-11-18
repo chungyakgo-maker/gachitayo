@@ -68,6 +68,13 @@ export async function loadTeams(): Promise<void> {
   set({ teams: r.teams, loaded: true });
 }
 
+/** 팀 하나를 새로 받아 목록에 바꿔 넣는다 (편집 화면: 오래된 목록으로 저장하지 않게, 검토 지적) */
+export async function loadTeam(id: string): Promise<Team> {
+  const t = await apiFetch<Team>('GET', `/api/teams/${id}`, { token: token() });
+  replace(t);
+  return t;
+}
+
 export async function createTeam(name: string, memberIds: string[]): Promise<Team> {
   const t = await apiFetch<Team>('POST', '/api/teams', { token: token(), body: { name: name.trim(), memberIds } });
   replace(t);
@@ -107,7 +114,15 @@ export function watchTeams(): () => void {
   };
   tick();
   const id = setInterval(tick, POLL_MS);
-  return () => clearInterval(id);
+  // 앱으로 돌아오면 바로 (30초 기다리지 않게, 검토 지적)
+  const onVisible = () => {
+    if (document.visibilityState !== 'hidden') tick();
+  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+  return () => {
+    clearInterval(id);
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+  };
 }
 
 export function resetTeamsForTest(): void {

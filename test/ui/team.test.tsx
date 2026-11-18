@@ -26,12 +26,18 @@ const h = vi.hoisted(() => ({
   calls: [] as string[],
   openFail: null as Error | null,
   myAvatar: null as string | null | undefined,
+  loadGate: null as Promise<void> | null,
+  loadFail: null as Error | null,
 }));
 vi.mock('../../src/app/teams', async (orig) => ({
   ...(await orig<typeof import('../../src/app/teams')>()),
   useTeams: () => h.teams,
   getTeams: () => h.teams,
-  loadTeams: async () => void h.calls.push('loadTeams'),
+  loadTeams: async () => {
+    h.calls.push('loadTeams');
+    if (h.loadGate) await h.loadGate;
+    if (h.loadFail) throw h.loadFail;
+  },
   openTeamDrive: async (id: string) => {
     h.calls.push(`drive ${id}`);
     if (h.openFail) throw h.openFail;
@@ -40,6 +46,7 @@ vi.mock('../../src/app/teams', async (orig) => ({
     h.calls.push(`create ${name} ${ids.join(',')}`);
     return T('new', { name });
   },
+  loadTeam: async (id: string) => void h.calls.push(`loadTeam ${id}`),
   updateTeam: async (id: string, p: unknown) => {
     h.calls.push(`update ${id} ${JSON.stringify(p)}`);
     return T(id);
@@ -100,6 +107,8 @@ beforeEach(() => {
   h.friends = [];
   h.calls = [];
   h.openFail = null;
+  h.loadGate = null;
+  h.loadFail = null;
   h.group = { room: null, me: 'me', connected: true, offer: null, later: null, acceptedVersion: 0, error: null };
   window.location.hash = '#/';
 });
@@ -141,6 +150,39 @@ describe('팀 고르기', () => {
     fireEvent.click(screen.getByRole('button', { name: /팀2 고르기/ }));
     await flush();
     expect(h.calls).toContain('drive 2');
+  });
+
+  it('저장된 목록이 아니라 새로 받은 목록으로 고른다 (검토 지적)', async () => {
+    let open!: () => void;
+    h.loadGate = new Promise<void>((r) => (open = r));
+    render(<TeamSheet onClose={() => {}} />);
+    await flush();
+    expect(h.calls).not.toContain('drive 1');
+    open();
+    await flush();
+    expect(h.calls).toContain('drive 1');
+  });
+
+  it('목록을 못 받으면 알려 주고 다시 해 볼 수 있다 (검토 지적: "불러오는 중"에 멈췄다)', async () => {
+    h.loadFail = new Error('통신 오류');
+    render(<TeamSheet onClose={() => {}} />);
+    await flush();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    h.loadFail = null;
+    fireEvent.click(screen.getByRole('button', { name: '다시 해 보기' }));
+    await flush();
+    expect(h.calls).toContain('drive 1');
+  });
+
+  it('팀 하나로 바로 들어가다 실패하면 다시 해 볼 수 있다', async () => {
+    const { ApiError } = await import('../../src/server/api');
+    h.openFail = new ApiError(409, '잠시 뒤 다시 해 주세요');
+    render(<TeamSheet onClose={() => {}} />);
+    await flush();
+    h.openFail = null;
+    fireEvent.click(screen.getByRole('button', { name: '다시 해 보기' }));
+    await flush();
+    expect(h.calls.filter((c) => c === 'drive 1').length).toBe(2);
   });
 
   it('들어가지 못하면 서버가 준 말을 보여 준다', async () => {
@@ -186,6 +228,17 @@ describe('팀 만들기·편집', () => {
     fireEvent.click(screen.getByRole('button', { name: /한 번 더 누르면 팀을 지워요/ }));
     await flush();
     expect(h.calls).toContain('delete 1');
+  });
+
+  it('편집 화면은 열 때 팀을 새로 받고, 이름만 바꾸면 팀원 목록은 보내지 않는다 (검토 지적: 오래된 목록으로 나간 사람을 되살렸다)', async () => {
+    h.friends = [F('b', '민수')];
+    render(<TeamEditScreen teamId="1" />);
+    await flush();
+    expect(h.calls).toContain('loadTeam 1');
+    fireEvent.change(screen.getByLabelText('팀 이름'), { target: { value: '새 이름' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await flush();
+    expect(h.calls).toContain(`update 1 ${JSON.stringify({ name: '새 이름' })}`);
   });
 
   it('팀원은 목록만 보고 나갈 수 있다', async () => {
@@ -266,6 +319,18 @@ describe('카톡 친구 초대 링크', () => {
     fireEvent.click(screen.getByRole('button', { name: '친구 되기' }));
     await flush();
     expect(h.calls).toContain('addFriend K7QX29MD');
+  });
+
+  it('초대 화면을 열면 들고 있던 링크는 다 쓴 것 (메인으로 갈 때 다시 끌려오지 않게, 검토 지적)', () => {
+    rememberPendingLink('/friend/K7QX29MD/세영');
+    render(<FriendInviteScreen code="K7QX29MD" name="세영" />);
+    expect(takePendingLink()).toBeNull();
+  });
+
+  it('주소에 실린 긴 한글 이름(퍼센트 글자)도 들고 있는다 (검토 지적)', () => {
+    const path = `/friend/K7QX29MD/${encodeURIComponent('드라이브왕세영')}`;
+    rememberPendingLink(path);
+    expect(takePendingLink()).toBe(path);
   });
 
   it('첫 실행 안내 중에는 받은 링크를 들고 있다가 돌려준다 (친구·팀 주행 링크)', () => {

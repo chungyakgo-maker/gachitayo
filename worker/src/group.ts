@@ -119,6 +119,10 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
   async alarm(): Promise<void> {
     await this.close();
   }
+  /** 팀을 지우면 열린 팀 주행 방도 닫는다 (검토 지적: 지운 팀 방에서 위치가 계속 오갔다) */
+  async shutdown(): Promise<void> {
+    await this.close();
+  }
   private async save(d: RoomData): Promise<void> {
     await this.ctx.storage.put('room', d);
     this.broadcast(JSON.stringify({ type: 'state', ...this.view(d) }));
@@ -196,6 +200,11 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
     if ('error' in d) return d;
     if (!Array.isArray(userIds) || userIds.length !== d.members.length || new Set(userIds).size !== userIds.length || !d.members.every((m) => userIds.includes(m.userId))) return { error: 'bad' };
     for (const m of d.members) m.order = userIds.indexOf(m.userId) + 1;
+    // 팀 방: 새로 들어오는 사람이 방장이 바꾼 순서를 흐트러뜨리지 않게 이 방의 기억 순서도 바꾼다 (검토 지적)
+    if (d.teamId) {
+      const now = userIds as string[];
+      d.pref = [...now, ...(d.pref ?? []).filter((id) => !now.includes(id))];
+    }
     await this.save(d);
     return this.view(d);
   }
@@ -319,8 +328,9 @@ export async function createRoom(env: Cloudflare.Env, userId: string, now = Date
   if (!code) throw new HttpError(503, '잠시 뒤 다시 해 주세요');
   const roomId = crypto.randomUUID();
   await env.DB.prepare('INSERT INTO rooms (id, code, host_id, created_at) VALUES (?, ?, ?, ?)').bind(roomId, code, userId, now).run();
+  // 코드 방은 친구가 아닐 수 있어 프사를 싣지 않는다 (사진은 친구·같은 팀에게만, 검토 지적)
   const p = await profileOf(env, userId);
-  await room(env, roomId).init(code, userId, p.nickname, now, p.avatar);
+  await room(env, roomId).init(code, userId, p.nickname, now, null);
   return { roomId, code };
 }
 
@@ -338,17 +348,31 @@ export async function joinRoom(env: Cloudflare.Env, userId: string, body: unknow
     throw new HttpError(404, '방을 찾지 못했어요');
   }
   const p = await profileOf(env, userId);
-  unwrap<RoomState>(await room(env, r.id).join(userId, p.nickname, p.avatar));
+  unwrap<RoomState>(await room(env, r.id).join(userId, p.nickname, null));
   return { roomId: r.id };
 }
 
-export const roomState = async (env: Cloudflare.Env, roomId: string, userId: string): Promise<RoomState> => unwrap<RoomState>(await room(env, roomId).state(userId));
+/** 팀 방은 방에 남아 있어도 지금 팀원이어야 한다 (검토 지적: 팀에서 빠진 사람이 남은 방으로 위치를 계속 받았다) */
+async function teamGuard(env: Cloudflare.Env, st: RoomState, userId: string): Promise<void> {
+  if (!st.teamId) return;
+  const ok = await env.DB.prepare('SELECT 1 AS x FROM team_members WHERE team_id = ? AND user_id = ?').bind(st.teamId, userId).first();
+  if (!ok) throw new HttpError(403, '팀원만 할 수 있어요');
+}
+async function guarded(env: Cloudflare.Env, roomId: string, userId: string): Promise<RoomState> {
+  const st = unwrap<RoomState>(await room(env, roomId).state(userId));
+  await teamGuard(env, st, userId);
+  return st;
+}
+
+export const roomState = (env: Cloudflare.Env, roomId: string, userId: string): Promise<RoomState> => guarded(env, roomId, userId);
 
 const num = (v: unknown, min: number, max: number) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
 
 export async function roomAction(env: Cloudflare.Env, roomId: string, userId: string, action: string, body: unknown): Promise<unknown> {
   const b = (body ?? {}) as Record<string, unknown>;
   const r = room(env, roomId);
+  // 나가기는 언제나 된다. 나머지는 팀 방이면 지금 팀원만
+  if (action !== 'leave') await guarded(env, roomId, userId);
   switch (action) {
     case 'order': {
       const st = unwrap<RoomState>(await r.setOrder(userId, b.userIds));
@@ -391,11 +415,15 @@ async function rememberTeamOrder(env: Cloudflare.Env, st: RoomState): Promise<vo
   await env.DB.prepare('UPDATE teams SET order_json = ? WHERE id = ?').bind(JSON.stringify(next), st.teamId).run();
 }
 
-export const roomRoute = async (env: Cloudflare.Env, roomId: string, userId: string): Promise<RoomRoute | null> => unwrap<RoomRoute | null>(await room(env, roomId).route(userId));
+export async function roomRoute(env: Cloudflare.Env, roomId: string, userId: string): Promise<RoomRoute | null> {
+  await guarded(env, roomId, userId);
+  return unwrap<RoomRoute | null>(await room(env, roomId).route(userId));
+}
 
 /** 웹소켓 /group/{id}: 참가자만 */
 export async function connectRoom(env: Cloudflare.Env, roomId: string, userId: string): Promise<Response> {
   const r = room(env, roomId);
   if (!(await r.isMember(userId))) throw new HttpError(403, '방 참가자만 할 수 있어요');
+  await guarded(env, roomId, userId);
   return r.fetch(new Request('https://room/connect', { headers: { Upgrade: 'websocket', 'X-User-Id': userId } }));
 }

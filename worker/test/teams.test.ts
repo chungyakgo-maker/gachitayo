@@ -47,6 +47,8 @@ describe('프로필 사진', () => {
     expect(img.status).toBe(200);
     expect(img.headers.get('Content-Type')).toBe('image/jpeg');
     expect(img.headers.get('Cache-Control')).toContain('immutable');
+    // 사진이 아닌 것으로 읽히지 않게 (검토 지적)
+    expect(img.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(new Uint8Array(await img.arrayBuffer())).toEqual(jpeg());
   });
 
@@ -270,5 +272,104 @@ describe('팀 주행', () => {
     await call('PUT', `/api/teams/${t.id}`, { token: a.token, body: { memberIds: fs.slice(1).map((f) => f.userId) } });
     await call('POST', `/api/rooms/${roomId}/leave`, { token: fs[0]!.token });
     expect((await drive(fs[0]!.token, t.id)).status).toBe(403);
+  });
+});
+
+describe('검토 지적 (2026-11-18)', () => {
+  it('팀에서 빠지거나 나가면 열린 팀 주행 방에서도 빠진다 (위치를 계속 받지 않게)', async () => {
+    const a = await user('세영');
+    const [b, c] = await friendsFor(a, 2);
+    const t = await team(a, '팀', [b!, c!]);
+    const { roomId } = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+    await drive(b!.token, t.id);
+    await drive(c!.token, t.id);
+    // 팀장이 b를 뺀다
+    await call('PUT', `/api/teams/${t.id}`, { token: a.token, body: { memberIds: [c!.userId] } });
+    expect((await call('GET', `/api/rooms/${roomId}`, { token: b!.token })).status).toBe(403);
+    // c가 팀을 나간다
+    await call('POST', `/api/teams/${t.id}/leave`, { token: c!.token });
+    expect((await call('GET', `/api/rooms/${roomId}`, { token: c!.token })).status).toBe(403);
+    expect((await roomOf(a.token, roomId)).members.map((m) => m.userId)).toEqual([a.userId]);
+  });
+
+  it('팀을 지우면 열린 팀 주행 방도 닫힌다', async () => {
+    const a = await user('세영');
+    const [b] = await friendsFor(a, 1);
+    const t = await team(a, '팀', [b!]);
+    const { roomId } = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+    await drive(b!.token, t.id);
+    await call('DELETE', `/api/teams/${t.id}`, { token: a.token });
+    expect((await call('GET', `/api/rooms/${roomId}`, { token: b!.token })).status).toBe(404);
+    expect((await call('GET', `/api/rooms/${roomId}`, { token: a.token })).status).toBe(404);
+  });
+
+  it('팀 방은 팀원 표에 없는 사람이면 방에 남아 있어도 403 (방 상태·방장 동작)', async () => {
+    const a = await user('세영');
+    const [b] = await friendsFor(a, 1);
+    const t = await team(a, '팀', [b!]);
+    const { roomId } = (await (await drive(b!.token, t.id)).json()) as { roomId: string };
+    // 표에서만 지운 경우 (예: 다른 경로로 빠짐)
+    await env.DB.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').bind(t.id, b!.userId).run();
+    expect((await call('GET', `/api/rooms/${roomId}`, { token: b!.token })).status).toBe(403);
+    expect((await call('POST', `/api/rooms/${roomId}/gap`, { token: b!.token, body: { gapS: 3 } })).status).toBe(403);
+  });
+
+  it('닫힌 주행 다음 "팀 주행"이 목록 받기와 겹쳐도 새 방이 열린다 (409 없음)', async () => {
+    const a = await user('세영');
+    const t = await team(a, '팀', []);
+    for (let i = 0; i < 5; i++) {
+      const { roomId } = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+      await call('POST', `/api/rooms/${roomId}/leave`, { token: a.token });
+      const [, r] = await Promise.all([call('GET', '/api/teams', { token: a.token }), drive(a.token, t.id)]);
+      expect(r.status).toBe(200);
+      const next = ((await r.json()) as { roomId: string }).roomId;
+      expect((await roomOf(a.token, next)).members.length).toBe(1);
+      await call('POST', `/api/rooms/${next}/leave`, { token: a.token });
+    }
+  });
+
+  it('방장이 바꾼 순서는 누가 새로 들어와도 그대로', async () => {
+    const a = await user('세영');
+    const [b, c] = await friendsFor(a, 2);
+    const t = await team(a, '팀', [b!, c!]);
+    // 첫 주행에서 순서 a,b,c를 기억해 둔다
+    const first = ((await (await drive(a.token, t.id)).json()) as { roomId: string }).roomId;
+    await drive(b!.token, t.id);
+    await drive(c!.token, t.id);
+    await call('POST', `/api/rooms/${first}/order`, { token: a.token, body: { userIds: [a.userId, b!.userId, c!.userId] } });
+    for (const u of [a, b!, c!]) await call('POST', `/api/rooms/${first}/leave`, { token: u.token });
+    // 다음 주행: 방장이 b,a로 바꾼 뒤 c가 들어온다
+    const { roomId } = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+    await drive(b!.token, t.id);
+    await call('POST', `/api/rooms/${roomId}/order`, { token: a.token, body: { userIds: [b!.userId, a.userId] } });
+    await drive(c!.token, t.id);
+    const room = await roomOf(a.token, roomId);
+    expect([...room.members].sort((x, y) => x.order - y.order).map((m) => m.userId)).toEqual([b!.userId, a.userId, c!.userId]);
+  });
+
+  it('코드 방(친구 아닐 수 있음)에는 프사를 싣지 않는다', async () => {
+    const h = await user('방장');
+    await call('PUT', '/api/me/avatar', { token: h.token, raw: jpeg() });
+    const r = (await (await call('POST', '/api/rooms', { token: h.token })).json()) as { roomId: string; code: string };
+    const s = await user('모르는사람');
+    await call('PUT', '/api/me/avatar', { token: s.token, raw: jpeg() });
+    expect((await call('POST', '/api/rooms/join', { token: s.token, body: { code: r.code } })).status).toBe(200);
+    const room = await roomOf(s.token, r.roomId);
+    expect(room.members.map((m) => m.avatar)).toEqual([null, null]);
+  });
+});
+
+describe('검토 지적: 탈퇴와 팀 주행 방', () => {
+  it('팀장이 탈퇴하면 그 팀 방이 닫히고, 팀원이 탈퇴하면 방에서 빠진다', async () => {
+    const a = await user('세영');
+    const [b, c] = await friendsFor(a, 2);
+    const t1 = await team(a, 'a팀', [b!, c!]);
+    const r1 = ((await (await drive(a.token, t1.id)).json()) as { roomId: string }).roomId;
+    await drive(b!.token, t1.id);
+    expect((await call('DELETE', '/api/me', { token: b!.token })).status).toBe(200);
+    expect((await roomOf(a.token, r1)).members.map((m) => m.userId)).toEqual([a.userId]);
+    await drive(c!.token, t1.id);
+    expect((await call('DELETE', '/api/me', { token: a.token })).status).toBe(200);
+    expect((await call('GET', `/api/rooms/${r1}`, { token: c!.token })).status).toBe(404);
   });
 });

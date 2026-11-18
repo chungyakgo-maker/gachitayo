@@ -2,8 +2,8 @@
 // 방 코드 초대 #/join/{코드}, 친구 초대 #/friend/{코드}/{이름}, 팀 주행 알리기 #/team/{팀}/drive (설계 2026-11-18 team-drive)
 const KEY = 'gachitayo.pendingJoin.v1';
 const KEEP_MS = 30 * 60_000;
-/** 들고 있을 수 있는 링크 모양 (다른 주소로 끌려가지 않게) */
-const LINK_RE = /^\/(join\/\d{6}|friend\/[2-9A-HJKMNP-Z]{8}(\/[^/]{1,40})?|team\/[0-9a-f-]{36}\/drive)$/;
+/** 들고 있을 수 있는 링크 모양 (다른 주소로 끌려가지 않게). 이름은 주소에 퍼센트 글자로 실려 한글 20자면 180자쯤 */
+const LINK_RE = /^\/(join\/\d{6}|friend\/[2-9A-HJKMNP-Z]{8}(\/[^/]{1,200})?|team\/[0-9a-f-]{36}\/drive)$/;
 
 export function rememberPendingLink(path: string, now = Date.now()): void {
   if (!LINK_RE.test(path)) return;
