@@ -1,4 +1,5 @@
 // 주행 준비 (사양서 8.3, 디자인 시안 Prepare)
+import { liveGap, locationSharing, shareAnyLocation } from '../../features';
 import { MountTips } from '../components/MountTips';
 import { GapSection } from '../components/GapSection';
 import { ShareToggle } from '../components/ShareToggle';
@@ -8,7 +9,7 @@ import { useAccount } from '../../app/account';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseFreeDrive, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
-import { MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DriveMode } from '../../app/settings';
+import { effectiveSettings, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DriveMode } from '../../app/settings';
 import { Sheet } from '../components/Sheet';
 import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { formatDayKst, formatLapTime, formatLength } from '../format';
@@ -143,8 +144,9 @@ export function PrepareScreen() {
       </section>
 
       {/* 주행 중 위치 공유 (사용자 요청): 기록 시작 전에 켜야 친구 지도와 친구의 앞 친구 간격에 내가 보인다 */}
-      {shareOn && <ShareToggle variant="card" />}
-      {shareOn && <DriveFriendsToggle />}
+      {/* 정식 빌드(features.ts): 위치를 주고받는 게 모두 꺼져 있으면 공유 카드도, 친구 위치 보이기도 없다 */}
+      {shareOn && shareAnyLocation() && <ShareToggle variant="card" />}
+      {shareOn && locationSharing() && <DriveFriendsToggle />}
 
       {/* 일반 주행(기록 안 남김)은 코스·비교 랩을 고르지 않는다 (코스를 만들지도 않는다) */}
       {!d.noRecord && (
@@ -217,13 +219,13 @@ export function PrepareScreen() {
         </section>
       )}
 
-      <GapSection />
+      {liveGap() && <GapSection />}
 
       <a className="list-link" href="#/prepare/widgets">
         <span className="card-col" style={{ gap: 3 }}>
           <span className="label">상단 표시 값</span>
           <span style={{ fontSize: 15, fontWeight: 600 }}>
-            {topSummary(settings)}
+            {topSummary(effectiveSettings(settings))}
           </span>
         </span>
         <IconChevron size={20} color="#9AA1A9" />

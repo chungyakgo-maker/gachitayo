@@ -1,5 +1,6 @@
 // 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도(통신이 되면 OSM 타일, 안 되면 타일 없이),
 // 위치 공유 켜기/끄기와 공유 중인 친구 (M8: 사용자 요청으로 2단계에서 앞당김). 같이 달리기는 3단계라 넣지 않는다.
+import { locationSharing } from '../../features';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
 import { beginPrepare, chooseCourse, chooseFreeDrive, getDriveState, loadCourses, prepareWithCourse, useDrive } from '../../app/drive';
@@ -48,7 +49,8 @@ export function MainScreen() {
     void loadCourses();
   }, []);
   const fr = useFriends();
-  const friendsOn = acc.status === 'ready';
+  // 정식 빌드(features.ts): 위치 공유 단추·친구 위치 없음
+  const friendsOn = acc.status === 'ready' && locationSharing();
   useEffect(() => {
     if (!friendsOn) return;
     void loadFriends();

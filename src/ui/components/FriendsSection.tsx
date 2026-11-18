@@ -1,5 +1,6 @@
 // 설정 · 친구 (사양서 8.8, M8): 내 친구 코드(복사), 카톡으로 친구 초대(사용자 결정 A-가, 설계 2026-11-18 team-drive),
 // 친구 코드로 친구 추가, 친구 목록(프사, 공유 중 표시, 끊기)
+import { locationSharing } from '../../features';
 import { useEffect, useState } from 'react';
 import { useAccount } from '../../app/account';
 import { addFriendByCode, formatCode, loadFriends, removeFriend, useFriends } from '../../app/friends';
@@ -10,6 +11,8 @@ export function FriendsSection() {
   const fr = useFriends();
   const acc = useAccount();
   const [code, setCode] = useState('');
+  // 정식 빌드(features.ts): 위치 공유 글자 없음
+  const mapOn = locationSharing();
   const [confirm, setConfirm] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -98,7 +101,7 @@ export function FriendsSection() {
               <Avatar id={f.avatar} name={f.nickname} />
               <span className="card-col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
                 <span className="friend-name">{f.nickname}</span>
-                <span className={`sub${f.sharing ? ' sharing' : ''}`}>{f.sharing ? '위치 공유 중' : '공유 안 함'}</span>
+                {mapOn && <span className={`sub${f.sharing ? ' sharing' : ''}`}>{f.sharing ? '위치 공유 중' : '공유 안 함'}</span>}
               </span>
               {confirm === f.userId ? (
                 <span style={{ display: 'flex', gap: 6 }}>
@@ -119,7 +122,9 @@ export function FriendsSection() {
         </ul>
       )}
       <span className="sub" style={{ lineHeight: 1.6 }}>
-        친구 코드를 넣으면 바로 서로 친구가 돼요. 위치는 메인 지도에서 "위치 공유"를 켠 동안만 친구에게 보여요.
+        {mapOn
+          ? '친구 코드를 넣으면 바로 서로 친구가 돼요. 위치는 메인 지도에서 "위치 공유"를 켠 동안만 친구에게 보여요.'
+          : '친구 코드를 넣으면 바로 서로 친구가 돼요. 친구와 팀을 만들어 팀 주행을 할 수 있어요.'}
       </span>
     </section>
   );

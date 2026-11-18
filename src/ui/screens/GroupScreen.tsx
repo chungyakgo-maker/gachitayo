@@ -2,6 +2,7 @@
 // 방 코드·카톡 초대·링크 복사, 주행 순서(방장은 ↑↓), 차 간격(방장은 − +), 목적지(방장은 정하기·바꾸기), 출발 준비, 방 나가기.
 // 주행 중에도 열 수 있다 (방장이 중간에 목적지를 정해 모두에게 보낸다)
 // 팀 주행 방(설계 2026-11-18 team-drive, 시안 ③)이면 방 코드 대신 팀 이름·"주행 열었어요" 알리기·아직 안 들어온 팀원·프사
+import { liveGap, locationSharing } from '../../features';
 import { useEffect, useState } from 'react';
 import { beginPrepare, chooseCourse, getDriveState, useDrive } from '../../app/drive';
 import {
@@ -64,6 +65,8 @@ export function GroupScreen() {
   }
 
   const host = isGroupHost(g);
+  // 정식 빌드(features.ts): 차 간격은 계산하지 않고 안내로만, 지도에 서로 위치 없음
+  const gapOn = liveGap();
   const members = [...room.members].sort((a, b) => a.order - b.order);
   const team = room.teamId ? (ts.teams.find((t) => t.id === room.teamId) ?? null) : null;
   const waiting = team ? team.members.filter((m) => !members.some((x) => x.userId === m.userId)) : [];
@@ -209,7 +212,7 @@ export function GroupScreen() {
       </section>
 
       <section className="card card-col" style={{ gap: 8 }}>
-        <span className="label">차 간격 (앞 차와)</span>
+        <span className="label">{gapOn ? '차 간격 (앞 차와)' : '권장 차 간격 (안내)'}</span>
         {host ? (
           <div className="group-stepper">
             <button type="button" aria-label="차 간격 줄이기" disabled={busy || room.gapS <= GAP_MIN} onClick={() => act(() => setGroupGap(Math.max(GAP_MIN, room.gapS - 0.5)))}>
@@ -227,7 +230,13 @@ export function GroupScreen() {
             {room.gapS.toFixed(1)}초
           </span>
         )}
-        <span className="sub">{host ? '1초부터 0.5초 단위 · 모두에게 같은 값' : '방장이 정해요 · 주행 중 칸 1에 앞 차와의 간격이 보여요'}</span>
+        <span className="sub">
+          {!gapOn
+            ? '모두에게 안내로만 보여요 · 지도에서 서로 위치는 보이지 않아요'
+            : host
+              ? '1초부터 0.5초 단위 · 모두에게 같은 값'
+              : '방장이 정해요 · 주행 중 칸 1에 앞 차와의 간격이 보여요'}
+        </span>
       </section>
 
       {room.teamId && (
@@ -247,7 +256,7 @@ export function GroupScreen() {
               출발 준비
             </button>
             <span className="sub" style={{ textAlign: 'center' }}>
-              각자 출발 준비를 누르고 출발해요 · 주행 중 지도에 모두 보여요
+              {locationSharing() ? '각자 출발 준비를 누르고 출발해요 · 주행 중 지도에 모두 보여요' : '각자 출발 준비를 누르고 출발해요 · 목적지 경로는 모두 같아요'}
             </span>
           </>
         )}
