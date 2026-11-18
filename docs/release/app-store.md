@@ -1,6 +1,7 @@
 # 디고 앱스토어 등록 자료 (초안)
 
-2026-11-16 · 출시 준비 (2026-11-17 갱신: 이름·번들 ID·연락처·로그인·영어 심사 메모. **2026-11-18 정식 빌드(위치 공유 끔) 기준으로 고침**: 팀 주행·프로필 사진, 위치 공유 문장 뺌).
+2026-11-16 · 출시 준비 (2026-11-17 갱신: 이름·번들 ID·연락처·로그인·영어 심사 메모. **2026-11-18 정식 빌드(위치 공유 끔) 기준으로 고침**: 팀 주행·프로필 사진, 위치 공유 문장 뺌. **2026-11-18 바이크 모드 더함**: 부제·키워드·설명·심사 메모·스크린샷 7번).
+**제출 전에 서버 배포가 먼저**다: 바이크 길찾기(고속도로·자동차전용도로 피하기)는 서버가 해서, 서버를 올리기 전에는 바이크도 자동차 경로가 나온다.
 **심사에 내는 빌드는 Codemagic "디고 아이폰 정식 (위치 공유 끔) → App Store" 빌드(1.0.0)만.** App Store Connect 배포 화면 버전 번호도 1.0.0. App Store Connect → 디고 → 앱 정보 / 1.0 버전 화면에 그대로 붙여 넣는다.
 법적 문구(약관·개인정보)는 초안이며 확인은 사용자가 한다.
 
@@ -10,7 +11,7 @@
 |---|---|
 | 이름 | 디고: 드라이브 코스 추천 (홈 화면 이름은 "디고") |
 | 번들 ID | kr.dgo.app |
-| 부제 (30자) | 와인딩 랩타이머 · 팀 주행 |
+| 부제 (30자) | 와인딩 랩타이머 · 팀 주행 · 바이크 |
 | 카테고리 | 주: 내비게이션 · 부: 스포츠 |
 | 개인정보처리방침 URL | https://chungyakgo-maker.github.io/gachitayo/privacy.html |
 | 지원 URL | https://chungyakgo-maker.github.io/gachitayo/privacy.html (문의 이메일 chungyakgo@gmail.com 이 들어 있는 페이지) |
@@ -20,7 +21,7 @@
 ## 키워드 (100자, 쉼표로)
 
 ```
-랩타이머,랩타임,와인딩,드라이브,주행기록,코스,페이스노트,팀주행,G미터,델타,서킷,트랙,투어링
+랩타이머,랩타임,와인딩,드라이브,주행기록,코스,페이스노트,팀주행,G미터,델타,서킷,트랙,투어링,바이크,오토바이,뱅크각,기울기
 ```
 
 ## 설명
@@ -39,6 +40,11 @@
 
 ■ 목적지로 주행
 · 장소를 검색하거나 지도에서 찍으면 그 길로 커브 표지판을 띄워요
+
+■ 바이크 모드
+· 설정에서 탈것을 바이크로 바꾸면 지도에 내 바이크(스쿠터·R차·크루저·네이키드·모타드)를 보여줘요
+· 목적지 길찾기는 고속도로·자동차전용도로를 피하는 길을 먼저 찾고, 그래도 섞이면 도로 이름으로 알려줘요
+· G미터 대신 기울기(뱅크각)를 보여주고, 주행 요약에 왼쪽·오른쪽 최대 기울기를 남겨요 (속도와 도는 빠르기로 계산한 추정값)
 
 ■ 팀 주행
 · 친구로 팀을 만들어 두고(최대 15명), 팀으로 바로 함께 달려요
@@ -99,6 +105,8 @@ Motion sensors: Used during a drive to show and record acceleration/braking/corn
 
 Team drive: Settings (설정) → "팀" → "+ 팀 만들기" creates a team (teams are made from friends; a team with only yourself is fine for review). Then Main → "주행 시작" (Start driving) → "팀 주행" (Team drive) opens the team lobby: driving order, a recommended gap shown as guidance, and a destination set by the host. In this version users do NOT share their locations with each other: there is no friend location on the map, no live gap to the car ahead, and the host shares only the destination (each member's route is calculated from their own position).
 
+Bike mode: Settings (설정) → "탈것" (Vehicle) → "바이크" (Motorcycle). The map marker becomes a motorcycle, destination routes avoid expressways and motorways (motorcycles are not allowed on them in Korea; we request Naver Directions' "avoid car-only roads" option and warn by road name if one is still included), and a lean-angle gauge replaces the G-meter. The lean angle is an estimate calculated from speed and turn rate. To try it without riding: Courses (코스) → any course → "모의주행 (코스 미리 보기)" (Simulated drive).
+
 Profile photo: Settings (설정) → "사진 바꾸기" (Change photo) uses the photo picker or camera; the photo is reduced to 160×160 and shown only to friends and team members.
 
 Account deletion: Settings (설정) → "계정과 모든 기록 지우기" deletes all data on the phone and the server. If the account used Sign in with Apple, the Apple token is revoked.
@@ -109,4 +117,4 @@ Contact: chungyakgo@gmail.com
 ## 스크린샷
 
 6.9인치(1320×2868) 세로, **정식 빌드 화면**(친구 위치·앞 차 간격 없음). 만들어 둠: `docs/release/screenshots/` (2026-11-18, 지도는 실제 서버 지도, 이름·사진은 예시)
-1-메인 · 2-코스 · 3-주행-커브표지판 · 4-팀-대기실 · 5-팀-만들기 · 6-목적지 — App Store Connect → 디고 → 1.0.0 → 6.9인치 디스플레이에 이 순서로 끌어다 놓는다.
+1-메인 · 2-코스 · 3-주행-커브표지판 · 4-팀-대기실 · 5-팀-만들기 · 6-목적지 · 7-바이크-기울기(2026-11-18, 바이크 모드: R차 표시·기울기 칸, 모의주행 화면) — App Store Connect → 디고 → 1.0.0 → 6.9인치 디스플레이에 이 순서로 끌어다 놓는다.
