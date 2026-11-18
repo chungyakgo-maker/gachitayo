@@ -72,6 +72,12 @@ export interface Settings {
   bikeMarker: BikeMarker;
 }
 
+/** 주행 지도 기본 확대 단계 (따라가기 기준, 한 단계 = 두 배) */
+export const DRIVE_ZOOM_DEFAULT = -1;
+/** 저장된 주행 지도 확대를 한 번 기본값으로 되돌렸다는 표시 (예전 빌드에서 두 손가락으로 줄여 저장된 값이 남아 "기본이 너무 멀다") */
+const ZOOM_RESET_KEY = 'gachitayo.driveZoom.v';
+const ZOOM_RESET_V = '2';
+
 export const GATE_WIDTH_MIN_M = 10;
 export const GATE_WIDTH_MAX_M = 60;
 
@@ -94,7 +100,8 @@ export const DEFAULT_SETTINGS: Settings = {
   curveTint: 'D',
   courseFilter: 'all',
   popularPeriod: '30d',
-  driveZoom: 0,
+  // 2026-11-18 세영 "기본 축척이 너무 멀어 … 확대한 정도가 기본이어야해": 보여 준 사진의 확대 정도 ≈ 따라가기 기준 한 단계 축소
+  driveZoom: DRIVE_ZOOM_DEFAULT,
   carMarker: 'arrow',
   vehicle: 'car',
   bikeMarker: 'sport',
@@ -145,7 +152,8 @@ function load(): Settings {
       Array.isArray(w) && w.length === 2 && w.every((x) => WIDGETS.includes(x)) && (w[0] !== w[1] || w[0] === 'none') ? [w[0]!, w[1]!] : DEFAULT_SETTINGS.widgets;
     // 칸 1 설정이 생기기 전에 저장한 값: 속도는 지도 오른쪽 아래로 옮겼으니 속도 칸을 표지판으로 (사용자 요청)
     if (typeof raw.topDelta !== 'boolean' && !widgets.includes('pace')) widgets = widgets.map((x) => (x === 'speed' ? 'pace' : x)) as [WidgetId, WidgetId];
-    return {
+    const zoomReset = localStorage.getItem(ZOOM_RESET_KEY) !== ZOOM_RESET_V;
+    const loaded: Settings = {
       defaultMode: MODES.includes(raw.defaultMode as DriveMode) ? raw.defaultMode! : DEFAULT_SETTINGS.defaultMode,
       topDelta: raw.topDelta !== false,
       deltaSource: raw.deltaSource === 'best' ? 'best' : 'friend',
@@ -166,11 +174,19 @@ function load(): Settings {
       courseFilter: FILTERS.some((f) => f.id === raw.courseFilter) ? raw.courseFilter! : 'all',
       popularPeriod: PERIODS.some((p) => p.id === raw.popularPeriod) ? raw.popularPeriod! : '30d',
       driveZoom:
-        typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom) ? driveZoomOf(raw.driveZoom) : 0,
+        localStorage.getItem(ZOOM_RESET_KEY) === ZOOM_RESET_V && typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom)
+          ? driveZoomOf(raw.driveZoom)
+          : DRIVE_ZOOM_DEFAULT,
       carMarker: CAR_MARKERS.includes(raw.carMarker as CarMarker) ? raw.carMarker! : 'arrow',
       vehicle: raw.vehicle === 'bike' ? 'bike' : 'car',
       bikeMarker: BIKE_MARKERS.includes(raw.bikeMarker as BikeMarker) ? raw.bikeMarker! : 'sport',
     };
+    if (zoomReset) {
+      // 되돌린 값을 바로 저장한다 (안 그러면 다음에 켤 때 예전 값을 다시 읽는다)
+      localStorage.setItem(KEY, JSON.stringify(loaded));
+      localStorage.setItem(ZOOM_RESET_KEY, ZOOM_RESET_V);
+    }
+    return loaded;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -191,6 +207,8 @@ export function updateSettings(patch: Partial<Settings>): void {
   current = { ...current, ...patch };
   try {
     localStorage.setItem(KEY, JSON.stringify(current));
+    // 지금 빌드에서 저장한 값이니 다음에 켤 때 확대를 되돌리지 않는다
+    localStorage.setItem(ZOOM_RESET_KEY, ZOOM_RESET_V);
   } catch {
     // 저장할 수 없어도(사생활 보호 모드 등) 이번 실행 동안은 쓴다
   }

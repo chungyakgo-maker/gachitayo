@@ -117,7 +117,8 @@ describe('로그아웃', () => {
     expect((await rec.getDriveRepo().listCourses()).map((c) => c.id)).toEqual(['b1']);
     expect(await rec.getDriveRepo().refLaps('b1', 1)).toEqual([]);
     for (const k of ['gachitayo.token', 'gachitayo.userId', 'gachitayo.nickname', 'gachitayo.onboarded', 'gachitayo.kakao']) expect(localStorage.getItem(k)).toBeNull();
-    expect(localStorage.getItem('gachitayo.settings')).toBe('{"defaultMode":"map"}');
+    // 설정은 남는다 (불러올 때 확대 되돌리기로 다른 칸이 채워질 수는 있다, 2026-11-18)
+    expect(JSON.parse(localStorage.getItem('gachitayo.settings') ?? 'null')).toMatchObject({ defaultMode: 'map' });
     expect(account.getAccountState()).toMatchObject({ status: 'none', onboarded: false, kakao: false, userId: null });
     expect(reload).toHaveBeenCalledTimes(1);
   });

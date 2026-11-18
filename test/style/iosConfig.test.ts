@@ -51,6 +51,11 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(release).toMatch(/bundle_identifier: kr\.dgo\.app/);
   });
 
+  it('흔들어서 실행 취소를 끈다 (2026-11-18 실차: 주행 중 진동에 "Undo 입력" 창이 떴다)', () => {
+    const d = readFileSync(new URL('ios/App/App/AppDelegate.swift', root), 'utf8');
+    expect(d).toMatch(/application\.applicationSupportsShakeToEdit = false/);
+  });
+
   it('웹 배포도 위치 공유·간격 끔 (세영 "웹도 끔")', () => {
     const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
     const pages = ci.slice(ci.indexOf('GitHub Pages 배포'), ci.indexOf('서버(Worker·D1·R2) 배포'));

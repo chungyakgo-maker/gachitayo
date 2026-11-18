@@ -7,7 +7,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // 흔들어서 실행 취소 끄기 (2026-11-18 세영 실차: 주행 중 거치대 진동을 "흔들기"로 알아듣고 "Undo 입력" 창이 떴다).
+        // 디고에는 흔들어서 되돌릴 일이 없다
+        application.applicationSupportsShakeToEdit = false
         return true
     }
 
