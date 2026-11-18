@@ -20,6 +20,24 @@ describe('약관 페이지 (사양서 13.3)', () => {
     for (const t of ['프로필 사진', '팀 이름', '팀원', '친구이거나 같은 팀']) expect([t, html.includes(t)]).toEqual([t, true]);
   });
 
+  it('정식 앱(위치 공유 끔)에 맞는 문구: 정식 앱은 다른 이용자와 위치를 주고받지 않고, 위치 공유는 시험판에서만 (설계 2026-11-18 official-build)', () => {
+    const pv = page('privacy.html');
+    const lt = page('location-terms.html');
+    for (const html of [pv, lt]) {
+      expect(html).toContain('시행일 2026년 11월 18일');
+      expect(html).toContain('정식 앱');
+      expect(html).toContain('시험판');
+      expect(html).toMatch(/정식 앱[^<]*다른 이용자와 위치를 주고받지 않/);
+    }
+    // 팀 목적지: 정식 앱 방장은 목적지만 보낸다 (경로는 각자 위치에서)
+    expect(pv).toMatch(/목적지만/);
+    expect(lt).toMatch(/목적지만/);
+    // 길찾기 때 지금 위치를 네이버 클라우드로 (위치정보 약관에도)
+    expect(lt).toContain('네이버 클라우드');
+    // 프로필 사진은 친구·같은 팀만
+    expect(pv).toContain('프로필 사진');
+  });
+
   it('위치정보 이용약관: 수집 목적·보유 기간·친구 제공·이용자 권리', () => {
     const html = page('location-terms.html');
     for (const t of ['목적', '보유', '친구', '권리', 'chungyakgo@gmail.com']) expect([t, html.includes(t)]).toEqual([t, true]);
