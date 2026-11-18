@@ -7,10 +7,13 @@
 //
 // 두 손가락 (사용자 요청 2026-11-17 "부드럽게 확대·축소가 안 되고 뚝뚝 끊겨", "손으로 지도 회전이 안 돼"):
 // 벌리고 오므리는 만큼 매 프레임 확대가 따라가고(+ / − 는 0.25초 동안 스르륵), 비틀면 지도가 돈다.
-// 손을 떼면 확대는 설정에(onZoomEnd), 돌린 방위는 주행 화면에(onBearing) 넘긴다 — 손가락이 움직이는 동안은 React를 다시 그리지 않는다.
+// 2026-11-18 "주행중일땐 여전히 메인지도랑 동작이 다르잖아": 선 지도는 메인 지도와 같은 지도 프로그램이 손 동작을 직접 받는다
+// (끌기·관성, 손가락 기준 확대·돌리기, 두 손가락 끌기). 손가락이 닿아 있는 동안은 따라가기를 멈추고, 손으로 움직이면 둘러보기
+// ("내 위치로"), 다 떼고 3초 뒤 지금 카메라에서 내 위치·평소 주행 확대·보기대로 방위로 스르륵 돌아온다.
+// 바탕 지도 없이 그릴 때(선 지도가 아닐 때)는 같은 규칙을 여기서 손가락으로 흉내 낸다. 손가락이 움직이는 동안은 React를 다시 그리지 않는다.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { MapViewMode } from '../../app/settings';
-import { fromLocal, type LatLon } from '../../engine/geo';
+import { fromLocal, toLocal, type LatLon } from '../../engine/geo';
 import type { ReplayMapController } from '../map/mapTypes';
 import { lineMapConfig } from '../map/lineMapSupport';
 import { anchorPadding, drawMiniMap, followView, ME_ANCHOR, type MapModel, type MapView, type MiniMapOpts } from '../overlay/minimap';
@@ -40,13 +43,7 @@ export interface LiveMapProps {
   zoom?: number;
   /** 내 차 표시 모양 (설정) */
   marker?: MiniMapOpts['marker'];
-  /** 손으로 돌린 지도 위쪽 방위 (°). null 이면 보기대로 (진행 방향 위면 자동으로 돈다) */
-  bearing?: number | null;
-  /** 두 손가락을 뗐을 때 확대 단계 (소수) */
-  onZoomEnd?: (zoom: number) => void;
-  /** 두 손가락으로 돌렸을 때, 손을 뗀 뒤의 방위 (°) */
-  onBearing?: (bearing: number) => void;
-  /** 한 손가락으로 끌어 내 위치에서 벗어났는지 (2026-11-18 "메인·주행 똑같이"): true 면 GPS 버튼이 "내 위치로" */
+  /** 손으로 움직여 내 위치를 따라가지 않는지 (2026-11-18 "메인·주행 똑같이"): true 면 GPS 버튼이 "내 위치로" */
   onAway?: (away: boolean) => void;
   /** 바뀔 때마다 내 위치로 돌아온다 (GPS 버튼 / "내 위치로") */
   recenter?: number;
@@ -92,7 +89,7 @@ export function LiveMap(props: LiveMapProps) {
   const size = useRef({ W: 0, H: 0 });
   size.current = { W: box.width, H: box.height };
   // span: 바탕 지도가 없을 때 속도에 맞춘 보이는 거리 (확대 전), zoom: 지금 그리는 확대 단계(소수), up: 지금 그리는 위쪽 방위
-  // view: 마지막에 그린 지도 변환 (끈 만큼 옮길 때), cp: 마지막 카메라 가운데 (평면 m), propB: 지난번 손으로 돌린 방위 (풀리면 스르륵)
+  // view: 마지막에 그린 지도 변환 (끈 만큼 옮길 때), cp: 마지막 카메라 가운데 (평면 m)
   const smooth = useRef({
     head: null as number | null,
     span: 300,
@@ -103,7 +100,6 @@ export function LiveMap(props: LiveMapProps) {
     up: null as number | null,
     view: null as MapView | null,
     cp: null as { x: number; y: number } | null,
-    propB: null as number | null,
   });
   // 손가락이 움직이는 동안의 값과, 손을 뗀 뒤 설정·주행 화면이 따라올 때까지 쓸 값.
   // free: 끌어서 둘러보는 중의 카메라 가운데 (내 위치를 따라가지 않음), freeZoom·freeBearing: 둘러보는 중에만 쓰는 확대·방위,
@@ -112,8 +108,12 @@ export function LiveMap(props: LiveMapProps) {
     g: null as TwoFingerGesture | null,
     zoom: null as number | null,
     bearing: null as number | null,
-    holdZoom: null as number | null,
-    holdBearing: null as number | null,
+    /** 선 지도: 손가락이 닿아 있음 (따라가기를 멈춘다) / 손으로 움직여 둘러보는 중 */
+    hold: false,
+    nativeFree: false,
+    /** 두 손가락 시작 확대·가운데 (흉내 낼 때: 움직였는지·두 손가락 끌기) */
+    gz0: 0,
+    mid: null as { x: number; y: number } | null,
     pan: null as { x: number; y: number; moving: boolean } | null,
     free: null as { x: number; y: number } | null,
     freeZoom: null as number | null,
@@ -159,9 +159,13 @@ export function LiveMap(props: LiveMapProps) {
 
   // 전체 코스: 코스·보기·크기가 바뀔 때만 맞춘다 (코스가 없으면 지나온 경로가 늘어날 때마다)
   const pathLen = frame.path?.length ?? 0;
+  // 전체 코스 보기에서 손으로 옮겼다가 돌아오면 다시 맞춘다
+  const [refit, setRefit] = useState(0);
   useEffect(() => {
     const c = ctl.current;
     if (state !== 'ready' || !c || !origin || view !== 'fit') return;
+    // 손으로 둘러보는 중에는 맞추지 않는다
+    if (touch.current.hold || touch.current.nativeFree) return;
     c.resize();
     const local = model.line.length ? model.line : [...(frame.path ?? []), ...(frame.me ? [[frame.me.x, frame.me.y] as const] : [])];
     c.fit(
@@ -172,7 +176,7 @@ export function LiveMap(props: LiveMapProps) {
       { top: insetTop, bottom: insetBottom },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, model, origin?.lat, origin?.lon, view, insetTop, insetBottom, model.line.length ? 0 : Math.floor(pathLen / 20), box.width, box.height]);
+  }, [state, model, origin?.lat, origin?.lon, view, insetTop, insetBottom, model.line.length ? 0 : Math.floor(pathLen / 20), box.width, box.height, refit]);
   useEffect(() => {
     if (state === 'ready') ctl.current?.resize();
   }, [state, box.width, box.height, view]);
@@ -184,7 +188,7 @@ export function LiveMap(props: LiveMapProps) {
   const vc = insetTop + (H - insetTop - insetBottom) * ME_ANCHOR;
   const D = Math.ceil(2 * Math.hypot(W / 2, Math.max(vc, H - vc))) + 8;
   // 사진 지도만 지도판을 크게 만들어 CSS로 돌린다 (진행 방향 위, 또는 손으로 돌렸을 때)
-  const rotating = !native && view !== 'fit' && (view === 'heading' || (props.bearing ?? null) !== null);
+  const rotating = !native && view === 'heading';
   const rotatingRef = useRef(rotating);
   rotatingRef.current = rotating;
 
@@ -203,18 +207,12 @@ export function LiveMap(props: LiveMapProps) {
     sm.head = smoothAngleStep(sm.head, me?.psi, dt, 250);
     // 확대: 손가락이 움직이는 동안은 그대로 따라가고, + / − 는 스르륵 (계단처럼 뚝 바뀌지 않게)
     const t = touch.current;
-    if (t.holdZoom !== null && Math.abs((p.zoom ?? 0) - t.holdZoom) < 0.006) t.holdZoom = null;
-    if (t.holdBearing !== null && p.bearing === t.holdBearing) t.holdBearing = null;
-    const zoomTarget = t.zoom ?? (t.free ? t.freeZoom : null) ?? t.holdZoom ?? p.zoom ?? 0;
+    const zoomTarget = t.zoom ?? (t.free ? t.freeZoom : null) ?? p.zoom ?? 0;
     if (t.zoom !== null || dt <= 0 || Math.abs(zoomTarget - sm.zoom) < 0.002) sm.zoom = zoomTarget;
     else sm.zoom += (zoomTarget - sm.zoom) * (1 - Math.exp(-dt / ZOOM_EASE_MS));
-    // 위쪽 방위: 손으로 돌리는 중 → 둘러보는 중 방위 → 손으로 돌린 값 → 보기대로 (진행 방향 위면 진행 방향)
-    const manual = t.bearing ?? (t.free ? (t.freeBearing ?? 0) : null) ?? t.holdBearing ?? p.bearing ?? null;
+    // 위쪽 방위: 둘러보는 중이면 그때 방위, 아니면 보기대로 (진행 방향 위면 진행 방향). 돌아올 때는 스르륵
+    const manual = t.free ? (t.bearing ?? t.freeBearing ?? 0) : null;
     let up = upBearing(p.view, manual, sm.head);
-    // 손으로 돌린 방위가 풀리면(GPS 버튼·나침반) 그 자리에서 스르륵 돌아간다
-    const propB = p.bearing ?? null;
-    if (sm.propB !== null && propB === null && !t.free && !t.upAnim) t.upAnim = { from: sm.up ?? 0, t0: now };
-    sm.propB = propB;
     if (t.upAnim) {
       const k = Math.min(1, Math.max(0, (now - t.upAnim.t0) / RETURN_MS));
       if (k >= 1) t.upAnim = null;
@@ -241,21 +239,24 @@ export function LiveMap(props: LiveMapProps) {
 
     let mapView: MapView | undefined;
     const k = ctl.current;
-    if (k && state === 'ready' && sm.applied !== sm.zoom) {
+    // 선 지도에 손가락이 닿아 있거나 손으로 둘러보는 중이면 카메라는 사용자 것 (따라가기·확대를 넣지 않는다)
+    const userOwns = t.hold || t.nativeFree;
+    if (k && state === 'ready' && sm.applied !== sm.zoom && !userOwns) {
       k.setZoomOffset?.(sm.zoom);
       sm.applied = sm.zoom;
     }
     if (p.tiles && k && state === 'ready' && p.origin && k.nativeRotate && k.trackHeading) {
       // 선 지도: 지도가 스스로 돌고, 내 위치는 가려지지 않은 영역 가운데
       if (host.current) host.current.style.transform = '';
-      if (p.view !== 'fit' && cp) {
+      if (p.view !== 'fit' && cp && !userOwns) {
         const ll = fromLocal(p.origin, cp.x, cp.y);
         if (up !== null) k.trackHeading(ll.lat, ll.lon, up, pad);
         else k.track(ll.lat, ll.lon, pad);
       }
       const origin = p.origin;
+      const shownUp = userOwns ? (k.camera?.().bearing ?? 0) : up;
       mapView = {
-        rot: up !== null ? (up * Math.PI) / 180 : 0,
+        rot: shownUp !== null ? (shownUp * Math.PI) / 180 : 0,
         P: (x, y) => {
           const ll = fromLocal(origin, x, y);
           const q = k.project(ll.lat, ll.lon);
@@ -355,13 +356,16 @@ export function LiveMap(props: LiveMapProps) {
     if (t.timer) clearTimeout(t.timer);
     t.timer = null;
   };
-  /** 끌기 시작: 내 위치 따라가기를 멈추고 지금 보이는 확대·방위를 그대로 둔다 */
+  const later = () => {
+    clearTimer();
+    touch.current.timer = setTimeout(() => goBackRef.current(), AUTO_RETURN_MS);
+  };
+  /** 손으로 움직이기 시작: 내 위치 따라가기를 멈추고 지금 보이는 확대·방위를 그대로 둔다 */
   const enterFree = () => {
     const t = touch.current;
     const sm = smooth.current;
     if (t.free) return;
-    const c = sm.cp ?? latest.current.frame.me;
-    if (!c) return;
+    const c = sm.cp ?? latest.current.frame.me ?? { x: 0, y: 0 };
     t.free = { x: c.x, y: c.y };
     t.ret = null;
     t.upAnim = null;
@@ -372,11 +376,30 @@ export function LiveMap(props: LiveMapProps) {
   /** 내 위치로: 위치는 스르륵, 확대는 평소 주행 크기, 방위는 보기대로 (둘러보며 바꾼 것은 버린다) */
   const goBack = () => {
     const t = touch.current;
+    const sm = smooth.current;
     clearTimer();
-    if (!t.free) return;
     const now = nowMs();
+    if (t.nativeFree) {
+      // 선 지도: 손으로 옮겨 둔 지금 카메라에서 시작해 돌아온다
+      t.nativeFree = false;
+      t.hold = false;
+      const cam = ctl.current?.camera?.();
+      const o = latest.current.origin;
+      if (cam && o) {
+        const l = toLocal(o, cam.lat, cam.lon);
+        t.ret = { x: l.x, y: l.y, t0: now };
+        t.upAnim = { from: cam.bearing, t0: now };
+        sm.zoom = cam.zoomOffset;
+        sm.applied = NaN;
+      }
+      latest.current.onAway?.(false);
+      if (latest.current.view === 'fit') setRefit((n) => n + 1);
+      redraw();
+      return;
+    }
+    if (!t.free) return;
     t.ret = { x: t.free.x, y: t.free.y, t0: now };
-    t.upAnim = { from: smooth.current.up ?? 0, t0: now };
+    t.upAnim = { from: sm.up ?? 0, t0: now };
     t.free = null;
     t.freeZoom = null;
     t.freeBearing = null;
@@ -392,21 +415,56 @@ export function LiveMap(props: LiveMapProps) {
     recenterSeen.current = props.recenter;
     goBackRef.current();
   }, [props.recenter]);
-  // 둘러보는 중의 + / −: 잠깐만 (저장 안 함)
+  // 둘러보는 중의 + / −: 잠깐만 (저장 안 함). 선 지도는 지도가 스르륵
   const nudgeSeen = useRef(props.zoomNudge?.seq);
   useEffect(() => {
     const n = props.zoomNudge;
     if (!n || n.seq === nudgeSeen.current) return;
     nudgeSeen.current = n.seq;
     const t = touch.current;
-    if (!t.free) return;
-    t.freeZoom = Math.min(2, Math.max(-4, (t.freeZoom ?? smooth.current.zoom) + n.d));
+    if (t.nativeFree) ctl.current?.zoomBy?.(n.d);
+    else if (t.free) t.freeZoom = Math.min(2, Math.max(-4, (t.freeZoom ?? smooth.current.zoom) + n.d));
   }, [props.zoomNudge]);
   useEffect(() => () => clearTimer(), []);
 
-  // 한 손가락: 끌어서 둘러보기 (전체 코스 보기 빼고). 두 손가락: 확대는 늘, 돌리기는 전체 코스 보기가 아닐 때만
+  // 선 지도: 손 동작은 지도가 직접 받고 (메인 지도와 같게), 여기서는 따라가기 멈춤·둘러보기·3초 뒤 돌아오기만
+  const onUser = (phase: 'down' | 'moved' | 'up') => {
+    const t = touch.current;
+    if (phase === 'down') {
+      clearTimer();
+      t.hold = true;
+      return;
+    }
+    if (phase === 'moved') {
+      clearTimer();
+      t.hold = true;
+      if (!t.nativeFree) {
+        t.nativeFree = true;
+        t.ret = null;
+        t.upAnim = null;
+        latest.current.onAway?.(true);
+      }
+      return;
+    }
+    t.hold = false;
+    if (t.nativeFree) later();
+  };
+  const onUserRef = useRef(onUser);
+  onUserRef.current = onUser;
+  useEffect(() => {
+    const k = ctl.current;
+    if (state !== 'ready' || !native || !k?.onUser) return;
+    k.onUser((ph) => onUserRef.current(ph));
+    return () => k.onUser?.(null);
+  }, [state, native]);
+  /** 선 지도가 손 동작을 받는 중이면 아래 흉내는 쓰지 않는다 */
+  const mapTakesTouch = () => latest.current.tiles && state === 'ready' && native;
+
+  // 바탕 지도 없이 그릴 때(사진 지도 포함): 메인 지도처럼 흉내 낸다. 한 손가락 끌기, 두 손가락 확대·돌리기·끌기.
+  // 움직이면 둘러보기("내 위치로"), 다 떼고 3초 뒤 돌아오기. 전체 코스 보기는 확대만
   const pts = (e: React.TouchEvent) => [0, 1].map((i) => ({ x: e.touches[i]!.clientX, y: e.touches[i]!.clientY }));
   const onTouchStart = (e: React.TouchEvent) => {
+    if (mapTakesTouch()) return;
     const t = touch.current;
     clearTimer();
     const p = latest.current;
@@ -418,13 +476,24 @@ export function LiveMap(props: LiveMapProps) {
     if (e.touches.length !== 2) return;
     const [a, b] = pts(e);
     const sm = smooth.current;
-    const up = sm.up ?? upBearing(p.view, t.holdBearing ?? p.bearing ?? null, sm.head) ?? 0;
-    const z0 = t.free ? (t.freeZoom ?? sm.zoom) : (t.holdZoom ?? p.zoom ?? 0);
+    const up = sm.up ?? upBearing(p.view, null, sm.head) ?? 0;
+    const z0 = t.free ? (t.freeZoom ?? sm.zoom) : sm.zoom;
     t.g = new TwoFingerGesture(a!, b!, { zoom: z0, bearing: p.view === 'fit' ? null : up });
+    t.gz0 = z0;
+    t.mid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
     t.zoom = null;
     t.bearing = null;
   };
+  /** 손가락을 따라 지도 그림이 움직인다 = 카메라는 반대로 */
+  const shift = (dx: number, dy: number) => {
+    const t = touch.current;
+    const v = smooth.current.view;
+    if (!t.free || !v || latest.current.view === 'fit') return;
+    const [lx, ly] = screenToLocal(v.P, [t.free.x, t.free.y], -dx, -dy);
+    t.free = { x: t.free.x + lx, y: t.free.y + ly };
+  };
   const onTouchMove = (e: React.TouchEvent) => {
+    if (mapTakesTouch()) return;
     const t = touch.current;
     if (e.touches.length === 1 && t.pan) {
       const x = e.touches[0]!.clientX;
@@ -436,12 +505,7 @@ export function LiveMap(props: LiveMapProps) {
         t.pan.moving = true;
         enterFree();
       }
-      // 손가락을 따라 지도 그림이 움직인다 = 카메라는 반대로
-      const v = smooth.current.view;
-      if (t.free && v) {
-        const [lx, ly] = screenToLocal(v.P, [t.free.x, t.free.y], -dx, -dy);
-        t.free = { x: t.free.x + lx, y: t.free.y + ly };
-      }
+      shift(dx, dy);
       t.pan.x = x;
       t.pan.y = y;
       redraw();
@@ -450,41 +514,35 @@ export function LiveMap(props: LiveMapProps) {
     if (!t.g || e.touches.length !== 2) return;
     const [a, b] = pts(e);
     const r = t.g.move(a!, b!);
+    // 확대·돌리기도 메인 지도처럼 둘러보기 (평소 주행 크기는 + / − 로 정한다)
+    if (!t.free && (Math.abs(r.zoom - t.gz0) > 0.02 || r.bearing !== null)) enterFree();
+    if (!t.free) return;
     t.zoom = r.zoom;
     if (r.bearing !== null) t.bearing = r.bearing;
+    const m = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+    if (t.mid) shift(m.x - t.mid.x, m.y - t.mid.y);
+    t.mid = m;
     redraw();
   };
   const onTouchEnd = (e: React.TouchEvent) => {
+    if (mapTakesTouch()) return;
     const t = touch.current;
     if (e.touches.length === 0) t.pan = null;
     if (t.g && e.touches.length < 2) {
-      const p = latest.current;
       const zoomEnd = t.zoom;
       const bearingEnd = t.g.rotated ? t.bearing : null;
       t.g = null;
       t.zoom = null;
       t.bearing = null;
+      t.mid = null;
       if (t.free) {
         // 둘러보는 중: 확대·방위는 잠깐만 (돌아오면 평소대로)
         if (zoomEnd !== null) t.freeZoom = zoomEnd;
         if (bearingEnd !== null) t.freeBearing = bearingEnd;
-      } else {
-        // 설정·주행 화면이 새 값을 줄 때까지 이 값을 쓴다 (손을 뗀 순간 예전 값으로 튀지 않게)
-        if (zoomEnd !== null && Math.abs(zoomEnd - (p.zoom ?? 0)) >= 0.005) {
-          t.holdZoom = zoomEnd;
-          p.onZoomEnd?.(zoomEnd);
-        }
-        if (bearingEnd !== null) {
-          t.holdBearing = bearingEnd;
-          p.onBearing?.(bearingEnd);
-        }
       }
     }
     // 손을 다 떼고 3초 동안 안 대면 저절로 내 위치로 (사용자 결정)
-    if (e.touches.length === 0 && t.free) {
-      clearTimer();
-      t.timer = setTimeout(() => goBackRef.current(), AUTO_RETURN_MS);
-    }
+    if (e.touches.length === 0 && t.free) later();
   };
 
   return (
@@ -504,7 +562,8 @@ export function LiveMap(props: LiveMapProps) {
           style={rotating ? { position: 'absolute', left: W / 2 - D / 2, top: vc - D / 2, width: D, height: D } : { position: 'absolute', inset: 0 }}
         />
       )}
-      <canvas ref={canvas} className="overlay-layer" role="img" aria-label={label} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
+      {/* 그림은 손가락을 아래 지도로 넘긴다 (선 지도가 메인 지도처럼 손 동작을 직접 받게) */}
+      <canvas ref={canvas} className="overlay-layer" role="img" aria-label={label} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none' }} />
       {tiles && state === 'ready' && isOnline() && (
         <span className="map-attr" style={{ bottom: insetBottom + 6 }}>
           © OpenStreetMap

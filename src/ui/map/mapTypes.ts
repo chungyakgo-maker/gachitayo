@@ -67,6 +67,12 @@ export interface ReplayMapController {
   trackHeading?(lat: number, lon: number, bearingDeg: number, inset: { top: number; bottom: number }): void;
   /** 주행 지도 + / − (사용자 요청): 따라가기 확대 단계를 이만큼 더하고, 전체 보기는 맞춘 뒤 이만큼 */
   setZoomOffset?(d: number): void;
+  /** 손 동작을 지도가 직접 받을 때 (선 지도, 2026-11-18 "메인·주행 똑같이"): 손가락이 닿음 · 지도가 손으로 움직이기 시작함 · 손을 다 뗌(관성 끝). null 이면 끈다 */
+  onUser?(cb: ((phase: 'down' | 'moved' | 'up') => void) | null): void;
+  /** 지금 카메라: 가운데(위·아래 가림을 뺀 자리)·확대 단계(따라가기 기준 +/−)·방위 */
+  camera?(): { lat: number; lon: number; zoomOffset: number; bearing: number };
+  /** 둘러보는 중의 + / − : 지도가 스르륵 (저장 안 함) */
+  zoomBy?(d: number): void;
 }
 
 /** 따라가기 확대 단계 (사진 지도 기준. 선 지도는 1 작은 값이 같은 넓이) */

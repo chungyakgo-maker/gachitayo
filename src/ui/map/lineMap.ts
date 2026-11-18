@@ -16,7 +16,7 @@ export type { MapLibreMap };
 
 /** 선 지도 하나 (북쪽 위, 기울이기 없음). interactive=false면 손으로 못 움직인다 (주행·재생).
  *  rotate: 두 손가락 비틀기로 돌리기 (메인 지도, 2026-11-18 "메인·주행 똑같이") */
-export function newLineMap(el: HTMLElement, cfg: LineMapConfig, opts: { interactive?: boolean; attribution?: boolean; rotate?: boolean } = {}): MapLibreMap {
+export function newLineMap(el: HTMLElement, cfg: LineMapConfig, opts: { interactive?: boolean; attribution?: boolean; rotate?: boolean; doubleTapZoom?: boolean } = {}): MapLibreMap {
   const interactive = opts.interactive ?? true;
   const map = new MapLibreMap({
     container: el,
@@ -37,6 +37,8 @@ export function newLineMap(el: HTMLElement, cfg: LineMapConfig, opts: { interact
   if (interactive) {
     if (!opts.rotate) map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
+    // 주행 지도: 두 번 탭은 화면 모드 바꾸기라 확대로 쓰지 않는다
+    if (opts.doubleTapZoom === false) map.doubleClickZoom.disable();
   }
   return map;
 }
