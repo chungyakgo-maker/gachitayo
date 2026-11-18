@@ -9,7 +9,7 @@ export { G_MAX_DEFAULT, G_MAX_OPTIONS };
 
 export type DriveMode = 'map' | 'minimal' | 'dashboard';
 /** 상단 칸 2·3에 고를 값. pace 커브 표지판, none 표시 안 함 (사용자 요청) */
-export type WidgetId = 'g' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'dist' | 'avg' | 'none';
+export type WidgetId = 'g' | 'lean' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'dist' | 'avg' | 'none';
 export type DeltaPalette = 'green-red' | 'blue-orange';
 /** 커브 방향 화면 색 (사용자 요청 "abcd 다 넣어 선택할 수 있게"): 끄기, A 화면 전체, B 전체·가까울수록 진하게, C 네 가장자리, D 커브 쪽 가장자리(가까울수록 진하게) */
 export type CurveTint = 'off' | 'A' | 'B' | 'C' | 'D';
@@ -107,6 +107,8 @@ export const driveZoomOf = (z: number): number => Math.round(Math.min(DRIVE_ZOOM
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   g: 'G미터',
+  // 바이크 기울기 (2026-11-18 바이크 모드): 탈것을 바이크로 바꾸면 G미터 칸이 이걸로 (setVehicle)
+  lean: '기울기',
   pace: '표지판',
   speed: '속도',
   lap: '현재 랩타임',
@@ -195,6 +197,15 @@ export function updateSettings(patch: Partial<Settings>): void {
   listeners.forEach((l) => l());
 }
 
+/** 탈것 바꾸기: 바이크면 G미터 칸을 기울기로, 자동차면 기울기 칸을 G미터로 (시안 "탈것을 바이크로 바꾸면 G미터 칸이 기울기로") */
+export function setVehicle(v: Vehicle): void {
+  if (current.vehicle === v) return;
+  const [from, to]: [WidgetId, WidgetId] = v === 'bike' ? ['g', 'lean'] : ['lean', 'g'];
+  // 다른 칸에 이미 바꿀 값이 있으면 그 칸은 그대로 두고 이 칸만 바꾸지 않는다 (같은 값 두 칸이 되지 않게)
+  const widgets = (current.widgets.includes(to) ? current.widgets : current.widgets.map((w) => (w === from ? to : w))) as [WidgetId, WidgetId];
+  updateSettings({ vehicle: v, widgets });
+}
+
 /** 칸 slot(0 = 칸 2 왼쪽, 1 = 칸 3 오른쪽)에 값 id. 다른 칸과 같으면 두 칸이 서로 바뀐다 (표시 안 함은 두 칸 다 가능) */
 export function setWidget(slot: 0 | 1, id: WidgetId): void {
   const w: [WidgetId, WidgetId] = [...current.widgets];
@@ -211,11 +222,12 @@ export function nextTop(s: Pick<Settings, 'topDelta' | 'deltaSource'>, hasFriend
   return { topDelta: false, deltaSource: s.deltaSource };
 }
 
-/** 주행 중 칸 2·3을 누르면 (사용자 요청): 목록 순서대로 다음 값. 다른 칸의 값, 지금 쓸 수 없는 값(코스 없으면 표지판, 앞 친구 없으면 간격), 표시 안 함은 건너뛴다 */
-export function nextWidget(widgets: readonly [WidgetId, WidgetId], slot: 0 | 1, ctx: { hasCourse: boolean; hasFriend: boolean }): [WidgetId, WidgetId] {
+/** 주행 중 칸 2·3을 누르면 (사용자 요청): 목록 순서대로 다음 값. 다른 칸의 값, 지금 쓸 수 없는 값(코스 없으면 표지판, 앞 친구 없으면 간격, 자동차면 기울기), 표시 안 함은 건너뛴다 */
+export function nextWidget(widgets: readonly [WidgetId, WidgetId], slot: 0 | 1, ctx: { hasCourse: boolean; hasFriend: boolean; bike?: boolean }): [WidgetId, WidgetId] {
   const order: WidgetId[] = WIDGETS.filter((id) => id !== 'none');
   const other = widgets[slot === 0 ? 1 : 0];
-  const ok = (id: WidgetId) => id !== other && (id !== 'pace' || ctx.hasCourse) && (id !== 'gap' || ctx.hasFriend);
+  // 기울기는 바이크일 때만 돌아가며 고른다 (자동차는 거의 0이라 칸을 누를 때 건너뛴다. 상단 표시 값 화면에서는 고를 수 있다)
+  const ok = (id: WidgetId) => id !== other && (id !== 'pace' || ctx.hasCourse) && (id !== 'gap' || ctx.hasFriend) && (id !== 'lean' || !!ctx.bike);
   const from = order.indexOf(widgets[slot]);
   for (let i = 1; i <= order.length; i++) {
     const id = order[(from + i + order.length) % order.length]!;

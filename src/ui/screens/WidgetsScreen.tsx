@@ -7,6 +7,7 @@ import { PaceNoteSign } from '../components/PaceNoteSign';
 
 const SAMPLE: Record<Exclude<WidgetId, 'pace' | 'none'>, string> = {
   g: '좌 0.82 · 제동 0.31',
+  lean: '왼쪽 32°',
   speed: '142 km/h',
   lap: '1:12.4',
   sector: 'S2 −0.19',

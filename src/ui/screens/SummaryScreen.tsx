@@ -1,9 +1,10 @@
 // 주행 종료 요약 (사양서 8.5, 디자인 시안 Summary)
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { changeKind, dismissDetourOf, overwriteDetour, processSession, saveCourse, saveDetour, useProcessing } from '../../app/drive';
 import { getDriveRepo, getRepo } from '../../app/recording';
 import { useSync } from '../../app/sync';
 import type { InvalidReason } from '../../engine/course/laps';
+import { maxLeanOf } from '../../engine/derive/lean';
 import type { Course, CourseKind } from '../../types/course';
 import type { DriveResultRecord } from '../../types/drive';
 import type { SessionRecord } from '../../types/session';
@@ -58,6 +59,9 @@ export function SummaryView({
   const valid = laps.filter((l) => l.valid);
   const best = laps.find((l) => l.lapNo === result?.bestLapNo) ?? null;
   const proposed = result?.proposedCourse ?? null;
+  // 바이크로 달린 주행: 최대 기울기 (저장된 처리 궤적에서 다시 계산, 바이크 모드 시안)
+  const processed = result?.processed ?? null;
+  const lean = useMemo(() => (session.vehicle === 'bike' && processed ? maxLeanOf(processed) : null), [session.vehicle, processed]);
   const unsaved = result !== null && !result.courseId;
   const shownCourse = course ?? proposed;
   // 코스를 벗어난 길 (설계 2026-11-13-off-course): 기본 코스는 새 코스로만, 내 코스는 덮어쓰기도
@@ -226,6 +230,16 @@ export function SummaryView({
               </span>
             </div>
           </div>
+          {lean && (
+            <div className="stat lean-stat" aria-label="최대 기울기">
+              <span className="label">최대 기울기 (추정)</span>
+              <span className="v">
+                <small>왼쪽</small>
+                {lean.leftDeg}° <small className="gap-left">오른쪽</small>
+                {lean.rightDeg}°
+              </span>
+            </div>
+          )}
           {laps.length > 0 && (
             <section aria-label="랩 기록" className="lap-table">
               <div className="lap-row head">

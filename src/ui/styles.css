@@ -1653,6 +1653,18 @@ html.app-h .modal-backdrop {
   border: 1px solid var(--card-line);
 }
 
+/* 주행 요약 최대 기울기 (바이크): "왼쪽 41° 오른쪽 38°" */
+.lean-stat .v small {
+  margin-right: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-dim);
+}
+
+.lean-stat .v small.gap-left {
+  margin-left: 10px;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2438,6 +2450,14 @@ html.app-h .modal-backdrop {
 .dash-tile.g-tile .g-meter {
   display: block;
   flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* 대시보드 기울기 칸 (바이크): G미터 자리를 꽉 채운다 */
+.dash-tile.g-tile .lean-dash {
+  flex: 1;
+  align-self: stretch;
   min-height: 0;
   width: 100%;
 }

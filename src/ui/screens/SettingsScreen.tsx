@@ -15,7 +15,7 @@ import { RestoreBanner } from '../components/RestoreBanner';
 import { Overlay } from '../components/Overlay';
 import { isApp } from '../../platform';
 import { LegalLink } from '../legal';
-import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, BIKE_MARKER_LABEL, CAR_MARKER_LABEL, CURVE_TINT_LABEL, VEHICLE_LABEL, MAP_VIEW_LABEL, effectiveSettings, updateSettings, useSettings, topSummary, type BikeMarker, type CarMarker, type CurveTint, type Vehicle, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, BIKE_MARKER_LABEL, CAR_MARKER_LABEL, CURVE_TINT_LABEL, VEHICLE_LABEL, MAP_VIEW_LABEL, effectiveSettings, setVehicle, updateSettings, useSettings, topSummary, type BikeMarker, type CarMarker, type CurveTint, type Vehicle, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { drawMeIcon } from '../overlay/minimap';
 import { MountTips } from '../components/MountTips';
@@ -329,7 +329,7 @@ export function SettingsScreen() {
           <span className="label">탈것</span>
           <div className="segmented small" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
             {(Object.keys(VEHICLE_LABEL) as Vehicle[]).map((k) => (
-              <button key={k} type="button" aria-pressed={s.vehicle === k} onClick={() => updateSettings({ vehicle: k })}>
+              <button key={k} type="button" aria-pressed={s.vehicle === k} onClick={() => setVehicle(k)}>
                 {VEHICLE_LABEL[k]}
               </button>
             ))}

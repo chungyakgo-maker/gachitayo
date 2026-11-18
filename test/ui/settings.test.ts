@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSettings, setWidget, topSummary, updateSettings, DEFAULT_SETTINGS, WIDGET_LABEL } from '../../src/app/settings';
+import { getSettings, setVehicle, setWidget, topSummary, updateSettings, DEFAULT_SETTINGS, WIDGET_LABEL } from '../../src/app/settings';
 
 describe('설정 (폰 보관)', () => {
   beforeEach(() => {
@@ -182,5 +182,29 @@ describe('주행 중 칸을 누르면 다음 값으로', () => {
     vi.resetModules();
     expect((await import('../../src/app/settings')).getSettings().driveZoom).toBe(0.54);
     localStorage.removeItem('gachitayo.settings');
+  });
+});
+
+describe('탈것을 바꾸면 G미터 칸 ↔ 기울기 칸 (2026-11-18 기울기 시안)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    updateSettings(DEFAULT_SETTINGS);
+  });
+
+  it('바이크로 바꾸면 G미터 칸이 기울기로, 자동차로 돌리면 다시 G미터', () => {
+    expect(WIDGET_LABEL.lean).toBe('기울기');
+    setVehicle('bike');
+    expect(getSettings()).toMatchObject({ vehicle: 'bike', widgets: ['lean', 'pace'] });
+    setVehicle('car');
+    expect(getSettings()).toMatchObject({ vehicle: 'car', widgets: ['g', 'pace'] });
+    // G미터를 안 골랐으면 칸은 그대로
+    updateSettings({ widgets: ['speed', 'pace'] });
+    setVehicle('bike');
+    expect(getSettings().widgets).toEqual(['speed', 'pace']);
+  });
+
+  it('주행 중 칸을 누를 때 기울기는 바이크에서만 (자동차는 건너뛴다)', () => {
+    expect(nextWidget(['g', 'pace'], 0, { hasCourse: true, hasFriend: false })).toEqual(['speed', 'pace']);
+    expect(nextWidget(['g', 'pace'], 0, { hasCourse: true, hasFriend: false, bike: true })).toEqual(['lean', 'pace']);
   });
 });

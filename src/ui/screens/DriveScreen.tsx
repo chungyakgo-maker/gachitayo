@@ -30,6 +30,7 @@ import { useOverlayInsets } from '../hooks/useOverlayInsets';
 import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
+import { drawLeanTile, leanLabel } from '../overlay/leanGauge';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
 import { mapModel, routeDoneS, routeMapModel, type MapPerson } from '../overlay/minimap';
 import { frontMember, groupColor, useGroup, useGroupPoints, type GroupPoints, type GroupState } from '../../app/group';
@@ -106,6 +107,9 @@ function WidgetCanvas({ id, frame, th }: { id: Exclude<WidgetId, 'pace' | 'none'
   if (id === 'g') {
     return <OverlayCanvas className="tile g" label={gMeterLabel(frame)} draw={(ctx, w, h) => drawGTile(ctx, w, h, frame, th)} />;
   }
+  if (id === 'lean') {
+    return <OverlayCanvas className="tile lean" label={leanLabel(frame)} draw={(ctx, w, h) => drawLeanTile(ctx, w, h, frame, th)} />;
+  }
   const v = widgetValue(id, frame);
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
@@ -160,7 +164,7 @@ export function DriveView({ snap, gap: gapIn = null, front: frontIn = null, frie
   // 주행 중 칸 터치로 바꾸기 (사용자 요청)
   // 누르면 저장된 원래 값에서 다음으로 (정식 빌드에서 바꿔 읽은 값으로 저장하면 친구 델타·앞 친구 간격 설정이 지워졌다, 검토 지적)
   const tapTop = onTop ?? (() => updateSettings(nextTop(settingsIn, gap !== null)));
-  const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settingsIn.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
+  const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settingsIn.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null, bike: settingsIn.vehicle === 'bike' }) }));
 
   // 주행 지도 손 동작은 메인 지도와 같다 (2026-11-18 "주행중일땐 여전히 메인지도랑 동작이 다르잖아"): 끌기·두 손가락 확대·돌리기는
   // 모두 둘러보기 — GPS 버튼이 "내 위치로", 누르거나 3초 뒤 돌아오면 위치·확대(평소 주행 크기, + / − 로 정함)·방향(나침반 보기대로)이 원래대로.
@@ -333,10 +337,16 @@ export function DriveView({ snap, gap: gapIn = null, front: frontIn = null, frie
                 km/h
               </span>
             </div>
-            {/* G: 글자 없이 칸을 꽉 채운 G미터 (사용자 요청) */}
-            <div className="dash-tile g-tile">
-              <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} max={settings.gMaxG} trail={frame.gTrail} estimated={st?.gEstimated ?? false} />
-            </div>
+            {/* G: 글자 없이 칸을 꽉 채운 G미터 (사용자 요청). 바이크면 기울기 (바이크 모드 시안: G미터 자리에 기울기) */}
+            {settings.vehicle === 'bike' ? (
+              <div className="dash-tile g-tile">
+                <OverlayCanvas className="lean-dash" label={leanLabel(frame)} draw={(ctx, w, h) => drawLeanTile(ctx, w, h, frame, th)} />
+              </div>
+            ) : (
+              <div className="dash-tile g-tile">
+                <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} max={settings.gMaxG} trail={frame.gTrail} estimated={st?.gEstimated ?? false} />
+              </div>
+            )}
           </div>
           <div className="dash-laps full">
             <div className="card-col">

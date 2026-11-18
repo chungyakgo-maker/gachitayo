@@ -132,3 +132,32 @@ describe('요약: 코스를 벗어난 길', () => {
     expect(screen.queryByText('코스를 벗어난 길로 달렸어요')).toBeNull();
   });
 });
+
+describe('요약: 바이크 최대 기울기 (2026-11-18 바이크 모드 시안)', () => {
+  // 60 km/h로 3초 오른쪽(반지름 50 m) 코너 (나침반 방향이 늘어난다)
+  const track = () => {
+    const v = 60 / 3.6;
+    const t: number[] = [];
+    const speed: number[] = [];
+    const heading: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      t.push(i * 100);
+      speed.push(v);
+      heading.push((((v / 50) * i * 0.1) * 180) / Math.PI);
+    }
+    const n = t.length;
+    const z = Array(n).fill(0);
+    return { hz: 10, n, t, lat: z, lon: z, alt: z, speed, heading, ax: z, ay: z, s: z, lapNo: z };
+  };
+
+  it('바이크로 달린 주행이면 "최대 기울기 (추정) 왼쪽 ○° 오른쪽 ○°", 자동차 주행이면 없다', () => {
+    const v = render(<SummaryView data={{ session: { ...session, vehicle: 'bike' }, result: result({ processed: track() }), course }} busy={false} error={null} onRetry={noop} onKind={noop} onSave={noop} />);
+    const stat = screen.getByLabelText('최대 기울기');
+    expect(stat).toHaveTextContent('최대 기울기 (추정)');
+    expect(stat).toHaveTextContent(/왼쪽0°/);
+    expect(stat).toHaveTextContent(/오른쪽(29|30)°/);
+    v.unmount();
+    render(<SummaryView data={{ session, result: result({ processed: track() }), course }} busy={false} error={null} onRetry={noop} onKind={noop} onSave={noop} />);
+    expect(screen.queryByLabelText('최대 기울기')).toBeNull();
+  });
+});

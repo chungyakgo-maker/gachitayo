@@ -9,7 +9,7 @@ import { useAccount } from '../../app/account';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseFreeDrive, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
-import { BIKE_MARKER_LABEL, effectiveSettings, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, VEHICLE_LABEL, type DriveMode, type Vehicle } from '../../app/settings';
+import { BIKE_MARKER_LABEL, effectiveSettings, MAP_VIEW_LABEL, setVehicle, updateSettings, useSettings, topSummary, VEHICLE_LABEL, type DriveMode, type Vehicle } from '../../app/settings';
 import { Sheet } from '../components/Sheet';
 import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { formatDayKst, formatLapTime, formatLength } from '../format';
@@ -211,7 +211,7 @@ export function PrepareScreen() {
         <span className="label">탈것</span>
         <div className="segmented small" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
           {(Object.keys(VEHICLE_LABEL) as Vehicle[]).map((k) => (
-            <button key={k} type="button" aria-pressed={settings.vehicle === k} onClick={() => updateSettings({ vehicle: k })}>
+            <button key={k} type="button" aria-pressed={settings.vehicle === k} onClick={() => setVehicle(k)}>
               {VEHICLE_LABEL[k]}
             </button>
           ))}
