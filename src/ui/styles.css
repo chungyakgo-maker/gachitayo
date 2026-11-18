@@ -3551,3 +3551,144 @@ a.team-item {
   align-items: center;
   text-decoration: none;
 }
+
+/* ── 도움말 · 기능 알아보기 (설계 2026-11-18 help, 시안 docs/mock/2026-11-18-help.jpg) ── */
+.help-page {
+  gap: 12px;
+}
+
+.help-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  /* 칩으로 내려왔을 때 맨 위에 붙어 가리지 않게 */
+  scroll-margin-top: 12px;
+}
+
+.help-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.help-card ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+
+.help-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.help-steps li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  align-items: start;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.help-steps .n {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 칩 줄: 가로로 밀어서 더 본다 (폰 폭에 다 안 들어간다) */
+.help-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.help-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.help-chips button {
+  flex: none;
+  min-height: 36px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--card-line);
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.help-media {
+  position: relative;
+}
+
+.help-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--card-line);
+  background: var(--bg);
+}
+
+.help-gif {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.help-go {
+  align-self: flex-start;
+  min-height: 32px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* 메인: 처음 한 번 알림 */
+.help-nudge {
+  gap: 10px;
+}
+
+.help-nudge .btn {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.help-nudge-x {
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  background: none;
+  color: var(--fg-dim);
+  font-size: 16px;
+}

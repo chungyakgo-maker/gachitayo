@@ -30,6 +30,7 @@ import { rememberPendingLink, takePendingLink } from '../app/pendingJoin';
 import { TeamEditScreen } from './screens/TeamEditScreen';
 import { TeamDriveLinkScreen } from './screens/TeamDriveLinkScreen';
 import { FriendInviteScreen } from './screens/FriendInviteScreen';
+import { HelpScreen } from './screens/HelpScreen';
 
 const safeDecode = (v: string): string => {
   try {
@@ -67,6 +68,9 @@ function route(path: string): ReactElement {
       return <SettingsScreen />;
     case '/settings/widgets':
       return <WidgetsScreen back="#/settings" />;
+    // 도움말 · 기능 알아보기 (설계 2026-11-18 help)
+    case '/help':
+      return <HelpScreen />;
     case '/prepare':
       return <PrepareScreen />;
     case '/prepare/widgets':

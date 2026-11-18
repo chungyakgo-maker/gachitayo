@@ -29,6 +29,7 @@ import { handOffDestination } from '../../app/routeNav';
 import { useGroup } from '../../app/group';
 import { TeamSheet } from '../components/TeamSheet';
 import { TeamNotice } from '../components/TeamNotice';
+import { HelpNudge } from '../components/HelpNudge';
 import { watchTeams } from '../../app/teams';
 
 export function MainScreen() {
@@ -113,6 +114,7 @@ export function MainScreen() {
           </a>
         )}
         <TeamNotice />
+        <HelpNudge />
         {permission === 'denied' && <span className="notice">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>}
         {acc.status === 'none' && acc.lost && (
           <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>

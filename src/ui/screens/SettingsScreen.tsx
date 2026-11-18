@@ -429,6 +429,17 @@ export function SettingsScreen() {
           <MountTips />
         </details>
         <DeleteAccountSection />
+        {/* 도움말 (설계 2026-11-18 help): 그림으로 보는 디고 사용법 */}
+        <section className="card-col" style={{ gap: 8 }} aria-label="도움말">
+          <span className="label">도움말</span>
+          <a className="list-link" href="#/help">
+            <span className="card-col" style={{ gap: 3 }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>기능 알아보기</span>
+              <span className="sub">그림으로 보는 디고 사용법</span>
+            </span>
+            <IconChevron size={20} color="#9AA1A9" />
+          </a>
+        </section>
         <section className="card-col" style={{ gap: 8 }} aria-label="약관">
           <span className="label">약관</span>
           <span style={{ fontSize: 15, display: 'flex', gap: 16 }}>
