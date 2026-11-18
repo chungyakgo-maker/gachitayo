@@ -51,3 +51,21 @@ describe('아이폰 앱에서 초대', () => {
     vi.doUnmock('@capacitor/share');
   });
 });
+
+// 카톡 카드도 새 로고 미리보기 그림과 이름 디고 (2026-11-18 "카톡공유할떄 링크가 안바뀐거임")
+describe('카톡 카드 (웹, 카카오 키가 있을 때)', () => {
+  it('제목은 디고, 그림은 새 로고 미리보기(og-image.png)', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_KAKAO_JS_KEY', 'k');
+    const sent: Array<{ content: { title: string; imageUrl: string } }> = [];
+    vi.stubGlobal('Kakao', { init: () => {}, isInitialized: () => true, Share: { sendDefault: (o: (typeof sent)[number]) => sent.push(o) } });
+    try {
+      const m = await import('../../src/app/kakaoShare');
+      expect(await m.shareInvite({ code: '482917', destName: null, count: 2 })).toBe('kakao');
+      expect(sent[0]!.content.title).toBe('디고 · 그룹 주행 초대');
+      expect(sent[0]!.content.imageUrl).toMatch(/\/og-image\.png$/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
