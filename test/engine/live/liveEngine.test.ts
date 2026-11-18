@@ -70,3 +70,37 @@ describe('주행 중 코스 이탈 거리', () => {
     expect(st.offCourseM).toBe(50);
   });
 });
+
+// 상단 표시 값 주행 거리·평균 속도 (사용자 요청 2026-11-18): 출발부터 달린 거리, 평균 속도는 멈춘 시간(5 km/h 미만)을 뺀다
+describe('주행 거리·평균 속도', () => {
+  const inp = (t: number, x: number, v: number) => ({ t, x, y: 0, v, sigmaPos: 2, ax: null, ay: null, gpsOk: true, gCalibrated: false });
+
+  it('속도를 시간으로 쌓아 거리를 재고, 평균 속도는 움직인 시간으로 나눈다 (신호 대기는 빼고)', () => {
+    const e = new LiveEngine(null, null);
+    let st = e.push(inp(0, 0, 0));
+    expect(st.distM).toBe(0);
+    expect(st.avgKmh).toBeNull();
+    // 20 m/s 로 10초 → 200 m
+    for (let t = 100; t <= 10_000; t += 100) st = e.push(inp(t, (t / 1000) * 20, 20));
+    expect(st.distM).toBeCloseTo(200 - 1, 0); // 처음 0.1초는 0 → 20 으로 오르는 중
+    expect(st.avgKmh!).toBeCloseTo(72, 0);
+    // 30초 멈춤 → 멈추며 줄어든 0.1초(1 m)만 더하고, 멈춘 시간은 평균에서 뺀다 (멈춰 있지 않았다면 200/40.1초 = 18 km/h)
+    for (let t = 10_100; t <= 40_000; t += 100) st = e.push(inp(t, 200, 0));
+    expect(st.distM).toBeCloseTo(200, 6);
+    expect(st.avgKmh!).toBeCloseTo((200 / 10.1) * 3.6, 6);
+  });
+
+  it('위치가 잠깐 튀어도 거리는 속도로 재므로 늘지 않는다', () => {
+    const e = new LiveEngine(null, null);
+    let st = e.push(inp(0, 0, 10));
+    for (let t = 100; t <= 2000; t += 100) st = e.push(inp(t, t === 1000 ? 500 : (t / 1000) * 10, 10));
+    expect(st.distM).toBeCloseTo(20, 1);
+  });
+
+  it('입력이 3초 넘게 끊겼다가 오면 그 사이는 위치 사이 거리로 (속도×시간으로 크게 늘지 않게)', () => {
+    const e = new LiveEngine(null, null);
+    e.push(inp(0, 0, 10));
+    const st = e.push(inp(10_000, 60, 10));
+    expect(st.distM).toBeCloseTo(60, 6);
+  });
+});

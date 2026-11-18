@@ -5,6 +5,7 @@ import { frameFromLive, headline, widgetValue, type OverlayFrame, type XY } from
 import { anchorPadding, COURSE_DONE, COURSE_LINE, drawMiniMap, fitView, followView, mapModel, drawMeIcon, ME_ANCHOR, ME_MARKER, PATH_STYLE, routeDoneS } from '../../../src/ui/overlay/minimap';
 import { overlayTheme } from '../../../src/ui/overlay/theme';
 import type { Course } from '../../../src/types/course';
+import type { LiveState } from '../../../src/engine/live/liveEngine';
 
 const th = overlayTheme('green-red');
 
@@ -177,6 +178,22 @@ describe('오버레이 그리기 (캔버스)', () => {
     const alphas = t.calls.filter((x) => x.op === 'stroke' && String(x.strokeStyle).startsWith('rgba(170, 202, 230')).map((x) => Number(/,\s*([\d.]+)\)$/.exec(String(x.strokeStyle))![1]));
     expect(alphas.length).toBe(3);
     expect(alphas[0]).toBeLessThan(alphas[2]!);
+  });
+});
+
+describe('상단 표시 값: 주행 거리·평균 속도 (사용자 요청 2026-11-18)', () => {
+  it('주행 거리는 km 소수 한 자리, 평균 속도는 km/h. 아직 없으면 —', () => {
+    expect(widgetValue('dist', frame({ distM: 23_440 }))).toMatchObject({ label: '주행 거리', value: '23.4', unit: 'km' });
+    expect(widgetValue('dist', frame({ distM: 0 }))).toMatchObject({ value: '0.0', unit: 'km' });
+    expect(widgetValue('dist', frame({ hasState: false, distM: undefined }))).toMatchObject({ value: '—', unit: '' });
+    expect(widgetValue('avg', frame({ avgKmh: 58.4 }))).toMatchObject({ label: '평균 속도', value: '58', unit: 'km/h' });
+    expect(widgetValue('avg', frame({ avgKmh: null }))).toMatchObject({ value: '—' });
+  });
+
+  it('주행 상태에서 거리·평균 속도를 가져온다', () => {
+    const st = { t: 1, speedKmh: 50, distM: 1234, avgKmh: 61 } as unknown as LiveState;
+    const snap = { t: 1, state: st, pos: null, path: [], pathFrom: 0, ghost: null } as unknown as Parameters<typeof frameFromLive>[0];
+    expect(frameFromLive(snap, false, false)).toMatchObject({ distM: 1234, avgKmh: 61 });
   });
 });
 

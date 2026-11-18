@@ -38,6 +38,8 @@ function state(p: Partial<LiveState> = {}): LiveState {
     currentSector: 1,
     sectorDeltas: [-0.12, -0.19, null],
     maxSpeedKmh: 186.2,
+    distM: 0,
+    avgKmh: null,
     delta: -0.31,
     s: 100,
     onCourse: true,

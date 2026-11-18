@@ -9,6 +9,13 @@ import { DeltaFilter, rawDelta } from '../delta/delta';
 import type { LapTrace } from '../delta/trace';
 import { GForceSmoother } from '../derive/gforce';
 
+/** 평균 속도에서 뺄 멈춘 시간: 이보다 느리면 멈춤 (5 km/h) */
+const MOVING_MPS = 5 / 3.6;
+/** 입력이 이만큼(초) 넘게 끊기면 그 사이는 위치 사이 거리로 */
+const DIST_GAP_S = 3;
+/** 이만큼 움직이기 전에는 평균 속도를 보이지 않는다 (처음 몇 걸음은 들쭉날쭉) */
+const AVG_MIN_MS = 3000;
+
 export interface LiveInput {
   /** 세션 시계 ms */
   t: number;
@@ -58,6 +65,10 @@ export interface LiveState {
   sectorDeltas: [number | null, number | null, number | null];
   /** 이번 세션 최고 속도 */
   maxSpeedKmh: number;
+  /** 출발부터 달린 거리 m (상단 표시 값 "주행 거리", 사용자 요청 2026-11-18) */
+  distM: number;
+  /** 평균 속도 km/h = 거리 ÷ 움직인 시간 (5 km/h 미만으로 멈춘 시간은 뺀다, 사용자 결정). 3초 넘게 움직이기 전에는 null */
+  avgKmh: number | null;
   /** 초, + 느림. 숨김이면 null */
   delta: number | null;
   s: number | null;
@@ -99,6 +110,10 @@ export class LiveEngine {
   private offCourseM: number | null = null;
   private readonly progress: LapProgress;
   private maxV = 0;
+  // 주행 거리·평균 속도: 속도를 시간으로 쌓는다 (GPS 위치가 튀어도 거리가 갑자기 늘지 않게)
+  private distM = 0;
+  private movingMs = 0;
+  private lastIn: { t: number; x: number; y: number; v: number } | null = null;
   /** 구간 경계를 지날 때의 델타 (구간 1 시작은 0) */
   private deltaAtBound: [number | null, number | null] = [null, null];
   private gEstimated = false;
@@ -114,6 +129,7 @@ export class LiveEngine {
 
   push(p: LiveInput): LiveState {
     this.maxV = Math.max(this.maxV, p.v);
+    this.addDistance(p);
     const g = p.ax !== null && p.ay !== null && (p.gCalibrated || p.gEstimated) ? this.g.push(p.t, p.ax, p.ay) : null;
     this.gEstimated = g !== null && !p.gCalibrated;
     const status = { gpsWeak: !p.gpsOk, offCourse: false, gNotCalibrated: !p.gCalibrated, courseRecording: false };
@@ -176,6 +192,18 @@ export class LiveEngine {
     }
 
     return this.state(p, g, tr.s, tr.onCourse, status, this.lapStartT === null ? null : p.t - this.lapStartT);
+  }
+
+  /** 주행 거리·움직인 시간 쌓기. 입력이 3초 넘게 끊겼으면 그 사이는 위치 사이 거리로 (속도×시간으로 크게 늘지 않게) */
+  private addDistance(p: LiveInput): void {
+    const prev = this.lastIn;
+    this.lastIn = { t: p.t, x: p.x, y: p.y, v: p.v };
+    if (!prev || !(p.t > prev.t)) return;
+    const dt = (p.t - prev.t) / 1000;
+    const moved = dt <= DIST_GAP_S ? ((prev.v + p.v) / 2) * dt : Math.hypot(p.x - prev.x, p.y - prev.y);
+    if (!Number.isFinite(moved)) return;
+    this.distM += moved;
+    if (moved / dt >= MOVING_MPS) this.movingMs += p.t - prev.t;
   }
 
   private startLap(t: number): void {
@@ -242,6 +270,8 @@ export class LiveEngine {
       currentSector,
       sectorDeltas,
       maxSpeedKmh: this.maxV * 3.6,
+      distM: this.distM,
+      avgKmh: this.movingMs >= AVG_MIN_MS ? (this.distM / (this.movingMs / 1000)) * 3.6 : null,
       delta: this.delta,
       s,
       onCourse,

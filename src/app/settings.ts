@@ -7,7 +7,7 @@ export { G_MAX_DEFAULT, G_MAX_OPTIONS };
 
 export type DriveMode = 'map' | 'minimal' | 'dashboard';
 /** 상단 칸 2·3에 고를 값. pace 커브 표지판, none 표시 안 함 (사용자 요청) */
-export type WidgetId = 'g' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'none';
+export type WidgetId = 'g' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'dist' | 'avg' | 'none';
 export type DeltaPalette = 'green-red' | 'blue-orange';
 /** 커브 방향 화면 색 (사용자 요청 "abcd 다 넣어 선택할 수 있게"): 끄기, A 화면 전체, B 전체·가까울수록 진하게, C 네 가장자리, D 커브 쪽 가장자리(가까울수록 진하게) */
 export type CurveTint = 'off' | 'A' | 'B' | 'C' | 'D';
@@ -96,6 +96,9 @@ export const WIDGET_LABEL: Record<WidgetId, string> = {
   vmax: '최고 속도',
   lapno: '랩 번호',
   gap: '앞 친구 간격',
+  // 사용자 요청 2026-11-18: 주행 시작부터 km, 평균 속도(멈춘 시간 뺌)
+  dist: '주행 거리',
+  avg: '평균 속도',
   none: '표시 안 함',
 };
 

@@ -23,6 +23,10 @@ export interface OverlayFrame {
   delta: number | null;
   speedKmh: number | null;
   maxSpeedKmh: number | null;
+  /** 출발부터 달린 거리 m (상단 표시 값 "주행 거리") */
+  distM?: number | null;
+  /** 평균 속도 km/h (멈춘 시간 뺌). 아직이면 null */
+  avgKmh?: number | null;
   /** 앞(+)·뒤 g */
   gx: number | null;
   /** 왼쪽(+)·오른쪽 g */
@@ -78,6 +82,8 @@ export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, has
     // 스냅샷은 있는데 아직 속도가 없으면 0 (정차)
     speedKmh: st?.speedKmh ?? (snap ? 0 : null),
     maxSpeedKmh: st?.maxSpeedKmh ?? null,
+    distM: st ? st.distM : null,
+    avgKmh: st?.avgKmh ?? null,
     gx: st?.gx ?? null,
     gy: st?.gy ?? null,
     gEstimated: st?.gEstimated ?? false,
@@ -150,6 +156,11 @@ export function widgetValue(id: Exclude<WidgetId, 'g' | 'pace' | 'none'>, f: Ove
   }
   if (id === 'speed') return { label, value: kmh(f.speedKmh), unit: 'km/h', tone: 'none', small: false };
   if (id === 'vmax') return { label, value: kmh(f.maxSpeedKmh), unit: 'km/h', tone: 'none', small: false };
+  if (id === 'avg') return { label, value: kmh(f.avgKmh ?? null), unit: 'km/h', tone: 'none', small: false };
+  if (id === 'dist') {
+    const d = f.distM;
+    return d === null || d === undefined ? { label, value: '—', unit: '', tone: 'none', small: false } : { label, value: (d / 1000).toFixed(1), unit: 'km', tone: 'none', small: false };
+  }
   if (id === 'lap') return { label, value: formatLapTime(f.lapElapsedMs, 1), unit: '', tone: 'none', small: false };
   if (id === 'lapno') {
     const on = f.hasState && f.lapNo > 0;
