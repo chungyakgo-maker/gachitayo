@@ -23,6 +23,9 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(array('UIBackgroundModes')).toContain('location');
     expect(array('LSApplicationQueriesSchemes')).toEqual(expect.arrayContaining(['nmap', 'kakaomap']));
     expect(plist).toMatch(/<key>ITSAppUsesNonExemptEncryption<\/key>\s*<false\/>/);
+    // 프로필 사진 고르기 (설계 2026-11-18 team-drive): 사진 고르기 창의 "사진 찍기"가 카메라를 쓴다. 문구가 없으면 앱이 꺼진다
+    expect(value('NSCameraUsageDescription')).toMatch(/프로필 사진/);
+    expect(value('NSPhotoLibraryUsageDescription')).toMatch(/프로필 사진/);
     // 블루투스는 넣지 않는다 (사용자: OBD 때 추가)
     expect(plist).not.toMatch(/NSBluetooth/);
   });

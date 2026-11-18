@@ -15,6 +15,11 @@ describe('약관 페이지 (사양서 13.3)', () => {
     expect(html).toContain('하루');
   });
 
+  it('개인정보처리방침: 팀·프로필 사진 (설계 2026-11-18 team-drive)', () => {
+    const html = page('privacy.html');
+    for (const t of ['프로필 사진', '팀 이름', '팀원', '친구이거나 같은 팀']) expect([t, html.includes(t)]).toEqual([t, true]);
+  });
+
   it('위치정보 이용약관: 수집 목적·보유 기간·친구 제공·이용자 권리', () => {
     const html = page('location-terms.html');
     for (const t of ['목적', '보유', '친구', '권리', 'chungyakgo@gmail.com']) expect([t, html.includes(t)]).toEqual([t, true]);
