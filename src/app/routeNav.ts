@@ -9,7 +9,7 @@ import type { LiveSnapshot } from '../engine/live/livePipeline';
 import { bearingOfPsi, ROUTE, RouteGuide, type RouteStep } from '../engine/route/routeGuide';
 import type { Course } from '../types/course';
 import { getAuth } from './account';
-import { getSettings } from './settings';
+import { getSettings, subscribeSettings } from './settings';
 import { beginPrepare, chooseCourse, chooseFreeDrive, driveBusy, getDriveState, subscribeDrive, subscribeLive } from './drive';
 
 export interface Destination {
@@ -240,19 +240,30 @@ export function startRouteDrive(): void {
   beginPrepare();
   if (record) chooseCourse(null);
   else chooseFreeDrive();
-  startNavWithRoute(route, dest);
+  // 내가 찾은 경로: 그때 탈것으로 찾았으니 다시 찾지 않는다 (서버가 예전이라 바이크 표시가 없어도, 검토 지적: 출발마다 길찾기 한 번 더)
+  startNavWithRoute(route, dest, true);
 }
 
-const needOwnRoute = (route: RouteData): boolean => isDestOnly(route) || (bikeNow() && route.vehicle !== 'bike');
+/** 목적지만 받은 경로이거나, 남이 준 경로(팀 방장)인데 나는 바이크이고 바이크 경로가 아니면 내 위치에서 다시 찾는다 */
+const needOwnRoute = (route: RouteData, own = false): boolean => isDestOnly(route) || (!own && bikeNow() && route.vehicle !== 'bike');
 
-/** 이 경로로 안내를 켠다 (목적지 화면의 출발, 그룹 주행의 방장 경로). 주행 준비는 부른 쪽이 연다 */
-export function startNavWithRoute(route: RouteData, dest: LatLon): void {
+// 안내 중에 탈것을 바이크로 바꾸면(주행 준비 화면 등) 자동차 경로를 그대로 두지 않고 내 위치에서 바이크 경로로 다시 찾는다 (검토 지적)
+let lastVehicle = getSettings().vehicle;
+subscribeSettings(() => {
+  const v = getSettings().vehicle;
+  if (v === lastVehicle) return;
+  lastVehicle = v;
+  if (v === 'bike' && nav && nav.route.vehicle !== 'bike') rerouteNow = true;
+});
+
+/** 이 경로로 안내를 켠다 (목적지 화면의 출발, 그룹 주행의 방장 경로). 주행 준비는 부른 쪽이 연다. own: 이 폰에서 찾은 경로 */
+export function startNavWithRoute(route: RouteData, dest: LatLon, own = false): void {
   stopNav();
   const first = route.points[0]!;
   navDest = { lat: dest.lat, lon: dest.lon };
   // 목적지만 받은 경로(정식 빌드 팀 주행)면 내 위치가 잡히는 대로 내 위치에서 찾는다.
   // 바이크인데 바이크 경로가 아니면(방장이 자동차) 고속도로가 섞일 수 있어 내 위치에서 바이크 경로로 다시 찾는다
-  rerouteNow = needOwnRoute(route);
+  rerouteNow = needOwnRoute(route, own);
   setNav({ guide: new RouteGuide(route.points, { lat: first[0], lon: first[1] }), route, step: null, status: 'guiding' });
   unsubs = [
     subscribeLive((s) => {

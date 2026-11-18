@@ -367,6 +367,44 @@ describe('주행 중 안내', () => {
     }
   });
 
+  it('검토 지적: 내가 찾은 경로로 출발하면 (예전 서버라 바이크 표시가 없어도) 다시 묻지 않는다', async () => {
+    const { updateSettings, DEFAULT_SETTINGS } = await import('../../src/app/settings');
+    updateSettings({ vehicle: 'bike' });
+    try {
+      await readyPlan(); // 예전 서버: vehicle 없는 응답
+      h.phase = 'preparing';
+      nav.startRouteDrive();
+      nav.navTick(snap(0, 0, 50), 100_000);
+      expect(pending).toHaveLength(1);
+    } finally {
+      updateSettings(DEFAULT_SETTINGS);
+    }
+  });
+
+  it('검토 지적: 안내 중에 탈것을 바이크로 바꾸면 자동차 경로 대신 내 위치에서 바이크 경로로 다시 찾는다', async () => {
+    const { updateSettings, setVehicle, DEFAULT_SETTINGS } = await import('../../src/app/settings');
+    try {
+      await readyPlan();
+      h.phase = 'preparing';
+      nav.startRouteDrive();
+      nav.navTick(snap(0, 0, 50), 100_000);
+      expect(pending).toHaveLength(1);
+      setVehicle('bike');
+      nav.navTick(snap(100, 0, 50), 100_100);
+      expect(pending).toHaveLength(2);
+      expect(pending[1]!.body).toMatchObject({ vehicle: 'bike' });
+      pending[1]!.resolve(json(200, { ...ROUTE_A, vehicle: 'bike', warnRoads: [], alt: 0, alts: 1 }));
+      await flush();
+      // 바이크 경로를 받은 뒤 자동차로 돌렸다 다시 바이크로 와도 이미 바이크 경로라 묻지 않는다
+      setVehicle('car');
+      setVehicle('bike');
+      nav.navTick(snap(200, 0, 50), 100_200);
+      expect(pending).toHaveLength(2);
+    } finally {
+      updateSettings(DEFAULT_SETTINGS);
+    }
+  });
+
   it('자동차는 vehicle 없이 (예전과 같은 요청), 다른 길 후보가 없으면 다시 묻지 않는다', async () => {
     await readyPlan();
     expect(pending[0]!.body).not.toHaveProperty('vehicle');

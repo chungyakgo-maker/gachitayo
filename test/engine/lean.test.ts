@@ -31,6 +31,29 @@ describe('기울기 계산', () => {
     }
   });
 
+  it('GPS만 쓸 때(진행 방향이 1초마다 계단)도 출렁이지 않는다 (검토 지적: 예전 0.5초 차이는 실제 30°가 6°~43°)', () => {
+    const v = 20;
+    const w = (Math.tan(Math.PI / 6) * G) / v;
+    const e = new LeanEstimator();
+    const seen: number[] = [];
+    for (let i = 0; i <= 600; i++) {
+      const t = i * 20;
+      const d = e.push(t, v, -w * Math.floor(t / 1000)); // 오른쪽으로 돈다, 1초마다 계단
+      if (t > 4000) seen.push(d);
+    }
+    expect(Math.min(...seen)).toBeGreaterThan(27);
+    expect(Math.max(...seen)).toBeLessThan(33);
+  });
+
+  it('진행 방향이 ±180°를 넘어가도 끊기지 않는다', () => {
+    const v = 60 / 3.6;
+    const e = new LeanEstimator();
+    let d = 0;
+    // 왼쪽으로 계속 돌며 π를 여러 번 넘는다 (wrap된 값으로 넣는다)
+    for (const p of circle(v, 50, 25, true)) d = e.push(p.t, p.v, Math.atan2(Math.sin(p.psi), Math.cos(p.psi)));
+    expect(d).toBeCloseTo(-(Math.atan((v * v) / 50 / G) * 180) / Math.PI, 0);
+  });
+
   it('느리면 0 (15 km/h 미만, 주차장·유턴)', () => {
     const e = new LeanEstimator();
     let d = 1;

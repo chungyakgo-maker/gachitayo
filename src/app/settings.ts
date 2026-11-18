@@ -240,6 +240,12 @@ export function nextWidget(widgets: readonly [WidgetId, WidgetId], slot: 0 | 1, 
   return [widgets[0], widgets[1]];
 }
 
+/** 설정이 바뀔 때마다 (React 밖에서: 경로 안내가 탈것 바뀜을 알아야 한다). 그만 들으려면 돌려준 함수를 부른다 */
+export function subscribeSettings(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
 export function useSettings(): Settings {
   return useSyncExternalStore(
     (cb) => {
