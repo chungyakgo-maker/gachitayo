@@ -114,7 +114,7 @@ export async function shareInvite(o: { code: string; destName: string | null; co
       const link = { mobileWebUrl: url, webUrl: url };
       k.Share.sendDefault({
         objectType: 'feed',
-        content: { title, description: desc, imageUrl: new URL('pwa-512x512.png', appBase()).toString(), link },
+        content: { title, description: desc, imageUrl: new URL('og-image.png', appBase()).toString(), link },
         buttons: [{ title: '방에 들어가기', link }],
       });
       return 'kakao';

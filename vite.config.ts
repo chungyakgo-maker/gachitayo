@@ -20,8 +20,9 @@ export default defineConfig(({ mode }) => ({
       injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
-        name: '같이타요',
-        short_name: '같이타요',
+        // 웹 이름도 디고 (사용자 결정 2026-11-18). 주소(/gachitayo/)·저장 키는 그대로라 링크·기록에 영향 없음
+        name: '디고',
+        short_name: '디고',
         description: '와인딩·서킷 주행 기록기',
         lang: 'ko',
         start_url: './',

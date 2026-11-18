@@ -411,7 +411,7 @@ function ExportSheet({
       )}
       {kind === 'raw' && (
         <span className="sub">
-          {raw.error ?? (raw.file ? 'PC의 같이타요(웹) 기록 탭에서 "원본 파일 가져오기"로 열면 같은 코스로 계산해서 보여줘요. 가져온 기록은 그 PC에만 저장돼요.' : '원본 파일을 만드는 중…')}
+          {raw.error ?? (raw.file ? 'PC의 디고(웹) 기록 탭에서 "원본 파일 가져오기"로 열면 같은 코스로 계산해서 보여줘요. 가져온 기록은 그 PC에만 저장돼요.' : '원본 파일을 만드는 중…')}
         </span>
       )}
       <button

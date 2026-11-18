@@ -31,11 +31,11 @@ describe('앱 화면 정리 (사양서 13.3)', () => {
     openUrl.mockClear();
   });
 
-  it('앱 이름: 아이폰 앱은 디고, 웹은 같이타요 (사용자 결정)', async () => {
+  it('앱 이름: 아이폰 앱도 웹도 디고 (사용자 결정 2026-11-18 (나), 예전 웹 이름 같이타요)', async () => {
     const { appName } = await import('../../src/ui/brand');
-    expect(appName()).toBe('같이타요');
+    expect(appName()).toBe('디고');
     await welcome();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('같이타요');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('디고');
     cleanup();
     app = true;
     expect(appName()).toBe('디고');

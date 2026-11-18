@@ -20,3 +20,33 @@ describe('약관 페이지 (사양서 13.3)', () => {
     for (const t of ['목적', '보유', '친구', '권리', 'chungyakgo@gmail.com']) expect([t, html.includes(t)]).toEqual([t, true]);
   });
 });
+
+// 카톡 공유 미리보기 (사용자 요청 2026-11-18 "카톡공유할떄 링크가 안바뀐거임", 웹 이름도 디고 — 결정 (나)):
+// 카톡은 링크한 웹 페이지의 공유 정보(og)를 읽어 제목·그림을 만든다
+describe('웹 페이지 이름·공유 미리보기', () => {
+  const index = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const meta = (prop: string) => index.match(new RegExp(`<meta (?:property|name)="${prop}" content="([^"]*)"`))?.[1];
+
+  it('이름은 디고 (같이타요 아님)', () => {
+    expect(index).toMatch(/<title>디고<\/title>/);
+    expect(meta('apple-mobile-web-app-title')).toBe('디고');
+    expect(index).not.toContain('같이타요');
+  });
+
+  it('공유 미리보기: 제목·설명·새 로고 그림(절대 주소, 1200×630)', () => {
+    expect(meta('og:title')).toBe('디고: 드라이브 코스 추천');
+    expect(meta('og:description')).toBe('와인딩 랩타이머 · 그룹 주행');
+    expect(meta('og:image')).toBe('https://chungyakgo-maker.github.io/gachitayo/og-image.png');
+    expect(meta('og:image:width')).toBe('1200');
+    expect(meta('og:image:height')).toBe('630');
+    expect(meta('og:url')).toBe('https://chungyakgo-maker.github.io/gachitayo/');
+    expect(meta('twitter:card')).toBe('summary_large_image');
+    const png = readFileSync(new URL('../../public/og-image.png', import.meta.url));
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+  });
+
+  it('약관 페이지도 디고', () => {
+    for (const n of ['privacy.html', 'location-terms.html']) expect([n, page(n).includes('같이타요')]).toEqual([n, false]);
+  });
+});
+
