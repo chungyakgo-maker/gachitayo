@@ -252,7 +252,9 @@ export function startDrive(): void {
   startLinks();
   markRecordingEvent('drive_start', state.course ? { courseId: state.course.id, courseVersion: state.course.version } : {});
   const id = getRecordingState().sessionId;
-  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null, ...(state.noRecord ? { noRecord: true } : {}) });
+  // 바이크로 달린 주행은 표시해 둔다 (주행 요약에 최대 기울기를 보인다, 바이크 모드). 이 기기에만 두는 칸
+  const bike = getSettings().vehicle === 'bike' ? { vehicle: 'bike' as const } : {};
+  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null, ...(state.noRecord ? { noRecord: true } : {}), ...bike });
   set({ phase: 'driving' });
   go('#/drive');
 }

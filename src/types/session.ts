@@ -37,6 +37,8 @@ export interface SessionRecord {
   restoring?: boolean;
   /** 일반 주행 (기록 안 남김, 사용자 요청): 끝나면 지운다. 앱이 꺼져 남았으면 다음에 묻지 않고 지운다 */
   noRecord?: boolean;
+  /** 바이크로 달린 주행 (바이크 모드, 주행 시작 때 설정의 탈것). 요약에 최대 기울기를 보인다 */
+  vehicle?: 'bike';
 }
 
 /** 5초 단위로 저장하는 원본 덩어리 */

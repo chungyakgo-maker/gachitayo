@@ -47,6 +47,9 @@ function state(p: Partial<LiveState> = {}): LiveState {
     gx: -0.31,
     gy: 0.82,
     gEstimated: false,
+    leanDeg: null,
+    maxLeanLeftDeg: 0,
+    maxLeanRightDeg: 0,
     status: { gpsWeak: false, offCourse: false, gNotCalibrated: false, courseRecording: false },
     ...p,
   };

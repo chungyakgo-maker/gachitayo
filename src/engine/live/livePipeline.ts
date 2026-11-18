@@ -2,6 +2,7 @@
 // → 코스 엔진·델타 엔진 → 주행 화면 스냅숏.
 // 기록기와 같은 샘플을 받는다. 화면은 tick(지금 시각)을 100 ms마다 불러 스냅숏을 그린다.
 import { GpsAccelEstimator } from '../derive/gpsAccel';
+import { LeanEstimator } from '../derive/lean';
 import { SensorGEstimator } from '../derive/sensorG';
 import { fromLocal, toLocal, type LatLon } from '../geo';
 import { buildGeometry, type CourseGeometry } from '../course/geometry';
@@ -86,6 +87,8 @@ export class LivePipeline {
   private lastGps: GpsSample | null = null;
   private stillSince: number | null = null;
   private readonly gpsAccel = new GpsAccelEstimator();
+  /** 바이크 기울기 (화면 표시용, 탈것과 상관없이 늘 구한다: 계산이 가볍다) */
+  private readonly lean = new LeanEstimator();
   private readonly sensorG = new SensorGEstimator();
   private state: LiveState | null = null;
   private pos: LiveSnapshot['pos'] = null;
@@ -239,6 +242,7 @@ export class LivePipeline {
       gpsOk,
       gCalibrated: cal?.signsConfirmed ?? false,
       gEstimated: estimated,
+      leanDeg: this.lean.push(p.t, Math.max(0, p.v), p.psi),
     });
     this.pos = { x: d.x, y: d.y, psi: p.psi };
     this.markLap(this.state);
