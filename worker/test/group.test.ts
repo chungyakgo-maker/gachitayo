@@ -47,7 +47,7 @@ describe('그룹 주행 방', () => {
     expect(code).toMatch(/^\d{6}$/);
     const s = await state(roomId, h);
     expect(s.code).toBe(code);
-    expect(s.members).toEqual([{ userId: h.userId, nickname: '방장', color: 0, order: 1, host: true }]);
+    expect(s.members).toEqual([{ userId: h.userId, nickname: '방장', color: 0, order: 1, host: true, avatar: null }]);
     expect(s.gapS).toBe(2);
     expect(s.dest).toBeNull();
   });

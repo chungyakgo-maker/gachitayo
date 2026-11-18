@@ -11,6 +11,8 @@ import { HttpError } from './http';
 import { parseLivePoint } from './live';
 
 export const ROOM_MAX = 8;
+/** 팀 주행 방은 팀 인원만큼 (사용자 요청 "최대 인원 15명") */
+export const TEAM_ROOM_MAX = 15;
 export const GAP_MIN_S = 1;
 export const GAP_MAX_S = 10;
 /** 코드가 유효한 시간. 지나면 방이 닫힌다 (상태·경로·웹소켓 모두, 검토 지적: 방을 안 나가면 위치가 계속 갔다) */
@@ -26,11 +28,13 @@ const RELAY_CLOCK_MS = 120_000;
 export interface Member {
   userId: string;
   nickname: string;
-  /** 색 번호 0~7 (방 안에서 겹치지 않음) */
+  /** 색 번호 0~7 (8명까지는 겹치지 않음, 그 뒤로는 가장 적게 쓴 색) */
   color: number;
   /** 주행 순서 1부터 */
   order: number;
   host: boolean;
+  /** 프로필 사진 id (avatar.ts, 없으면 null) */
+  avatar?: string | null;
 }
 export interface Dest {
   name: string;
@@ -52,9 +56,26 @@ interface RoomData {
   gapS: number;
   dest: Dest | null;
   routeVersion: number;
+  /** 팀 주행 방이면 팀 (설계 2026-11-18-team-drive). 코드 방은 null */
+  teamId?: string | null;
+  teamName?: string | null;
+  /** 최대 인원 (코드 방 8, 팀 방 15) */
+  max?: number;
+  /** 팀이 기억한 주행 순서 (사람 id). 들어오는 사람을 이 순서대로 자리 잡는다 */
+  pref?: string[];
 }
-export interface RoomState extends Omit<RoomData, 'createdAt'> {
+export interface RoomState extends Omit<RoomData, 'createdAt' | 'pref' | 'teamId' | 'teamName' | 'max'> {
   roomId: string;
+  teamId: string | null;
+  teamName: string | null;
+  max: number;
+}
+/** 팀 방 만들 때 */
+export interface TeamRoomInit {
+  teamId: string;
+  teamName: string;
+  gapS: number;
+  pref: string[];
 }
 type Fail = { error: 'forbidden' | 'full' | 'bad' | 'missing' };
 
@@ -103,8 +124,8 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
     this.broadcast(JSON.stringify({ type: 'state', ...this.view(d) }));
   }
   private view(d: RoomData): RoomState {
-    const { createdAt: _c, ...rest } = d;
-    return { roomId: this.ctx.id.name ?? '', ...rest, members: sorted(d.members) };
+    const { createdAt: _c, pref: _p, ...rest } = d;
+    return { roomId: this.ctx.id.name ?? '', ...rest, teamId: d.teamId ?? null, teamName: d.teamName ?? null, max: d.max ?? ROOM_MAX, members: sorted(d.members) };
   }
   private broadcast(msg: string, except?: WebSocket): void {
     for (const ws of this.ctx.getWebSockets()) {
@@ -117,25 +138,43 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
     }
   }
 
-  async init(code: string, hostId: string, nickname: string, now = Date.now()): Promise<RoomState> {
-    const d: RoomData = { code, createdAt: now, members: [{ userId: hostId, nickname, color: 0, order: 1, host: true }], gapS: 2, dest: null, routeVersion: 0 };
+  async init(code: string, hostId: string, nickname: string, now = Date.now(), avatar: string | null = null, team?: TeamRoomInit): Promise<RoomState> {
+    const d: RoomData = { code, createdAt: now, members: [{ userId: hostId, nickname, color: 0, order: 1, host: true, avatar }], gapS: team?.gapS ?? 2, dest: null, routeVersion: 0 };
+    if (team) Object.assign(d, { teamId: team.teamId, teamName: team.teamName, max: TEAM_ROOM_MAX, pref: team.pref });
     await this.save(d);
     await this.ctx.storage.setAlarm(now + ROOM_TTL_MS);
     return this.view(d);
   }
 
-  async join(userId: string, nickname: string): Promise<RoomState | Fail> {
+  async join(userId: string, nickname: string, avatar: string | null = null): Promise<RoomState | Fail> {
     const d = await this.data();
     if (!d) return { error: 'missing' };
     if (!d.members.some((m) => m.userId === userId)) {
-      if (d.members.length >= ROOM_MAX) return { error: 'full' };
-      const used = new Set(d.members.map((m) => m.color));
-      const color = [0, 1, 2, 3, 4, 5, 6, 7].find((c) => !used.has(c))!;
+      if (d.members.length >= (d.max ?? ROOM_MAX)) return { error: 'full' };
+      // 가장 적게 쓴 색 (8명까지는 겹치지 않는다. 15명 팀 방은 번호로 구별, 검토 지적: 9번째 사람 색이 비었다)
+      const uses = [0, 0, 0, 0, 0, 0, 0, 0];
+      for (const m of d.members) uses[m.color] = (uses[m.color] ?? 0) + 1;
+      const color = uses.indexOf(Math.min(...uses));
       // 방장이 없으면(혼자 있던 방장이 나갔다 다시 들어옴 등) 들어온 사람이 방장 (검토 지적: 아무도 목적지를 못 정했다)
-      d.members.push({ userId, nickname, color, order: d.members.length + 1, host: !d.members.some((m) => m.host) });
+      d.members.push({ userId, nickname, color, order: d.members.length + 1, host: !d.members.some((m) => m.host), avatar });
+      // 팀 방: 팀이 기억한 순서대로 자리 잡는다 (사용자 결정 "순서·간격은 팀마다 기억")
+      if (d.pref?.length) {
+        const rank = (id: string) => {
+          const i = d.pref!.indexOf(id);
+          return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+        };
+        const byJoin = sorted(d.members);
+        d.members = byJoin.map((m, i) => ({ m, i })).sort((x, y) => rank(x.m.userId) - rank(y.m.userId) || x.i - y.i).map(({ m }, i) => ({ ...m, order: i + 1 }));
+      }
       await this.save(d);
     }
     return this.view(d);
+  }
+
+  /** 팀 목록용: 방이 살아 있는지와 사람 수 (참가자 아니어도) */
+  async summary(): Promise<{ alive: boolean; count: number }> {
+    const d = await this.data();
+    return d ? { alive: d.members.length > 0, count: d.members.length } : { alive: false, count: 0 };
   }
 
   async state(userId: string): Promise<RoomState | Fail> {
@@ -199,8 +238,13 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
     if (me.host && d.members[0]) d.members[0].host = true;
     this.last.delete(userId);
     this.lastAt.delete(userId);
-    await this.save(d);
     for (const ws of this.ctx.getWebSockets(userId)) ws.close(1000, '나감');
+    // 팀 주행 방은 다 나가면 닫는다 (다음에 "팀 주행"을 누르면 새로 연다). 코드 방은 24시간 그대로 (혼자 있던 방장이 다시 들어올 수 있게)
+    if (!d.members.length && d.teamId) {
+      await this.close();
+      return { ok: true };
+    }
+    await this.save(d);
     return { ok: true };
   }
 
@@ -247,9 +291,9 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
 
 // ── Worker 쪽 (API) ──────────────────────────────────
 
-const room = (env: Cloudflare.Env, roomId: string) => env.GROUP.get(env.GROUP.idFromName(roomId));
+export const room = (env: Cloudflare.Env, roomId: string) => env.GROUP.get(env.GROUP.idFromName(roomId));
 
-function unwrap<T>(r: unknown): T {
+export function unwrap<T>(r: unknown): T {
   if (r && typeof r === 'object' && 'error' in (r as object)) {
     const e = (r as Fail).error;
     if (e === 'forbidden') throw new HttpError(403, '방 참가자만 할 수 있어요');
@@ -260,9 +304,9 @@ function unwrap<T>(r: unknown): T {
   return r as T;
 }
 
-async function nicknameOf(env: Cloudflare.Env, userId: string): Promise<string> {
-  const r = await env.DB.prepare('SELECT nickname FROM users WHERE id = ?').bind(userId).first<{ nickname: string }>();
-  return r?.nickname ?? '친구';
+export async function profileOf(env: Cloudflare.Env, userId: string): Promise<{ nickname: string; avatar: string | null }> {
+  const r = await env.DB.prepare('SELECT nickname, avatar FROM users WHERE id = ?').bind(userId).first<{ nickname: string; avatar: string | null }>();
+  return { nickname: r?.nickname ?? '친구', avatar: r?.avatar ?? null };
 }
 
 export async function createRoom(env: Cloudflare.Env, userId: string, now = Date.now()): Promise<{ roomId: string; code: string }> {
@@ -275,7 +319,8 @@ export async function createRoom(env: Cloudflare.Env, userId: string, now = Date
   if (!code) throw new HttpError(503, '잠시 뒤 다시 해 주세요');
   const roomId = crypto.randomUUID();
   await env.DB.prepare('INSERT INTO rooms (id, code, host_id, created_at) VALUES (?, ?, ?, ?)').bind(roomId, code, userId, now).run();
-  await room(env, roomId).init(code, userId, await nicknameOf(env, userId), now);
+  const p = await profileOf(env, userId);
+  await room(env, roomId).init(code, userId, p.nickname, now, p.avatar);
   return { roomId, code };
 }
 
@@ -292,7 +337,8 @@ export async function joinRoom(env: Cloudflare.Env, userId: string, body: unknow
     ]);
     throw new HttpError(404, '방을 찾지 못했어요');
   }
-  unwrap<RoomState>(await room(env, r.id).join(userId, await nicknameOf(env, userId)));
+  const p = await profileOf(env, userId);
+  unwrap<RoomState>(await room(env, r.id).join(userId, p.nickname, p.avatar));
   return { roomId: r.id };
 }
 
@@ -304,10 +350,16 @@ export async function roomAction(env: Cloudflare.Env, roomId: string, userId: st
   const b = (body ?? {}) as Record<string, unknown>;
   const r = room(env, roomId);
   switch (action) {
-    case 'order':
-      return unwrap(await r.setOrder(userId, b.userIds));
-    case 'gap':
-      return unwrap(await r.setGap(userId, b.gapS));
+    case 'order': {
+      const st = unwrap<RoomState>(await r.setOrder(userId, b.userIds));
+      if (st.teamId) await rememberTeamOrder(env, st);
+      return st;
+    }
+    case 'gap': {
+      const st = unwrap<RoomState>(await r.setGap(userId, b.gapS));
+      if (st.teamId) await env.DB.prepare('UPDATE teams SET gap_s = ? WHERE id = ?').bind(st.gapS, st.teamId).run();
+      return st;
+    }
     case 'dest': {
       const route = b.route as Record<string, unknown> | undefined;
       const pts = route?.points;
@@ -323,6 +375,20 @@ export async function roomAction(env: Cloudflare.Env, roomId: string, userId: st
     default:
       throw new HttpError(404);
   }
+}
+
+/** 팀 방에서 방장이 순서를 바꾸면 팀이 기억한다: 방에 있는 사람은 새 순서로, 없는 사람은 예전 순서대로 그 뒤에 */
+async function rememberTeamOrder(env: Cloudflare.Env, st: RoomState): Promise<void> {
+  const row = await env.DB.prepare('SELECT order_json FROM teams WHERE id = ?').bind(st.teamId).first<{ order_json: string | null }>();
+  let prev: string[] = [];
+  try {
+    prev = row?.order_json ? (JSON.parse(row.order_json) as string[]) : [];
+  } catch {
+    prev = [];
+  }
+  const now = sorted(st.members).map((m) => m.userId);
+  const next = [...now, ...prev.filter((id) => !now.includes(id))];
+  await env.DB.prepare('UPDATE teams SET order_json = ? WHERE id = ?').bind(JSON.stringify(next), st.teamId).run();
 }
 
 export const roomRoute = async (env: Cloudflare.Env, roomId: string, userId: string): Promise<RoomRoute | null> => unwrap<RoomRoute | null>(await room(env, roomId).route(userId));

@@ -26,6 +26,7 @@
 //   GET /api/popular?period=             인기 도로 (기본 코스별 달린 사람 수)
 //   POST /api/driving {builtin}          기본 코스로 주행 중 신호 (실시간 인기, 위치 없음)
 //   /api/rooms…, 웹소켓 /group/{id}      그룹 주행 방 (group.ts)
+//   /api/teams…                          팀·팀 주행 (teams.ts)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
 //   GET /map/info, /map/tiles/{z}/{x}/{y}.mvt, /map/fonts/…   선 지도 (로그인 없이, map.ts)
 // 응답: 400 잘못된 값, 401 로그인 필요, 403 다른 사람 것·허용하지 않은 출처, 404 없음, 405, 409 먼저 할 일이 남음, 413 너무 큼, 429 가입 제한
@@ -42,6 +43,7 @@ import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 import { finishApple } from './apple';
 import { deleteAvatar, getAvatar, putAvatar } from './avatar';
+import { createTeam, deleteTeam, getTeam, leaveTeam, listTeams, teamDrive, updateTeam } from './teams';
 
 export { LiveRoom } from './live';
 export { GroupRoom } from './group';
@@ -169,6 +171,26 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     if (method !== 'POST') throw new HttpError(405);
     const body = act === 'leave' ? null : await readJson(req, 1_048_576);
     return json(200, headers, await roomAction(env, id!, userId, act, body));
+  }
+
+  if (path === '/api/teams') {
+    const userId = await authenticate(req, env);
+    if (method === 'GET') return json(200, headers, await listTeams(env, userId));
+    if (method === 'POST') return json(200, headers, await createTeam(env, userId, await readJson(req, 8192)));
+    throw new HttpError(405);
+  }
+  const tm = /^\/api\/teams\/([^/]+)(?:\/(leave|drive))?$/.exec(path);
+  if (tm) {
+    const userId = await authenticate(req, env);
+    const [, id, act] = tm;
+    if (act) {
+      if (method !== 'POST') throw new HttpError(405);
+      return json(200, headers, act === 'leave' ? await leaveTeam(env, userId, id!) : await teamDrive(env, userId, id!));
+    }
+    if (method === 'GET') return json(200, headers, await getTeam(env, userId, id!));
+    if (method === 'PUT') return json(200, headers, await updateTeam(env, userId, id!, await readJson(req, 8192)));
+    if (method === 'DELETE') return json(200, headers, await deleteTeam(env, userId, id!));
+    throw new HttpError(405);
   }
 
   if (path === '/api/prefs') {

@@ -101,3 +101,174 @@ describe('친구 목록: 팀이 가득 찬 친구', () => {
     expect((await friendsOf(a.token))[0]!.full).toBe(true);
   });
 });
+
+// ── 팀 ────────────────────────────────────────────────
+
+type Team = {
+  id: string;
+  name: string;
+  ownerId: string;
+  members: Array<{ userId: string; nickname: string; avatar: string | null }>;
+  gapS: number;
+  drive: { roomId: string; count: number } | null;
+};
+type Room = { roomId: string; teamId: string | null; teamName: string | null; max: number; gapS: number; members: Array<{ userId: string; order: number; host: boolean; color: number; avatar: string | null }> };
+const teamsOf = async (token: string) => {
+  const r = await call('GET', '/api/teams', { token });
+  expect(r.status).toBe(200);
+  return ((await r.json()) as { teams: Team[] }).teams;
+};
+const create = (token: string, name: string, memberIds: string[]) => call('POST', '/api/teams', { token, body: { name, memberIds } });
+async function team(owner: { token: string }, name: string, members: Array<{ userId: string }>) {
+  const r = await create(owner.token, name, members.map((m) => m.userId));
+  expect(r.status).toBe(200);
+  return (await r.json()) as Team;
+}
+/** 나와 친구인 사람 n명 */
+async function friendsFor(owner: { token: string }, n: number, prefix = '친구') {
+  const out: Array<{ userId: string; token: string }> = [];
+  for (let i = 0; i < n; i++) {
+    const f = await user(`${prefix}${i + 1}`);
+    await befriend(owner, f);
+    out.push(f);
+  }
+  return out;
+}
+const drive = async (token: string, teamId: string) => call('POST', `/api/teams/${teamId}/drive`, { token });
+const roomOf = async (token: string, roomId: string) => (await (await call('GET', `/api/rooms/${roomId}`, { token })).json()) as Room;
+
+describe('팀 만들기·목록', () => {
+  it('친구를 넣어 만들면 바로 팀원, 팀장과 팀원 모두 목록에 보인다', async () => {
+    const a = await user('세영');
+    const [b] = await friendsFor(a, 1);
+    await call('PUT', '/api/me/avatar', { token: b!.token, raw: jpeg() });
+    const t = await team(a, ' 북악 새벽팀 ', [b!]);
+    expect(t).toMatchObject({ name: '북악 새벽팀', ownerId: a.userId, gapS: 2, drive: null });
+    expect(t.members.map((m) => m.userId)).toEqual([a.userId, b!.userId]);
+    expect(t.members[1]!.avatar).toMatch(/^[0-9a-f]{32}$/);
+    expect((await teamsOf(b!.token)).map((x) => x.id)).toEqual([t.id]);
+  });
+
+  it('친구가 아닌 사람·이름 없음·21자 이름은 400, 나 포함 15명까지', async () => {
+    const a = await user('세영');
+    const stranger = await user('모르는사람');
+    expect((await create(a.token, '팀', [stranger.userId])).status).toBe(400);
+    expect((await create(a.token, '  ', [])).status).toBe(400);
+    expect((await create(a.token, '가'.repeat(21), [])).status).toBe(400);
+    const fs = await friendsFor(a, 15);
+    expect((await create(a.token, '큰 팀', fs.map((f) => f.userId))).status).toBe(400);
+    const ok = await team(a, '큰 팀', fs.slice(0, 14));
+    expect(ok.members.length).toBe(15);
+  });
+
+  it('내가 속한 팀은 5개까지 (409), 팀이 5개인 친구는 넣을 수 없다 (409)', async () => {
+    const a = await user('세영');
+    const [b] = await friendsFor(a, 1);
+    for (let i = 0; i < 5; i++) await team(a, `팀${i}`, []);
+    expect((await create(a.token, '여섯째', [])).status).toBe(409);
+    const c = await user('지훈');
+    await befriend(c, b!);
+    // b가 a의 팀 다섯 개에 들어가 가득 참
+    for (const t of await teamsOf(a.token)) expect((await call('PUT', `/api/teams/${t.id}`, { token: a.token, body: { memberIds: [b!.userId] } })).status).toBe(200);
+    expect((await friendsOf(c.token)).find((f) => f.userId === b!.userId)?.full).toBe(true);
+    const r = await create(c.token, '새 팀', [b!.userId]);
+    expect(r.status).toBe(409);
+  });
+});
+
+describe('팀 고치기·나가기·지우기', () => {
+  it('팀장만 이름·팀원을 바꾼다 (팀원은 403). 친구를 끊어도 이미 팀원이면 남는다', async () => {
+    const a = await user('세영');
+    const [b, c] = await friendsFor(a, 2);
+    const t = await team(a, '팀', [b!]);
+    expect((await call('PUT', `/api/teams/${t.id}`, { token: b!.token, body: { name: '내 팀' } })).status).toBe(403);
+    await call('DELETE', `/api/friends/${b!.userId}`, { token: a.token });
+    const r = await call('PUT', `/api/teams/${t.id}`, { token: a.token, body: { name: '새 이름', memberIds: [b!.userId, c!.userId] } });
+    expect(r.status).toBe(200);
+    const u = (await r.json()) as Team;
+    expect(u.name).toBe('새 이름');
+    expect(u.members.map((m) => m.userId).sort()).toEqual([a.userId, b!.userId, c!.userId].sort());
+    // 빼기
+    const v = (await (await call('PUT', `/api/teams/${t.id}`, { token: a.token, body: { memberIds: [c!.userId] } })).json()) as Team;
+    expect(v.members.map((m) => m.userId)).toEqual([a.userId, c!.userId]);
+    expect(await teamsOf(b!.token)).toEqual([]);
+  });
+
+  it('팀원은 나갈 수 있고 팀장은 못 나간다(400). 팀장이 지우면 모두에게서 사라진다', async () => {
+    const a = await user('세영');
+    const [b, c] = await friendsFor(a, 2);
+    const t = await team(a, '팀', [b!, c!]);
+    expect((await call('POST', `/api/teams/${t.id}/leave`, { token: a.token })).status).toBe(400);
+    expect((await call('POST', `/api/teams/${t.id}/leave`, { token: b!.token })).status).toBe(200);
+    expect(await teamsOf(b!.token)).toEqual([]);
+    expect((await call('DELETE', `/api/teams/${t.id}`, { token: c!.token })).status).toBe(403);
+    expect((await call('DELETE', `/api/teams/${t.id}`, { token: a.token })).status).toBe(200);
+    expect(await teamsOf(a.token)).toEqual([]);
+    expect(await teamsOf(c!.token)).toEqual([]);
+  });
+
+  it('팀장이 탈퇴하면 팀이 지워지고, 팀원이 탈퇴하면 팀에서 빠진다', async () => {
+    const a = await user('세영');
+    const [b, c] = await friendsFor(a, 2);
+    const t = await team(a, '팀', [b!, c!]);
+    await team(b!, 'b의 팀', []);
+    expect((await call('DELETE', '/api/me', { token: c!.token })).status).toBe(200);
+    expect((await teamsOf(a.token))[0]!.members.map((m) => m.userId)).toEqual([a.userId, b!.userId]);
+    expect((await call('DELETE', '/api/me', { token: a.token })).status).toBe(200);
+    expect((await teamsOf(b!.token)).map((x) => x.name)).toEqual(['b의 팀']);
+    expect((await call('GET', `/api/teams/${t.id}`, { token: b!.token })).status).toBe(404);
+  });
+});
+
+describe('팀 주행', () => {
+  it('팀원 누구나 열고, 연 사람이 방장. 다른 팀원은 같은 방으로, 팀이 아니면 403', async () => {
+    const a = await user('세영');
+    const [b, c] = await friendsFor(a, 2);
+    const t = await team(a, '북악 새벽팀', [b!]);
+    const r1 = await drive(b!.token, t.id);
+    expect(r1.status).toBe(200);
+    const { roomId } = (await r1.json()) as { roomId: string };
+    const r2 = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+    expect(r2.roomId).toBe(roomId);
+    expect((await drive(c!.token, t.id)).status).toBe(403);
+    const room = await roomOf(a.token, roomId);
+    expect(room).toMatchObject({ teamId: t.id, teamName: '북악 새벽팀', max: 15 });
+    expect(room.members.find((m) => m.host)?.userId).toBe(b!.userId);
+    expect((await teamsOf(a.token))[0]!.drive).toEqual({ roomId, count: 2 });
+  });
+
+  it('방장이 바꾼 순서·차 간격은 팀이 기억해 다음 주행에 그대로', async () => {
+    const a = await user('세영');
+    const [b] = await friendsFor(a, 1);
+    const t = await team(a, '팀', [b!]);
+    const { roomId } = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+    await drive(b!.token, t.id);
+    expect((await call('POST', `/api/rooms/${roomId}/gap`, { token: a.token, body: { gapS: 3.5 } })).status).toBe(200);
+    expect((await call('POST', `/api/rooms/${roomId}/order`, { token: a.token, body: { userIds: [b!.userId, a.userId] } })).status).toBe(200);
+    await call('POST', `/api/rooms/${roomId}/leave`, { token: a.token });
+    await call('POST', `/api/rooms/${roomId}/leave`, { token: b!.token });
+    // 모두 나가면 주행이 닫힌다 → 다시 열면 새 방
+    expect((await teamsOf(a.token))[0]!.drive).toBeNull();
+    const next = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+    expect(next.roomId).not.toBe(roomId);
+    await drive(b!.token, t.id);
+    const room = await roomOf(a.token, next.roomId);
+    expect(room.gapS).toBe(3.5);
+    expect([...room.members].sort((x, y) => x.order - y.order).map((m) => m.userId)).toEqual([b!.userId, a.userId]);
+    expect(room.members.find((m) => m.host)?.userId).toBe(a.userId);
+  });
+
+  it('15명 방: 색이 모두 0~7 안에서 정해지고, 팀에서 빠지면 다시 못 들어온다', async () => {
+    const a = await user('세영');
+    const fs = await friendsFor(a, 14);
+    const t = await team(a, '큰 팀', fs);
+    const { roomId } = (await (await drive(a.token, t.id)).json()) as { roomId: string };
+    for (const f of fs) expect((await drive(f.token, t.id)).status).toBe(200);
+    const room = await roomOf(a.token, roomId);
+    expect(room.members.length).toBe(15);
+    expect(room.members.every((m) => Number.isInteger(m.color) && m.color >= 0 && m.color < 8)).toBe(true);
+    await call('PUT', `/api/teams/${t.id}`, { token: a.token, body: { memberIds: fs.slice(1).map((f) => f.userId) } });
+    await call('POST', `/api/rooms/${roomId}/leave`, { token: fs[0]!.token });
+    expect((await drive(fs[0]!.token, t.id)).status).toBe(403);
+  });
+});

@@ -91,6 +91,10 @@ export async function deleteAccount(env: Cloudflare.Env, userId: string, now = D
     del('DELETE FROM user_prefs WHERE user_id = ?', userId),
     del('DELETE FROM driving_now WHERE user_id = ?', userId),
     del('DELETE FROM rooms WHERE host_id = ?', userId),
+    // 팀: 내가 팀장인 팀은 지우고, 다른 팀에서는 빠진다
+    del('DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE owner_id = ?)', userId),
+    del('DELETE FROM teams WHERE owner_id = ?', userId),
+    del('DELETE FROM team_members WHERE user_id = ?', userId),
     del('DELETE FROM room_code_misses WHERE user_id = ?', userId),
     del('DELETE FROM users WHERE id = ?', userId),
   ]);
