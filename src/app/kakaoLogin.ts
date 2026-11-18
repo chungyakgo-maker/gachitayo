@@ -1,10 +1,12 @@
 // 카카오 로그인 (설계 docs/superpowers/specs/2026-11-13-kakao-login-design.md 5.2·5.6):
 // 시작할 때 이 창만 아는 verifier를 만들어 해시만 서버에 보내고, 카카오를 거쳐 돌아오면 verifier + 6자리 번호로 마친다.
 // 돌아온 창이 시작한 창과 다르면(아이폰 홈 화면 앱 등) 그 창은 번호만 보여 주고, 사용자가 원래 앱에 번호를 넣어 마친다.
+import { isApp } from '../platform';
 import { useSyncExternalStore } from 'react';
 import { ApiError, apiFetch } from '../server/api';
 import { accountEnabled } from '../server/config';
 import { adoptLogin, friendlyServerError, getAuth, whileFinishingLogin } from './account';
+import { DgoAuth } from './nativeAuth';
 
 const PENDING_KEY = 'gachitayo.kakaoLogin';
 /** 진행 중 로그인의 유효 시간 (서버 state와 같게) */
@@ -88,18 +90,21 @@ export function cancelKakaoLogin(): void {
   writeStored(null);
 }
 
-let providers: Promise<{ kakao: boolean }> | null = null;
-/** 서버가 카카오 로그인을 켜 두었는지 (한 번 받아 기억, 실패면 false이고 다음에 다시 묻는다) */
-export function getProviders(): Promise<{ kakao: boolean }> {
-  if (!accountEnabled()) return Promise.resolve({ kakao: false });
-  providers ??= apiFetch<{ kakao?: boolean }>('GET', '/auth/providers')
-    .then((r) => ({ kakao: r.kakao === true }))
+let providers: Promise<{ kakao: boolean; apple: boolean }> | null = null;
+/** 서버가 켜 둔 로그인 (한 번 받아 기억, 실패면 없음이고 다음에 다시 묻는다). 애플 로그인은 아이폰 앱에서만 (사용자 결정 2026-11-17) */
+export function getProviders(): Promise<{ kakao: boolean; apple: boolean }> {
+  if (!accountEnabled()) return Promise.resolve({ kakao: false, apple: false });
+  providers ??= apiFetch<{ kakao?: boolean; apple?: boolean }>('GET', '/auth/providers')
+    .then((r) => ({ kakao: r.kakao === true, apple: r.apple === true && isApp() }))
     .catch(() => {
       providers = null;
-      return { kakao: false };
+      return { kakao: false, apple: false };
     });
   return providers;
 }
+
+/** 아이폰 앱: 카카오가 돌려보내는 앱 주소 (서버 kakao.ts APP_RETURN과 같게) */
+export const APP_KAKAO_RETURN = 'dgo://auth/kakao';
 
 const b64url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes))
@@ -111,14 +116,33 @@ async function sha256Hex(s: string): Promise<string> {
   return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** 카카오 로그인 시작: 서버에서 카카오 주소를 받아 이동한다. from: 마친 뒤 돌아갈 화면 */
-export async function startKakaoLogin(from: string): Promise<void> {
+/** 카카오 로그인 시작: 서버에서 카카오 주소를 받아 이동한다. from: 마친 뒤 돌아갈 화면.
+ *  아이폰 앱은 iOS 로그인 창으로 열고, 돌아온 dgo://auth/kakao?state&pin 을 마치기 화면(#/auth/kakao)으로 넘긴다 */
+export async function startKakaoLogin(from: string): Promise<'left' | 'returned' | 'cancelled'> {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
-  const returnTo = `${window.location.origin}${window.location.pathname}`;
+  const returnTo = isApp() ? APP_KAKAO_RETURN : `${window.location.origin}${window.location.pathname}`;
   const r = await apiFetch<{ url: string }>('POST', '/auth/kakao/start', { token: getAuth()?.token, body: { returnTo, verifierHash: await sha256Hex(verifier) } });
   const state = new URL(r.url).searchParams.get('state') ?? '';
   writeStored({ state, verifier, from, startedAt: Date.now() });
-  kakaoNav.go(r.url);
+  if (!isApp()) {
+    kakaoNav.go(r.url);
+    return 'left';
+  }
+  // 앱: 창을 닫거나 실패하면 진행 중 로그인을 지운다 (검토 지적: 남아 있으면 "다른 창에서 번호 넣기" 안내가 떴다)
+  let back: URL;
+  try {
+    const res = await DgoAuth.webAuth({ url: r.url, scheme: 'dgo' });
+    if (res.cancelled || !res.url) {
+      writeStored(null);
+      return 'cancelled';
+    }
+    back = new URL(res.url);
+  } catch (e) {
+    writeStored(null);
+    throw e;
+  }
+  window.location.hash = `#/auth/kakao${back.search}`;
+  return 'returned';
 }
 
 let afterLogin: () => void = () => {};
@@ -127,7 +151,7 @@ export function setAfterKakaoLogin(fn: () => void): void {
   afterLogin = fn;
 }
 
-export type FinishResult = { ok: true; kind: string } | { ok: false; error: string };
+export type FinishResult = { ok: true; kind: string; changed: boolean } | { ok: false; error: string };
 let inflight: { state: string; p: Promise<FinishResult> } | null = null;
 /** 이번 실행에서 마친 로그인 (화면이 늦게 떠도 같은 결과를 준다) */
 let finished: { state: string; from: string; result: FinishResult } | null = null;
@@ -151,9 +175,9 @@ export function finishKakaoLogin(state: string, pin: string): Promise<FinishResu
           body: { state, verifier: pending.verifier, pin },
         }),
       );
-      adoptLogin({ userId: r.userId, token: r.token, nickname: r.nickname, kakao: true });
+      const changed = adoptLogin({ userId: r.userId, token: r.token, nickname: r.nickname, kakao: true });
       writeStored(null);
-      const result: FinishResult = { ok: true, kind: r.kind };
+      const result: FinishResult = { ok: true, kind: r.kind, changed };
       finished = { state, from: pending.from, result };
       afterLogin();
       return result;

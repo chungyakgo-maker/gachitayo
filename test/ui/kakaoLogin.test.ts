@@ -59,7 +59,7 @@ describe('카카오 로그인 시작·마치기 (앱)', () => {
     k.setAfterKakaoLogin(after);
     fetchMock.mockResolvedValueOnce(json(200, { userId: 'u9', token: 'n'.repeat(43), nickname: '드리프트왕', kind: 'created' }));
     const r = await k.finishKakaoLogin(STATE, '123456');
-    expect(r).toEqual({ ok: true, kind: 'created' });
+    expect(r).toMatchObject({ ok: true, kind: 'created' });
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ state: STATE, verifier: 'v'.repeat(43), pin: '123456' });
     expect(a.getAuth()).toEqual({ userId: 'u9', token: 'n'.repeat(43) });
     expect(a.getAccountState()).toMatchObject({ status: 'ready', kakao: true, onboarded: true, nickname: '드리프트왕', lost: false });
@@ -106,7 +106,8 @@ describe('카카오 로그인 시작·마치기 (앱)', () => {
     fetchMock.mockResolvedValueOnce(json(200, { userId: 'u9', token: 'n'.repeat(43), nickname: 'x', kind: 'login' }));
     const [r1, r2] = await Promise.all([k.finishKakaoLogin(STATE, '123456'), k.finishKakaoLogin(STATE, '123456')]);
     expect(r1).toEqual(r2);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 마친 뒤 연결 여부를 다시 받는 /api/me는 빼고 센다
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).endsWith('/auth/kakao/finish'))).toHaveLength(1);
   });
 
   it('마치는 중에 받은 401은 계정 끊김으로 보지 않는다', async () => {
@@ -164,10 +165,10 @@ describe('카카오 로그인 시작·마치기 (앱)', () => {
   it('providers: 서버가 카카오를 켜 두었는지. 실패하면 false', async () => {
     const { k } = await load();
     fetchMock.mockResolvedValueOnce(json(200, { kakao: true }));
-    expect(await k.getProviders()).toEqual({ kakao: true });
+    expect(await k.getProviders()).toEqual({ kakao: true, apple: false });
     const { k: k2 } = await load();
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    expect(await k2.getProviders()).toEqual({ kakao: false });
+    expect(await k2.getProviders()).toEqual({ kakao: false, apple: false });
   });
 
   it('/api/me의 kakao를 폰에 반영한다', async () => {

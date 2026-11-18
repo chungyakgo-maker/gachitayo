@@ -2,6 +2,7 @@
 // (화면 컴포넌트 안에서 등록하면 화면이 바뀔 때마다 다시 등록되고 리스너가 쌓인다.)
 import { registerSW } from 'virtual:pwa-register';
 import { createUpdateStore } from './updateStore';
+import { isApp } from '../../platform';
 
 let updateSW: ((reloadPage?: boolean) => Promise<void>) | undefined;
 
@@ -11,6 +12,8 @@ export const updateStore = createUpdateStore({
 });
 
 export function registerServiceWorker(): void {
+  // 아이폰 앱은 서비스워커가 없다. 새 버전은 앱 업데이트로 받는다 (사양서 13.3)
+  if (isApp()) return;
   updateSW = registerSW({
     immediate: true,
     onNeedRefresh: () => updateStore.markNeedRefresh(),

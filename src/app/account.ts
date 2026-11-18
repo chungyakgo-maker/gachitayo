@@ -17,6 +17,8 @@ export interface AccountState {
   lost: boolean;
   /** 카카오에 연결된 계정 (설계 docs/superpowers/specs/2026-11-13-kakao-login-design.md) */
   kakao: boolean;
+  /** 애플에 연결된 계정 (아이폰 앱, 앱 로그인 설계 2026-11-17) */
+  apple: boolean;
   busy: boolean;
   error: string | null;
 }
@@ -26,6 +28,7 @@ const NICKNAME_KEY = 'gachitayo.nickname';
 const TOKEN_KEY = 'gachitayo.token';
 const USER_KEY = 'gachitayo.userId';
 const KAKAO_KEY = 'gachitayo.kakao';
+const APPLE_KEY = 'gachitayo.apple';
 
 function read(key: string): string | null {
   try {
@@ -53,6 +56,7 @@ let state: AccountState = {
   // 열쇠는 지우고 사용자 ID만 남아 있으면 끊긴 계정
   lost: accountEnabled() && !token && read(USER_KEY) !== null,
   kakao: read(KAKAO_KEY) === '1',
+  apple: read(APPLE_KEY) === '1',
   busy: false,
   error: null,
 };
@@ -73,6 +77,7 @@ function syncFromStorage(): void {
     nickname: read(NICKNAME_KEY),
     onboarded: read(ONBOARDED_KEY) === '1',
     kakao: read(KAKAO_KEY) === '1',
+    apple: read(APPLE_KEY) === '1',
     lost: accountEnabled() && !token && userId !== null,
   });
 }
@@ -105,22 +110,44 @@ export async function whileFinishingLogin<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** 로그인으로 받은 계정을 이 폰의 계정으로 쓴다 (카카오 로그인 마치기) */
-export function adoptLogin(r: { userId: string; token: string; nickname: string; kakao: boolean }): void {
+/** 로그인으로 받은 계정을 이 폰의 계정으로 쓴다 (카카오·애플 로그인 마치기). 다른 쪽 연결 여부는 서버에서 다시 받는다 */
+export function adoptLogin(r: { userId: string; token: string; nickname: string; kakao?: boolean; apple?: boolean }): boolean {
+  // 이 폰에 있던 다른 계정에서 바뀌었는지 (앱은 화면을 다시 열어 예전 계정의 친구·방 연결을 비운다)
+  const changed = state.userId !== null && state.userId !== r.userId;
   token = r.token;
   write(TOKEN_KEY, r.token);
   write(USER_KEY, r.userId);
   write(NICKNAME_KEY, r.nickname);
   write(ONBOARDED_KEY, '1');
   write(KAKAO_KEY, r.kakao ? '1' : null);
-  set({ status: 'ready', userId: r.userId, nickname: r.nickname, onboarded: true, lost: false, kakao: r.kakao, busy: false, error: null });
+  write(APPLE_KEY, r.apple ? '1' : null);
+  set({ status: 'ready', userId: r.userId, nickname: r.nickname, onboarded: true, lost: false, kakao: !!r.kakao, apple: !!r.apple, busy: false, error: null });
+  void refreshMe().catch(() => {});
+  return changed;
 }
+
+/** 서버에서 닉네임·카카오·애플 연결 여부를 다시 받는다 (통신이 안 되면 그대로) */
+export async function refreshMe(): Promise<void> {
+  if (state.status !== 'ready' || !token) return;
+  const used = token;
+  const me = await apiFetch<{ nickname: string; kakao?: boolean; apple?: boolean }>('GET', '/api/me', { token: used });
+  if (used !== token) return;
+  const kakao = me.kakao === true;
+  const apple = me.apple === true;
+  if (me.nickname && me.nickname !== state.nickname) write(NICKNAME_KEY, me.nickname);
+  write(KAKAO_KEY, kakao ? '1' : null);
+  write(APPLE_KEY, apple ? '1' : null);
+  set({ nickname: me.nickname || state.nickname, kakao, apple });
+}
+
+/** 다른 폰에서도 이 계정으로 돌아올 수 있는 계정 (카카오·애플 로그인) */
+export const signedIn = (s: AccountState): boolean => s.kakao || s.apple;
 
 /** 이 폰에서 계정을 잊는다 (로그아웃). 설정은 남긴다 */
 export function forgetAccount(): void {
   token = null;
-  for (const k of [TOKEN_KEY, USER_KEY, NICKNAME_KEY, ONBOARDED_KEY, KAKAO_KEY]) write(k, null);
-  set({ status: accountEnabled() ? 'none' : 'disabled', userId: null, nickname: null, onboarded: false, lost: false, kakao: false, busy: false, error: null });
+  for (const k of [TOKEN_KEY, USER_KEY, NICKNAME_KEY, ONBOARDED_KEY, KAKAO_KEY, APPLE_KEY]) write(k, null);
+  set({ status: accountEnabled() ? 'none' : 'disabled', userId: null, nickname: null, onboarded: false, lost: false, kakao: false, apple: false, busy: false, error: null });
 }
 
 /** 서버에 이 폰 열쇠를 못 쓰게 한다 (로그아웃). 통신 실패는 그대로 던진다 */
@@ -157,8 +184,11 @@ export function initAccount(): Promise<void> {
   initPromise ??= (async () => {
     if (state.status === 'none') return ensureAccount();
     if (state.status !== 'ready' || !token) return;
+    // 보낸 열쇠를 기억한다: 그사이 로그인으로 열쇠가 바뀌면 이 결과는 버린다 (검토 지적)
+    const used = token;
     try {
-      const me = await apiFetch<{ userId: string; nickname: string; kakao?: boolean }>('GET', '/api/me', { token });
+      const me = await apiFetch<{ userId: string; nickname: string; kakao?: boolean; apple?: boolean }>('GET', '/api/me', { token: used });
+      if (used !== token) return;
       if (me.nickname && me.nickname !== state.nickname) {
         write(NICKNAME_KEY, me.nickname);
         set({ nickname: me.nickname });
@@ -168,8 +198,13 @@ export function initAccount(): Promise<void> {
         write(KAKAO_KEY, kakao ? '1' : null);
         set({ kakao });
       }
+      const apple = me.apple === true;
+      if (apple !== state.apple) {
+        write(APPLE_KEY, apple ? '1' : null);
+        set({ apple });
+      }
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) markAccountLost(token);
+      if (e instanceof ApiError && e.status === 401) markAccountLost(used);
     }
   })();
   return initPromise;

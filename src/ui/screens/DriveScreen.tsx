@@ -1,7 +1,7 @@
 // 주행 화면 (사양서 8.4, 디자인 시안 DriveMap·DriveMinimal·DriveDashboard)
 // 두 번 탭하면 모드 전환(지도 → 미니멀 → 대시보드), 2초 길게 눌러 종료. 그 밖의 터치는 무시한다.
 // 지도 모드의 델타·고른 값·미니맵은 오버레이 그리기 함수(src/ui/overlay)로 캔버스에 그린다 (사양서 13.1 확장 지점).
-import { useEffect, useMemo, useRef, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { useAccount } from '../../app/account';
 import { useFriends, watchFriendPositions } from '../../app/friends';
 import { useFollow, VIRTUAL_FRIEND, type FollowState } from '../../app/liveLink';
@@ -10,7 +10,7 @@ import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
 import { makePolyline } from '../../engine/course/polyline';
 import { cycleDriveMode, cycleReplaySpeed, endDrive, getDriveState, seekReplay, setReplayPlaying, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN, getSettings } from '../../app/settings';
+import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN, driveZoomOf } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
@@ -30,7 +30,7 @@ import { GTrailBuffer } from '../overlay/gmeter';
 import { formatDelta, formatLapTime } from '../format';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../overlay/draw';
 import { frameFromLive, headline, widgetValue, type GapInfo, type OverlayFrame } from '../overlay/frame';
-import { mapModel, routeMapModel, type MapPerson } from '../overlay/minimap';
+import { mapModel, routeDoneS, routeMapModel, type MapPerson } from '../overlay/minimap';
 import { frontMember, groupColor, useGroup, useGroupPoints, type GroupPoints, type GroupState } from '../../app/group';
 import { useNavLive, type NavLive } from '../../app/routeNav';
 import { useSmoothAngle } from '../hooks/useSmoothView';
@@ -122,6 +122,9 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   trailBuf.current.push(snap?.t ?? 0, st?.gx ?? null, st?.gy ?? null);
   // 목적지 경로는 코스가 없을 때만 (코스 주행은 그대로)
   const route = course ? null : nav;
+  // 경로에서 지나온 거리 (지도에서 그만큼 지운다, 사용자 요청). 잠깐 벗어나도 지운 선이 다시 나타나지 않게 마지막 값을 기억한다
+  const routeDone = useRef<{ guide: object; s: number } | null>(null);
+  routeDone.current = route ? routeDoneS(routeDone.current, route.guide, route.step?.s ?? null) : null;
   const frame: OverlayFrame = {
     ...frameFromLive(snap, course !== null, refLap !== null),
     gap,
@@ -129,6 +132,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
     gTrail: trailBuf.current.points(),
     free: noRecord,
     nav: route ? { remainingM: route.step?.remainingM ?? route.guide.lengthM, status: route.status } : null,
+    routeS: routeDone.current?.s ?? null,
   };
   // 칸 1 델타의 기준 (주행 중 칸 1을 눌러 바꾼다): 베스트면 앞 친구가 있어도 베스트 대비
   const frameTop: OverlayFrame = settings.deltaSource === 'best' ? { ...frame, gap: null } : frame;
@@ -150,28 +154,10 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   const tapTop = onTop ?? (() => updateSettings(nextTop(settings, gap !== null)));
   const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settings.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
 
-  // 주행 지도 두 손가락 벌리기·오므리기 = + / − 한 단계 (사용자 요청: 웹페이지가 아니라 지도가 커지게)
-  const pinch = useRef<{ d0: number; done: boolean } | null>(null);
-  const span2 = (t: React.TouchList) => Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY);
-  const zoomBy = (d: number) => {
-    const z = getSettings().driveZoom;
-    updateSettings({ driveZoom: Math.max(DRIVE_ZOOM_MIN, Math.min(DRIVE_ZOOM_MAX, z + d)) });
-  };
-  const onPinchStart = (e: React.TouchEvent) => {
-    pinch.current = e.touches.length === 2 ? { d0: span2(e.touches), done: false } : null;
-  };
-  const onPinchMove = (e: React.TouchEvent) => {
-    const p = pinch.current;
-    if (!p || p.done || e.touches.length !== 2 || !(p.d0 > 0)) return;
-    const r = span2(e.touches) / p.d0;
-    if (r > 1.25) zoomBy(1);
-    else if (r < 0.8) zoomBy(-1);
-    else return;
-    p.done = true;
-  };
-  const onPinchEnd = (e: React.TouchEvent) => {
-    if (e.touches.length < 2) pinch.current = null;
-  };
+  // 주행 지도 두 손가락 (사용자 요청 2026-11-17): 확대는 손가락을 따라 연속으로(LiveMap), 손을 떼면 설정에 남긴다.
+  // 비틀어 돌린 방위는 이번 주행 동안만 (나침반을 누르면 다시 진행 방향 위)
+  const [manualBearing, setManualBearing] = useState<number | null>(null);
+  const onZoomEnd = (z: number) => updateSettings({ driveZoom: driveZoomOf(z) });
 
   const onPointerDown = (e: React.PointerEvent) => {
     // 칸 터치·버튼은 두 번 탭(화면 모드 바꾸기)으로 치지 않는다
@@ -402,11 +388,13 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
     const at = settings.widgets.indexOf('pace');
     slots[at >= 0 ? at : 1] = <OffCourseTile key="off" distM={offM} />;
   }
-  const mapRot = mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
+  // 손으로 돌렸으면 그 방위 (전체 코스 보기는 늘 북쪽 위)
+  const manual = mapView !== 'fit' ? manualBearing : null;
+  const mapRot = manual !== null ? (manual * Math.PI) / 180 : mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
   return (
     // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
     <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
-      <div className="drive-map" ref={mapRef} onTouchStart={onPinchStart} onTouchMove={onPinchMove} onTouchEnd={onPinchEnd} onTouchCancel={onPinchEnd}>
+      <div className="drive-map" ref={mapRef}>
         {/* 지도는 화면 주사율로 따로 그린다 (사용자 요청 "지도가 뚝뚝 끊긴다"). 바탕 지도(OSM)는 설정으로 끔, 통신이 없으면 타일 없이 */}
         <LiveMap
           model={model}
@@ -422,16 +410,30 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
           tiles={replay !== null || settings.mapTiles}
           speedKmh={st?.speedKmh ?? null}
           zoom={settings.driveZoom}
+          marker={settings.carMarker}
+          bearing={manual}
+          onZoomEnd={onZoomEnd}
+          onBearing={setManualBearing}
         />
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
-        <MapViewButton view={mapView} rot={mapRot} onChange={onMapView} style={{ top: ins.top + 10 }} />
+        <MapViewButton
+          view={mapView}
+          manual={manual !== null}
+          rot={mapRot}
+          onChange={(v) => {
+            // 손으로 돌린 지도에서 누르면 다시 진행 방향 위(자동으로 돈다)
+            setManualBearing(null);
+            onMapView(v);
+          }}
+          style={{ top: ins.top + 10 }}
+        />
         <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 10 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
         {/* 지도 확대·축소 (사용자 요청 "주행 모드중 지도 축소나 확대"): 단계는 설정에 남는다 */}
         <div className="map-zoom" style={{ top: ins.top + 62 }}>
-          <button type="button" aria-label="지도 확대" disabled={settings.driveZoom >= DRIVE_ZOOM_MAX} onClick={() => updateSettings({ driveZoom: Math.min(DRIVE_ZOOM_MAX, settings.driveZoom + 1) })}>
+          <button type="button" aria-label="지도 확대" disabled={settings.driveZoom >= DRIVE_ZOOM_MAX} onClick={() => updateSettings({ driveZoom: driveZoomOf(settings.driveZoom + 1) })}>
             +
           </button>
-          <button type="button" aria-label="지도 축소" disabled={settings.driveZoom <= DRIVE_ZOOM_MIN} onClick={() => updateSettings({ driveZoom: Math.max(DRIVE_ZOOM_MIN, settings.driveZoom - 1) })}>
+          <button type="button" aria-label="지도 축소" disabled={settings.driveZoom <= DRIVE_ZOOM_MIN} onClick={() => updateSettings({ driveZoom: driveZoomOf(settings.driveZoom - 1) })}>
             −
           </button>
         </div>

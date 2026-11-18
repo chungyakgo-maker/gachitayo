@@ -319,8 +319,10 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
   });
   const tiles = L.tileLayer(OSM_TILE_URL, { maxZoom: 19, attribution: OSM_ATTRIBUTION, className: 'osm-tiles' });
   map.setView([36.5, 127.8], 7);
-  /** 따라가기 확대 단계 (+ / − 로 바뀐다) */
+  /** 따라가기 확대 단계 (+ / −·두 손가락으로 바뀐다, 소수) */
   let zf = FOLLOW_ZOOM;
+  /** 전체 코스 보기에서 맞춘 확대 (확대 단계를 더하기 전). 따라가기 중이면 null */
+  let fitBase: number | null = null;
   let shown = false;
   let fails = 0;
   tiles.on('tileload', () => {
@@ -340,23 +342,29 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     fit(points, inset) {
       if (points.length === 0) return;
       map.invalidateSize({ pan: false });
-      if (points.length === 1) map.setView(map.unproject(map.project(points[0]!, zf).add([0, (inset.bottom - inset.top) / 2]), zf), zf, { animate: false });
-      else {
+      if (points.length === 1) {
+        map.setView(map.unproject(map.project(points[0]!, zf).add([0, (inset.bottom - inset.top) / 2]), zf), zf, { animate: false });
+        fitBase = FOLLOW_ZOOM;
+      } else {
         map.fitBounds(L.latLngBounds(points), { paddingTopLeft: [20, 20 + inset.top], paddingBottomRight: [20, 20 + inset.bottom], maxZoom: 18, animate: false });
-        if (zf !== FOLLOW_ZOOM) map.setZoom(map.getZoom() + (zf - FOLLOW_ZOOM), { animate: false });
+        fitBase = map.getZoom();
+        if (zf !== FOLLOW_ZOOM) map.setZoom(fitBase + (zf - FOLLOW_ZOOM), { animate: false });
       }
     },
     follow(lat, lon, inset) {
+      fitBase = null;
       map.invalidateSize({ pan: false });
       // 가려지지 않은 영역의 가운데에 오게 (위·아래 가림 차이의 절반만큼 옮긴다)
       const c = map.project([lat, lon], zf).add([0, (inset.bottom - inset.top) / 2]);
       map.setView(map.unproject(c, zf), zf, { animate: false });
     },
     centerOn(lat, lon) {
+      fitBase = null;
       map.invalidateSize({ pan: false });
       map.setView([lat, lon], zf, { animate: false });
     },
     track(lat, lon, inset) {
+      fitBase = null;
       const target = map.unproject(map.project([lat, lon], zf).add([0, (inset.bottom - inset.top) / 2]), zf);
       if (map.getZoom() !== zf) {
         map.setView(target, zf, { animate: false });
@@ -372,6 +380,8 @@ export function createReplayMap(el: HTMLElement): ReplayMapController {
     },
     setZoomOffset(d) {
       zf = FOLLOW_ZOOM + d;
+      // 전체 코스 보기: 맞춘 확대에서 바로. 따라가기는 다음 track 에서
+      if (fitBase !== null) map.setZoom(fitBase + d, { animate: false });
     },
     project(lat, lon) {
       const p = map.latLngToContainerPoint([lat, lon]);

@@ -9,8 +9,10 @@ import { FOLLOW_ZOOM, type ReplayMapController } from './mapTypes';
 export function createLineReplayMap(el: HTMLElement, cfg: LineMapConfig): ReplayMapController {
   // 지도 출처는 지도가 돌아가도 바로 보이게 바깥(LiveMap)에서 글자로 쓴다
   const map = newLineMap(el, cfg, { interactive: false, attribution: false });
-  /** 따라가기 확대 단계 (+ / − 로 바뀐다) */
+  /** 따라가기 확대 단계 (+ / −·두 손가락으로 바뀐다, 소수) */
   let off = 0;
+  /** 전체 코스 보기에서 맞춘 확대 (확대 단계를 더하기 전). 따라가기 중이면 null */
+  let fitZoom: number | null = null;
   const Z = () => lineZoom(FOLLOW_ZOOM) + off;
   const pad = (inset: { top: number; bottom: number }) => ({ top: inset.top, bottom: inset.bottom, left: 0, right: 0 });
   let last = '';
@@ -19,6 +21,7 @@ export function createLineReplayMap(el: HTMLElement, cfg: LineMapConfig): Replay
     const key = `${lat.toFixed(7)},${lon.toFixed(7)},${bearing.toFixed(1)},${inset.top},${inset.bottom}`;
     if (key === last && map.getZoom() === Z()) return;
     last = key;
+    fitZoom = null;
     map.jumpTo({ center: [lon, lat], zoom: Z(), bearing, padding: pad(inset) });
   };
   return {
@@ -27,11 +30,14 @@ export function createLineReplayMap(el: HTMLElement, cfg: LineMapConfig): Replay
       if (points.length === 0) return;
       map.resize();
       last = '';
-      if (points.length === 1) map.jumpTo({ center: [points[0]![1], points[0]![0]], zoom: Z(), bearing: 0, padding: pad(inset) });
-      else {
+      if (points.length === 1) {
+        map.jumpTo({ center: [points[0]![1], points[0]![0]], zoom: Z(), bearing: 0, padding: pad(inset) });
+        fitZoom = lineZoom(FOLLOW_ZOOM);
+      } else {
         map.jumpTo({ bearing: 0 });
         map.fitBounds(boundsOf(points), { padding: { top: 20 + inset.top, bottom: 20 + inset.bottom, left: 20, right: 20 }, maxZoom: lineZoom(18), duration: 0 });
-        if (off !== 0) map.jumpTo({ zoom: map.getZoom() + off });
+        fitZoom = map.getZoom();
+        if (off !== 0) map.jumpTo({ zoom: fitZoom + off });
       }
     },
     follow(lat, lon, inset) {
@@ -55,6 +61,8 @@ export function createLineReplayMap(el: HTMLElement, cfg: LineMapConfig): Replay
     setZoomOffset(d) {
       off = d;
       last = '';
+      // 전체 코스 보기: 맞춘 확대에서 바로 (두 손가락을 따라 매 프레임 불린다). 따라가기는 다음 track 에서
+      if (fitZoom !== null) map.jumpTo({ zoom: fitZoom + off });
     },
     project(lat, lon) {
       const p = map.project([lon, lat]);

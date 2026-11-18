@@ -35,3 +35,19 @@ describe('초대 보내기', () => {
     expect(await copyInviteLink('482917')).toBe(false);
   });
 });
+
+describe('아이폰 앱에서 초대', () => {
+  it('uses the phone share sheet with the public web link, never the app address', async () => {
+    vi.resetModules();
+    const share = vi.fn(async (_o: { title: string; text: string; url: string }) => ({}));
+    vi.doMock('../../src/platform', async (orig) => ({ ...(await orig<typeof import('../../src/platform')>()), isApp: () => true }));
+    vi.doMock('@capacitor/share', () => ({ Share: { share } }));
+    const k = await import('../../src/app/kakaoShare');
+    expect(k.kakaoShareReady()).toBe(false);
+    expect(k.inviteLink('482917')).toBe('https://chungyakgo-maker.github.io/gachitayo/#/join/482917');
+    expect(await k.shareInvite({ code: '482917', destName: null, count: 2 })).toBe('shared');
+    expect(share.mock.calls[0]![0]).toMatchObject({ title: '디고 · 그룹 주행 초대', url: 'https://chungyakgo-maker.github.io/gachitayo/#/join/482917' });
+    vi.doUnmock('../../src/platform');
+    vi.doUnmock('@capacitor/share');
+  });
+});

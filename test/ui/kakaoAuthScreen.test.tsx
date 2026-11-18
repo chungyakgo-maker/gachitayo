@@ -57,7 +57,8 @@ describe('카카오에서 돌아온 화면', () => {
     render(<KakaoAuthScreen />);
     expect(screen.queryByText('482913')).toBeNull();
     await waitFor(() => expect(window.location.hash).toBe('#/settings'));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 마친 뒤 연결 여부를 다시 받는 /api/me는 빼고 센다
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).endsWith('/auth/kakao/finish'))).toHaveLength(1);
   });
 
   it('마치기에 실패하면 이유와 돌아가기를 보인다', async () => {

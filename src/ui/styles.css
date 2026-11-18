@@ -410,6 +410,46 @@ html.app-h .modal-backdrop {
   background: var(--bg);
 }
 
+/* 설정: 내 차 표시 고르기 (그림 4개, 고른 칸은 흰 테두리 — 흰 화살표·흰 차가 흰 바탕에 묻히지 않게) */
+.marker-pick {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+}
+
+.marker-pick button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0 7px;
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.marker-pick button[aria-pressed='true'] {
+  border-color: var(--fg);
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.marker-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-map-drive);
+}
+
 .list-link {
   display: flex;
   align-items: center;
@@ -1029,6 +1069,12 @@ html.app-h .modal-backdrop {
   flex-direction: column;
   gap: 6px;
   padding: 8px calc(16px + var(--safe-r)) calc(16px + var(--safe-b)) calc(16px + var(--safe-l));
+}
+
+/* 주행 지도: 두 손가락 확대·돌리기는 지도가 받는다 (페이지가 커지거나 밀리지 않게, 2026-11-17) */
+.drive-map .live-map,
+.drive-map .replay-map {
+  touch-action: none;
 }
 
 .drive-map .drive-bottom {
@@ -2607,6 +2653,47 @@ button.map-gps:active {
   cursor: pointer;
 }
 .kakao-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* 로그인 고르기 단추 (아이폰 앱): 카카오·애플 단추와 같은 크기, 테두리만 */
+.login-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 52px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.login-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* 애플 로그인 버튼 (어두운 화면: 흰 바탕, 검정 로고·글자, 카카오 버튼과 같은 크기) */
+.apple-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.apple-btn:disabled {
   opacity: 0.45;
   cursor: default;
 }

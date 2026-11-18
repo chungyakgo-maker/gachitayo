@@ -1,14 +1,22 @@
 // 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useEffect, useState } from 'react';
-import { friendlyServerError, recreateAccount, updateNickname, useAccount } from '../../app/account';
+import { friendlyServerError, recreateAccount, signedIn, updateNickname, useAccount } from '../../app/account';
+import { startAppleLogin } from '../../app/appleLogin';
+import { AppleButton } from '../components/AppleButton';
+import { LoginChooser } from '../components/LoginChooser';
+import { deleteAccount } from '../../app/deleteAccount';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
 import { logout, logoutCheck } from '../../app/logout';
 import { KakaoButton } from '../components/KakaoButton';
 import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { RestoreBanner } from '../components/RestoreBanner';
 import { Overlay } from '../components/Overlay';
-import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { isApp } from '../../platform';
+import { LegalLink } from '../legal';
+import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CAR_MARKER_LABEL, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CarMarker, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { OverlayCanvas } from '../components/OverlayCanvas';
+import { drawMeIcon } from '../overlay/minimap';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
@@ -28,16 +36,21 @@ const PALETTES: Array<[DeltaPalette, string, string, string]> = [
   ['blue-orange', '파랑·주황', '#5CB8FF', '#E8690F'],
 ];
 
-/** 카카오 로그인·로그아웃 (설계 5.6) */
-function KakaoAccount() {
+/** 카카오·애플 로그인·로그아웃 (카카오 설계 5.6, 앱 로그인 설계 2026-11-17: 애플은 아이폰 앱만) */
+function LoginAccount() {
   const acc = useAccount();
   const [on, setOn] = useState(false);
+  const [apple, setApple] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ask, setAsk] = useState<{ localOnly: number } | null>(null);
   useEffect(() => {
     let alive = true;
-    void getProviders().then((p) => alive && setOn(p.kakao));
+    void getProviders().then((p) => {
+      if (!alive) return;
+      setOn(p.kakao);
+      setApple(p.apple);
+    });
     return () => {
       alive = false;
     };
@@ -46,11 +59,21 @@ function KakaoAccount() {
     setBusy(true);
     setError(null);
     try {
-      await startKakaoLogin('#/settings');
+      // 앱에서 로그인 창을 닫으면 버튼을 다시 쓸 수 있게 (검토 지적)
+      if ((await startKakaoLogin('#/settings')) === 'cancelled') setBusy(false);
     } catch (e) {
       setError(friendlyServerError(e));
       setBusy(false);
     }
+  };
+  const appleLogin = async () => {
+    setBusy(true);
+    setError(null);
+    const r = await startAppleLogin();
+    setBusy(false);
+    // 이 폰의 계정이 다른 계정으로 바뀌었으면 화면을 다시 연다 (예전 계정의 친구·방 연결 비우기)
+    if (r.ok && r.changed) window.location.reload();
+    if (!r.ok && 'error' in r) setError(r.error);
   };
   const askLogout = async () => {
     setBusy(true);
@@ -72,19 +95,31 @@ function KakaoAccount() {
   return (
     <>
       <KakaoPendingCard />
-      {acc.kakao ? (
-        <div className="card-row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <span style={{ fontWeight: 600 }}>카카오 연결됨</span>
-          <button type="button" className="btn" disabled={busy} onClick={() => void askLogout()}>
-            로그아웃
-          </button>
-        </div>
+      {signedIn(acc) ? (
+        <>
+          <div className="card-row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ fontWeight: 600 }}>{[acc.kakao && '카카오', acc.apple && 'Apple'].filter(Boolean).join(' · ')} 연결됨</span>
+            <button type="button" className="btn" disabled={busy} onClick={() => void askLogout()}>
+              로그아웃
+            </button>
+          </div>
+          {/* 아직 안 붙인 로그인도 이 계정에 붙일 수 있게 (검토 지적: 애플만 붙은 계정은 웹에서 들어올 수 없었다) */}
+          {((on && !acc.kakao) || (apple && !acc.apple)) && (
+            <div className="card-col" style={{ gap: 8 }}>
+              {on && !acc.kakao && <KakaoButton label="카카오도 연결하기" disabled={busy} onClick={() => void login()} />}
+              {apple && !acc.apple && <AppleButton label="Apple도 연결하기" disabled={busy} onClick={() => void appleLogin()} />}
+              <span className="sub">{on && !acc.kakao ? '카카오를 연결하면 웹에서도 이 계정으로 들어올 수 있어요' : '어느 쪽으로 로그인해도 같은 계정으로 들어와요'}</span>
+            </div>
+          )}
+        </>
       ) : (
-        on &&
+        (on || apple) &&
         (acc.status === 'ready' || acc.lost) && (
-          <div className="card-col" style={{ gap: 6 }}>
-            <KakaoButton label="카카오로 로그인" disabled={busy} onClick={() => void login()} />
-            <span className="sub">{acc.lost ? '예전에 카카오로 연결했다면 이걸로 돌아와요' : '로그인하면 폰을 바꿔도 기록이 돌아와요'}</span>
+          <div className="card-col" style={{ gap: 8 }}>
+            <LoginChooser kakao={on} apple={apple} kakaoLabel="카카오로 로그인" disabled={busy} onKakao={() => void login()} onApple={() => void appleLogin()} />
+            <span className="sub">
+              {acc.lost ? `예전에 ${apple ? '카카오나 Apple로' : '카카오로'} 연결했다면 이걸로 돌아와요` : '로그인하면 폰을 바꿔도 기록이 돌아와요'}
+            </span>
           </div>
         )
       )}
@@ -145,12 +180,12 @@ function AccountSection() {
         </div>
       )}
       {acc.error && <div className="notice warn">{acc.error}</div>}
-      <KakaoAccount />
+      <LoginAccount />
       <span className="sub" style={{ lineHeight: 1.6 }}>
         {acc.status === 'disabled'
           ? '서버 연결 전이라 기록은 이 폰에만 있어요.'
-          : acc.kakao
-            ? '카카오 계정에 연결돼 있어요. 폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요.'
+          : signedIn(acc)
+            ? `${acc.kakao ? '카카오' : 'Apple'} 계정에 연결돼 있어요. 폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요.`
             : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요(서버 기록은 남아요). 홈 화면 앱으로 쓰고 자주 올려 주세요.'}
       </span>
     </section>
@@ -182,6 +217,58 @@ function SyncSection() {
         <button type="button" className="btn" disabled={sync.running || acc.status !== 'ready'} onClick={() => void retryNow()}>
           지금 다시 시도
         </button>
+      )}
+    </section>
+  );
+}
+
+/** 계정 삭제 (사양서 13.3, 애플 심사 필수): 확인 창에서 "지우기"를 눌러야 지운다 */
+export function DeleteAccountSection() {
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <section className="card-col" style={{ gap: 8 }} aria-label="계정 삭제">
+      <span className="label">계정 삭제</span>
+      <button
+        type="button"
+        className="btn danger"
+        onClick={() => {
+          setError(null);
+          setAsk(true);
+        }}
+      >
+        계정과 모든 기록 지우기
+      </button>
+      {ask && (
+        <Overlay>
+          <div className="modal-backdrop">
+            <div className="modal" role="dialog" aria-modal="true" aria-labelledby="account-delete-title">
+              <h2 id="account-delete-title">계정을 지울까요?</h2>
+              <p>닉네임·친구·코스·주행 기록이 폰과 서버에서 모두 지워지고 되돌릴 수 없어요.</p>
+              {error && <div className="notice warn">{error}</div>}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn danger"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    setError(null);
+                    void deleteAccount()
+                      .catch((e: Error) => setError(e.message))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  지우기
+                </button>
+                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(false)}>
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </Overlay>
       )}
     </section>
   );
@@ -231,6 +318,19 @@ export function SettingsScreen() {
             ))}
           </div>
           <span className="sub">통신이 없으면 저절로 코스 선만 그려요. 끄면 데이터와 배터리를 덜 써요.</span>
+        </section>
+        {/* 내 차 표시 (사용자 요청 시안 2026-11-17 "내 차 너무 작아서 안 보여"): 그림을 눌러 고른다 */}
+        <section className="card-col" style={{ gap: 8 }} aria-label="내 차 표시">
+          <span className="label">내 차 표시 (주행 지도)</span>
+          <div className="marker-pick">
+            {(Object.keys(CAR_MARKER_LABEL) as CarMarker[]).map((k) => (
+              <button key={k} type="button" aria-label={CAR_MARKER_LABEL[k]} aria-pressed={s.carMarker === k} onClick={() => updateSettings({ carMarker: k })}>
+                <OverlayCanvas className="marker-icon" label={CAR_MARKER_LABEL[k]} draw={(ctx, w, h) => drawMeIcon(ctx, w, h, k)} />
+                <span aria-hidden="true">{CAR_MARKER_LABEL[k]}</span>
+              </button>
+            ))}
+          </div>
+          <span className="sub">주행 화면 지도에서 내 위치를 이 모양으로 그려요. 처음에는 화살표예요.</span>
         </section>
         <DriveFriendsToggle />
         <section className="card-col" style={{ gap: 8 }} aria-label="커브 방향 화면 색">
@@ -296,16 +396,27 @@ export function SettingsScreen() {
           <summary>거치 팁</summary>
           <MountTips />
         </details>
-        <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
-          <span className="label">개발자 메뉴</span>
-          <a className="list-link" href="#/dev/recorder">
-            <span className="card-col" style={{ gap: 3 }}>
-              <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>
-              <span className="sub">원본 파일(.json.gz / .json) 내보내기</span>
-            </span>
-            <IconChevron size={20} color="#9AA1A9" />
-          </a>
+        <DeleteAccountSection />
+        <section className="card-col" style={{ gap: 8 }} aria-label="약관">
+          <span className="label">약관</span>
+          <span style={{ fontSize: 15, display: 'flex', gap: 16 }}>
+            <LegalLink kind="privacy">개인정보처리방침</LegalLink>
+            <LegalLink kind="location">위치정보 이용약관</LegalLink>
+          </span>
         </section>
+        {/* 개발자 메뉴는 웹(개발자용)에만. 아이폰 앱에서는 숨긴다 (사양서 13.3) */}
+        {!isApp() && (
+          <section className="card-col" style={{ gap: 8 }} aria-label="개발자 메뉴">
+            <span className="label">개발자 메뉴</span>
+            <a className="list-link" href="#/dev/recorder">
+              <span className="card-col" style={{ gap: 3 }}>
+                <strong style={{ fontSize: 15 }}>센서 기록 테스트</strong>
+                <span className="sub">원본 파일(.json.gz / .json) 내보내기</span>
+              </span>
+              <IconChevron size={20} color="#9AA1A9" />
+            </a>
+          </section>
+        )}
         <footer className="build-info">
           버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
         </footer>

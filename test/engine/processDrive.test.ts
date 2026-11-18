@@ -201,6 +201,23 @@ describe('M4 검토 수정', () => {
     expect(r.laps.slice(1).every((l) => l.valid)).toBe(true);
   });
 
+  it('아이폰 앱(사양서 13.3): 화면이 꺼져도 GPS가 이어진 중단(backgroundGps)은 랩을 무효로 하지 않는다. 표시 없는 중단은 지금처럼 무효', () => {
+    const course = courseFromTrack(oval, { gateAtS: 100 });
+    // GPS는 끊기지 않고 모션만 빈다 (화면 꺼짐)
+    const gap: [number, number] = [25, 35];
+    const s = session({ ...base, laps: 3 }, 86, { motionGaps: [gap] });
+    const ev = (payload?: Record<string, unknown>): SessionEvent[] => [
+      { t: 0, type: 'start' },
+      { t: gap[0] * 1000, type: 'pause', ...(payload ? { payload } : {}) },
+      { t: gap[1] * 1000, type: 'resume' },
+    ];
+    const app = processDrive({ gps: s.gps, motion: s.motion, events: ev({ backgroundGps: true }), course });
+    expect(app.laps.length).toBeGreaterThan(0);
+    expect(app.laps.every((l) => l.valid)).toBe(true);
+    const web = processDrive({ gps: s.gps, motion: s.motion, events: ev(), course });
+    expect(web.laps[0]!.invalidReason).toBe('interrupted');
+  });
+
   it('첫 주행으로 자동 생성한 편도 코스: 다른 날 같은 길을 달리면 매번 랩이 잡힌다', () => {
     const w = windingWithHairpins();
     const p2p: DriveOpts = { ...base, laps: 1, vMax: 30, aLatMax: 6 };

@@ -13,6 +13,10 @@ export type DeltaPalette = 'green-red' | 'blue-orange';
 export type CurveTint = 'off' | 'A' | 'B' | 'C' | 'D';
 export const CURVE_TINT_LABEL: Record<CurveTint, string> = { off: '끄기', A: 'A 화면 전체', B: 'B 전체 · 가까울수록 진하게', C: 'C 네 가장자리', D: 'D 커브 쪽 가장자리' };
 const CURVE_TINTS = Object.keys(CURVE_TINT_LABEL) as CurveTint[];
+/** 주행 지도의 내 차 표시 (사용자 요청 시안 2026-11-17 "내 차 너무 작아서 안 보여"): 화살표·흰 차·파란 점·빨간 차 */
+export type CarMarker = 'arrow' | 'white' | 'blue' | 'red';
+export const CAR_MARKER_LABEL: Record<CarMarker, string> = { arrow: '화살표', white: '흰 차', blue: '파란 점', red: '빨간 차' };
+const CAR_MARKERS = Object.keys(CAR_MARKER_LABEL) as CarMarker[];
 /** 주행 지도 모드의 보기 (사용자 요청): 전체 코스 / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼) */
 export type MapViewMode = 'fit' | 'follow' | 'heading';
 export const MAP_VIEW_LABEL: Record<MapViewMode, string> = { fit: '전체 코스', follow: '나를 가운데', heading: '진행 방향 위' };
@@ -46,8 +50,10 @@ export interface Settings {
   courseFilter: CourseFilter;
   /** 인기 도로 기간 */
   popularPeriod: PopularPeriod;
-  /** 주행 지도 확대 단계 (−4 ~ +2, 사용자 요청 "주행 모드중 지도 축소나 확대") */
+  /** 주행 지도 확대 단계 (−4 ~ +2, 사용자 요청 "주행 모드중 지도 축소나 확대"). 한 단계 = 두 배, 두 손가락으로 고르면 소수 */
   driveZoom: number;
+  /** 주행 지도의 내 차 표시 (기본 화살표) */
+  carMarker: CarMarker;
 }
 
 export const GATE_WIDTH_MIN_M = 10;
@@ -73,10 +79,13 @@ export const DEFAULT_SETTINGS: Settings = {
   courseFilter: 'all',
   popularPeriod: '30d',
   driveZoom: 0,
+  carMarker: 'arrow',
 };
 
 export const DRIVE_ZOOM_MIN = -4;
 export const DRIVE_ZOOM_MAX = 2;
+/** 주행 지도 확대 (두 손가락으로 고른 소수도, 2026-11-17 "부드럽게 확대·축소"): 범위 안, 0.01 단위 */
+export const driveZoomOf = (z: number): number => Math.round(Math.min(DRIVE_ZOOM_MAX, Math.max(DRIVE_ZOOM_MIN, z)) * 100) / 100;
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   g: 'G미터',
@@ -134,7 +143,8 @@ function load(): Settings {
       courseFilter: FILTERS.some((f) => f.id === raw.courseFilter) ? raw.courseFilter! : 'all',
       popularPeriod: PERIODS.some((p) => p.id === raw.popularPeriod) ? raw.popularPeriod! : '30d',
       driveZoom:
-        typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom) ? Math.min(DRIVE_ZOOM_MAX, Math.max(DRIVE_ZOOM_MIN, Math.round(raw.driveZoom))) : 0,
+        typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom) ? driveZoomOf(raw.driveZoom) : 0,
+      carMarker: CAR_MARKERS.includes(raw.carMarker as CarMarker) ? raw.carMarker! : 'arrow',
     };
   } catch {
     return DEFAULT_SETTINGS;

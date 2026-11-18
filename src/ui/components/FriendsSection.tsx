@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAccount } from '../../app/account';
 import { addFriendByCode, formatCode, loadFriends, removeFriend, useFriends } from '../../app/friends';
+import { appName } from '../brand';
 
 export function FriendsSection() {
   const fr = useFriends();
@@ -25,7 +26,7 @@ export function FriendsSection() {
 
   const share = async () => {
     if (!fr.code) return;
-    const text = `같이타요 친구 코드: ${formatCode(fr.code)}`;
+    const text = `${appName()} 친구 코드: ${formatCode(fr.code)}`;
     try {
       if (navigator.share) await navigator.share({ text });
       else {

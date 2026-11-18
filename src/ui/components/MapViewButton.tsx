@@ -9,19 +9,22 @@ export interface MapViewButtonProps {
   view: MapViewMode;
   /** 지도를 돌린 각도 (라디안, 반시계). 북쪽이 위면 0 */
   rot: number;
+  /** 손으로 돌린 지도 (2026-11-17): 누르면 진행 방향 위로 */
+  manual?: boolean;
   onChange: (v: MapViewMode) => void;
   /** 자리 (지도 위에 얹은 칸 아래로 내릴 때) */
   style?: CSSProperties;
 }
 
-export function MapViewButton({ view, rot, onChange, style }: MapViewButtonProps) {
-  const next = NEXT_MAP_VIEW[view];
+export function MapViewButton({ view, rot, manual = false, onChange, style }: MapViewButtonProps) {
+  const next: MapViewMode = manual ? 'heading' : NEXT_MAP_VIEW[view];
+  const now = manual ? '손으로 돌림' : MAP_VIEW_LABEL[view];
   return (
     <button
       type="button"
       className="map-compass"
       style={style}
-      aria-label={`지도 보기: ${MAP_VIEW_LABEL[view]} (누르면 ${MAP_VIEW_LABEL[next]})`}
+      aria-label={`지도 보기: ${now} (누르면 ${MAP_VIEW_LABEL[next]})`}
       onClick={() => onChange(next)}
     >
       <span className="dial">

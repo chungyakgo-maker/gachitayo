@@ -1,8 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { initRecording } from './app/recording';
-import { getAccountState, initAccount } from './app/account';
+import { getAccountState, initAccount, signedIn } from './app/account';
 import { finishFromHash, setAfterKakaoLogin } from './app/kakaoLogin';
+import { setAfterAppleLogin } from './app/appleLogin';
 import { startRestore } from './app/restore';
 import { initSync } from './app/sync';
 import { initFriends } from './app/friends';
@@ -10,6 +11,7 @@ import { seedBuiltinCourses } from './app/courses';
 import { syncCoursePrefs } from './app/coursePrefs';
 import { startDrivingSignal } from './app/drivingSignal';
 import { resumeGroupRoom } from './app/group';
+import { startAppLinks } from './app/appLinks';
 import { subscribeAccount } from './app/account';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
@@ -31,11 +33,12 @@ void initRecording();
 // 카카오에서 이 창으로 돌아왔으면 계정 확인보다 먼저 로그인을 마친다 (예전 열쇠로 "계정 끊김"이 뜨지 않게)
 // 카카오 계정이면 서버에 있고 이 폰에 없는 기록·코스를 되살린다 (로그인 직후와 앱을 열 때마다)
 setAfterKakaoLogin(() => void startRestore());
+setAfterAppleLogin(() => void startRestore());
 void finishFromHash(window.location.hash)
   .then(initAccount)
   .then(initSync)
   .then(() => {
-    if (getAccountState().kakao) void startRestore();
+    if (signedIn(getAccountState())) void startRestore();
     // 들어가 있던 그룹 주행 방으로 다시 (24시간이 지났거나 나갔으면 잊는다)
     void resumeGroupRoom();
     // 즐겨찾기·분류를 계정과 맞춘다 (카카오 로그인으로 계정이 바뀌어도 다시)
@@ -50,6 +53,8 @@ void finishFromHash(window.location.hash)
       }
     });
   });
+// 아이폰 앱: 방 초대 링크로 열리면 그 방으로
+startAppLinks();
 // 기본 코스로 주행 중이면 실시간 인기 신호 (코스 둘러보기 설계, 위치 없음)
 startDrivingSignal();
 // 기본 코스(배후령 · 미시령 옛길 · 만항재)를 처음 한 번 코스 목록에 넣는다

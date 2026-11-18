@@ -1,6 +1,10 @@
 // 그룹 주행 초대 (사용자 결정 "카톡 카드로"): 카카오 JavaScript SDK 카카오톡 공유로 카드를 보낸다.
 // 키(VITE_KAKAO_JS_KEY)가 없거나 SDK를 못 불러오면 폰 공유 창, 그것도 없으면 링크 복사.
 // 링크는 웹 앱 주소 #/join/{코드} (앱 출시 뒤 유니버설 링크는 따로)
+import { Share } from '@capacitor/share';
+import { isApp, WEB_APP_URL } from '../platform';
+import { appName } from '../ui/brand';
+
 const SDK_URL = 'https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js';
 /** 받은 파일이 바뀌지 않았는지 (CI 점검 2026-11-16에서 받은 값) */
 const SDK_INTEGRITY = 'sha384-DKYJZ8NLiK8MN4/C5P2dtSmLQ4KwPaoqAfyA/DfmEc1VDxu4yyC7wy6K1Hs90nka';
@@ -13,13 +17,15 @@ interface KakaoSdk {
 
 export type ShareResult = 'kakao' | 'shared' | 'copied' | 'failed';
 
+
 const jsKey = (): string => (import.meta.env.VITE_KAKAO_JS_KEY as string | undefined) ?? '';
 
-/** 카톡 카드로 보낼 수 있는지 (키가 들어간 빌드) */
-export const kakaoShareReady = (): boolean => jsKey() !== '';
+/** 카톡 카드로 보낼 수 있는지 (키가 들어간 웹 빌드. 아이폰 앱은 카카오 웹 SDK를 못 써서 폰 공유 창) */
+export const kakaoShareReady = (): boolean => jsKey() !== '' && !isApp();
 
-/** 이 웹 앱의 주소 (끝에 /) */
+/** 이 웹 앱의 주소 (끝에 /). 앱 안에서는 공개 웹 주소 */
 function appBase(): string {
+  if (isApp()) return WEB_APP_URL;
   return new URL(import.meta.env.BASE_URL || '/', window.location.origin).toString();
 }
 
@@ -88,8 +94,18 @@ export async function copyInviteLink(code: string): Promise<boolean> {
 /** 초대 보내기: 카톡 카드 → 폰 공유 창 → 링크 복사 */
 export async function shareInvite(o: { code: string; destName: string | null; count: number }): Promise<ShareResult> {
   const url = inviteLink(o.code);
-  const title = '같이타요 · 그룹 주행 초대';
+  const title = `${appName()} · 그룹 주행 초대`;
   const desc = `방 코드 ${formatRoomCode(o.code)}${o.destName ? ` · ${o.destName}까지 같이 달려요` : ' · 같이 달려요'}\n${o.count}명 참여 중`;
+  // 아이폰 앱: 폰 공유 창 (카톡을 고르면 링크가 간다)
+  if (isApp()) {
+    try {
+      await Share.share({ title, text: desc, url, dialogTitle: '그룹 주행 초대' });
+      return 'shared';
+    } catch (e) {
+      if (/cancel/i.test(String((e as { message?: unknown }).message ?? e))) return 'shared';
+      return (await copyInviteLink(o.code)) ? 'copied' : 'failed';
+    }
+  }
   // 미리 불러 둔 SDK만 쓴다. 아직이면 이번에는 폰 공유 창으로 (다음에는 카톡 카드)
   const k = readySdk();
   if (!k) preloadKakaoSdk();

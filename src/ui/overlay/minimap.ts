@@ -5,6 +5,7 @@ import { gateFromPoint, gateSegment } from '../../engine/course/geometry';
 import type { RouteGuide } from '../../engine/route/routeGuide';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
+import type { CarMarker } from '../../app/settings';
 import { roundRect, type Ctx } from './draw';
 import type { OverlayFrame, XY } from './frame';
 import type { OverlayTheme } from './theme';
@@ -124,6 +125,8 @@ export interface MiniMapOpts {
   friends?: ReadonlyArray<MapPerson>;
   /** 돌린 지도에서 왼쪽 위 작은 나침반 (주행 화면은 나침반 버튼이 대신하므로 끈다) */
   north?: boolean;
+  /** 내 차 표시 모양 (설정, 기본 화살표) */
+  marker?: CarMarker;
 }
 
 /** 화면에 맞추기: 코스가 있으면 코스 전체, 없으면 지나온 경로와 내 위치 (너무 작으면 200 m 범위) */
@@ -171,6 +174,13 @@ const STYLE = { gate: '#C9CDD2' };
 export const COURSE_LINE = { outline: '#ffffff', outlineW: 10, line: '#9fd0ff', lineW: 6 } as const;
 /** 코스 주행에서 이번 랩에 이미 지나온 코스 선: 옅게 (사용자 요청 "지나온 길이 빨간색이라 더 눈에 띄어 집중이 안 된다") */
 export const COURSE_DONE = { line: 'rgba(159, 208, 255, 0.28)', lineW: 6 } as const;
+
+/** 목적지 경로에서 지나온 거리 (지도에서 지울 만큼). 잠깐 경로를 벗어나 s가 없을 때는 마지막 값을 그대로 쓰고
+ *  (지운 선이 다시 나타나지 않게), 다시 찾기로 경로가 바뀌면 새 경로의 처음부터 센다 */
+export function routeDoneS<G extends object>(prev: { guide: G; s: number } | null, guide: G, s: number | null): { guide: G; s: number } | null {
+  if (s !== null) return { guide, s };
+  return prev && prev.guide === guide ? prev : null;
+}
 
 /** 코스 선을 s(m)에서 둘로 나눈다 (점 사이 거리로) */
 function splitAt(pts: ReadonlyArray<XY>, s: number): [XY[], XY[]] {
@@ -231,9 +241,12 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
   ctx.setLineDash([]);
   const hasLine = model.line.length >= 2;
   if (hasLine) {
-    // 코스 주행: 이번 랩에 지나온 코스 선은 옅게, 남은 코스 선은 밝게 (빨간 지나온 길 대신, 사용자 요청)
-    const s = f.courseS ?? null;
-    const [done, rest] = s !== null && s > 0 ? splitAt(model.line, s) : [[], model.line];
+    // 코스 주행: 이번 랩에 지나온 코스 선은 옅게, 남은 코스 선은 밝게 (빨간 지나온 길 대신, 사용자 요청).
+    // 목적지 주행: 지나온 경로는 아예 지운다 (내비처럼, 사용자 요청 "경로대로 가면 지나온 경로는 지워져야")
+    const routeS = f.routeS ?? null;
+    const s = routeS ?? f.courseS ?? null;
+    const [split, rest] = s !== null && s > 0 ? splitAt(model.line, s) : [[], model.line];
+    const done = routeS !== null ? [] : split;
     if (done.length >= 2) {
       polyline(ctx, done, v, false);
       ctx.strokeStyle = COURSE_DONE.line;
@@ -340,37 +353,167 @@ export function drawMiniMap(ctx: Ctx, w: number, h: number, model: MapModel, f: 
 
   if (f.me) {
     const [x, y] = v.P(f.me.x, f.me.y);
-    ctx.fillStyle = th.accentSoft;
-    ctx.beginPath();
-    ctx.arc(x, y, f.me.psi !== undefined ? 15 : 16, 0, Math.PI * 2);
-    ctx.fill();
-    if (f.me.psi !== undefined) {
-      // 지도를 돌렸으면 화살표도 같이 (진행 방향 위면 늘 위를 가리킨다)
-      const [tx, ty] = screenDir(v, Math.cos(f.me.psi), Math.sin(f.me.psi));
-      const ox = -ty;
-      const oy = tx;
-      ctx.beginPath();
-      ctx.moveTo(x + tx * 12, y + ty * 12);
-      ctx.lineTo(x - tx * 7 + ox * 7, y - ty * 7 + oy * 7);
-      ctx.lineTo(x - tx * 7 - ox * 7, y - ty * 7 - oy * 7);
-      ctx.closePath();
-      ctx.fillStyle = th.fg;
-      ctx.fill();
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = th.accent;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.arc(x, y, 6.5, 0, Math.PI * 2);
-      ctx.fillStyle = th.fg;
-      ctx.fill();
-      ctx.strokeStyle = th.accent;
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
+    // 지도를 돌렸으면 모양도 같이 (진행 방향 위면 늘 위를 가리킨다)
+    const dir = f.me.psi !== undefined ? screenDir(v, Math.cos(f.me.psi), Math.sin(f.me.psi)) : null;
+    drawMe(ctx, x, y, dir, opts.marker ?? 'arrow');
   }
   return v;
+}
+
+/** 내 차 표시 색 (사용자 요청 시안 2026-11-17: 화살표·흰 차·파란 점·빨간 차, 예전 작은 화살표의 약 2배) */
+export const ME_MARKER = {
+  arrow: { body: '#ffffff', edge: '#0d0e10', halo: 'rgba(170, 202, 230, 0.22)' },
+  white: { body: '#ffffff', edge: '#0d0e10', halo: 'rgba(170, 202, 230, 0.22)', glass: '#1b2a3a', roof: '#e6edf5', head: '#9fd0ff', tail: '#ff5b4f' },
+  blue: { body: '#3a86ff', edge: '#ffffff', halo: 'rgba(58, 134, 255, 0.18)', beam: 'rgba(58, 134, 255, 0.55)', beamEnd: 'rgba(58, 134, 255, 0)' },
+  red: { body: '#e8382f', edge: '#0d0e10', halo: 'rgba(232, 56, 47, 0.22)', glass: '#1a1c20', roof: '#c92a22', head: '#fff3c4', tail: '#ffb3ab' },
+} as const;
+
+function disc(ctx: Ctx, x: number, y: number, r: number, fill: string): void {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
+/** 그림자 (바탕 지도 위에서도 떠 보이게) 를 켜고 그린 뒤 끈다 */
+function withShadow(ctx: Ctx, draw: () => void): void {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 2;
+  draw();
+  ctx.restore();
+}
+
+/** 내 위치. dir: 화면에서 진행 방향(단위 벡터), 모르면 null → 방향 없는 큰 점 */
+function drawMe(ctx: Ctx, x: number, y: number, dir: readonly [number, number] | null, kind: CarMarker): void {
+  const m = ME_MARKER[kind];
+  ctx.setLineDash([]);
+  ctx.lineJoin = 'round';
+  if (!dir) {
+    disc(ctx, x, y, 24, m.halo);
+    withShadow(ctx, () => disc(ctx, x, y, 12, m.body));
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, Math.PI * 2);
+    ctx.strokeStyle = m.edge;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    return;
+  }
+  // 모양은 앞쪽이 위(0,-1)인 좌표로 그리고 진행 방향으로 돌린다
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(Math.atan2(dir[0], -dir[1]));
+  if (kind === 'arrow') drawArrowMark(ctx);
+  else if (kind === 'blue') drawBlueMark(ctx);
+  else drawCarMark(ctx, kind === 'red' ? ME_MARKER.red : ME_MARKER.white);
+  ctx.restore();
+}
+
+/** 설정 화면의 작은 미리보기: 칸 가운데에 위를 보게, 줄여서 */
+export function drawMeIcon(ctx: Ctx, w: number, h: number, kind: CarMarker): void {
+  ctx.save();
+  ctx.translate(w / 2, h / 2 + 2);
+  ctx.scale(0.62, 0.62);
+  drawMe(ctx, 0, 0, [0, -1], kind);
+  ctx.restore();
+}
+
+/** A 화살표: 흰 내비 화살표 + 검은 테두리 (높이 44 px) */
+function drawArrowMark(ctx: Ctx): void {
+  const m = ME_MARKER.arrow;
+  disc(ctx, 0, 0, 30, m.halo);
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(0, -26);
+    ctx.lineTo(18, 18);
+    ctx.lineTo(0, 8);
+    ctx.lineTo(-18, 18);
+    ctx.closePath();
+  };
+  withShadow(ctx, () => {
+    path();
+    ctx.fillStyle = m.body;
+    ctx.fill();
+  });
+  path();
+  ctx.strokeStyle = m.edge;
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  path();
+  ctx.fillStyle = m.body;
+  ctx.fill();
+}
+
+/** B·D 자동차: 위에서 본 차 (30 × 56 px), 앞유리로 방향이 보인다 */
+function drawCarMark(ctx: Ctx, m: (typeof ME_MARKER)['white'] | (typeof ME_MARKER)['red']): void {
+  disc(ctx, 0, 0, 34, m.halo);
+  const bw = 30;
+  const bh = 56;
+  const l = -bw / 2;
+  const t = -bh / 2;
+  withShadow(ctx, () => {
+    roundRect(ctx, l, t, bw, bh, 11);
+    ctx.fillStyle = m.body;
+    ctx.fill();
+  });
+  roundRect(ctx, l, t, bw, bh, 11);
+  ctx.strokeStyle = m.edge;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  // 앞유리·뒷유리
+  ctx.fillStyle = m.glass;
+  ctx.beginPath();
+  ctx.moveTo(l + 5, t + 18);
+  ctx.quadraticCurveTo(0, t + 11, l + bw - 5, t + 18);
+  ctx.lineTo(l + bw - 7, t + 27);
+  ctx.lineTo(l + 7, t + 27);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(l + 7, t + bh - 13);
+  ctx.lineTo(l + bw - 7, t + bh - 13);
+  ctx.lineTo(l + bw - 5, t + bh - 7);
+  ctx.quadraticCurveTo(0, t + bh - 4, l + 5, t + bh - 7);
+  ctx.closePath();
+  ctx.fill();
+  // 지붕
+  roundRect(ctx, l + 7, t + 29, bw - 14, bh - 44, 3);
+  ctx.fillStyle = m.roof;
+  ctx.fill();
+  // 전조등·미등
+  for (const [cy, h, col] of [[t + 2.5, 3.5, m.head], [t + bh - 5.5, 3, m.tail]] as const) {
+    ctx.fillStyle = col;
+    roundRect(ctx, l + 4, cy, 6, h, 1.5);
+    ctx.fill();
+    roundRect(ctx, l + bw - 10, cy, 6, h, 1.5);
+    ctx.fill();
+  }
+}
+
+/** C 파란 점: 앱 파란색(로고 색) 점 + 앞쪽으로 퍼지는 빛 */
+function drawBlueMark(ctx: Ctx): void {
+  const m = ME_MARKER.blue;
+  const g = ctx.createRadialGradient(0, 0, 10, 0, 0, 72);
+  g.addColorStop(0, m.beam);
+  g.addColorStop(1, m.beamEnd);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.arc(0, 0, 72, -Math.PI / 2 - 0.62, -Math.PI / 2 + 0.62);
+  ctx.closePath();
+  ctx.fill();
+  disc(ctx, 0, 0, 26, m.halo);
+  withShadow(ctx, () => disc(ctx, 0, 0, 16, m.edge));
+  disc(ctx, 0, 0, 12, m.body);
+  ctx.beginPath();
+  ctx.moveTo(0, -7);
+  ctx.lineTo(5.5, 5);
+  ctx.lineTo(0, 2.5);
+  ctx.lineTo(-5.5, 5);
+  ctx.closePath();
+  ctx.fillStyle = m.edge;
+  ctx.fill();
 }
 
 /** 진행 방향 위 보기에서 북쪽이 어디인지 (왼쪽 위 작은 나침반. 오른쪽 위는 재생 화면의 보기 버튼 자리) */

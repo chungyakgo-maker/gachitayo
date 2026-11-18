@@ -2,9 +2,13 @@
 import { useEffect, useState } from 'react';
 import { finishOnboarding, friendlyServerError, useAccount } from '../../app/account';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
-import { KakaoButton } from '../components/KakaoButton';
+import { LoginChooser } from '../components/LoginChooser';
+import { startAppleLogin } from '../../app/appleLogin';
 import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { IconPhone, IconPin, IconWarn } from '../icons';
+import { isApp } from '../../platform';
+import { LegalLink } from '../legal';
+import { appName } from '../brand';
 
 const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 const standalone = () =>
@@ -16,22 +20,38 @@ export function WelcomeScreen() {
   const [name, setName] = useState(acc.nickname ?? '');
   const [agree, setAgree] = useState(false);
   const ok = name.trim().length >= 1 && name.trim().length <= 20 && agree && !acc.busy;
-  // 카카오로 시작하기 (설계 5.6): 서버가 켜 두었을 때만
+  // 카카오로 시작하기 (설계 5.6): 서버가 켜 두었을 때만. 아이폰 앱은 Apple로 계속하기도 (앱 로그인 설계 2026-11-17)
   const [kakao, setKakao] = useState(false);
+  const [apple, setApple] = useState(false);
   const [kakaoBusy, setKakaoBusy] = useState(false);
   const [kakaoError, setKakaoError] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    void getProviders().then((p) => alive && setKakao(p.kakao));
+    void getProviders().then((p) => {
+      if (!alive) return;
+      setKakao(p.kakao);
+      setApple(p.apple);
+    });
     return () => {
       alive = false;
     };
   }, []);
+  const appleStart = async () => {
+    setKakaoBusy(true);
+    setKakaoError(null);
+    // 적은 닉네임이 있으면 애플이 준 이름보다 먼저 (검토 지적)
+    const r = await startAppleLogin(name);
+    // 마치면 계정이 생겨 첫 화면을 벗어난다. 실패·취소면 여기 그대로
+    setKakaoBusy(false);
+    if (r.ok && r.changed) window.location.reload();
+    if (!r.ok && 'error' in r) setKakaoError(r.error);
+  };
   const kakaoStart = async () => {
     setKakaoBusy(true);
     setKakaoError(null);
     try {
-      await startKakaoLogin('#/');
+      // 앱에서 로그인 창을 닫으면 버튼을 다시 쓸 수 있게 (검토 지적)
+      if ((await startKakaoLogin('#/')) === 'cancelled') setKakaoBusy(false);
     } catch (e) {
       setKakaoError(friendlyServerError(e));
       setKakaoBusy(false);
@@ -40,7 +60,7 @@ export function WelcomeScreen() {
   return (
     <main className="page page-full">
       <header className="card-col" style={{ gap: 6, paddingTop: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>같이타요</h1>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>{appName()}</h1>
         <span className="dim" style={{ fontSize: 14 }}>
           와인딩·서킷 랩타임과 베스트 대비 델타를 폰으로 재요
         </span>
@@ -56,7 +76,7 @@ export function WelcomeScreen() {
         <span className="sub">
           {acc.status === 'disabled'
             ? '지금은 서버 연결 전이라 기록을 폰에만 저장해요.'
-            : '가입 없이 이 폰에 익명 계정을 만들어요. 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요.'}
+            : `가입 없이 이 폰에 익명 계정을 만들어요. ${isApp() ? '앱을 지우거나' : '브라우저 데이터를 지우거나'} 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요.`}
         </span>
       </section>
 
@@ -67,24 +87,32 @@ export function WelcomeScreen() {
             <strong>위치·모션 권한</strong>
           </div>
           <span className="dim" style={{ fontSize: 13, lineHeight: 1.6 }}>
-            주행 시작을 누르면 위치와 모션 센서 권한을 물어봐요. {isIos() ? '아이폰은 두 창 모두 "허용"을 눌러 주세요.' : '"허용"을 눌러 주세요.'}
+            {isApp()
+              ? "주행 시작을 누르면 위치와 모션 센서 권한을 물어봐요. 위치는 '항상 허용'을 고르면 화면이 꺼져도 기록이 이어져요."
+              : `주행 시작을 누르면 위치와 모션 센서 권한을 물어봐요. ${isIos() ? '아이폰은 두 창 모두 "허용"을 눌러 주세요.' : '"허용"을 눌러 주세요.'}`}
           </span>
         </div>
-        <div className="status-item">
-          <div className="status-head">
-            <IconPhone color="#aacae6" />
-            <strong>홈 화면에 추가</strong>
-            {standalone() && <span style={{ color: '#3EE08F' }}>홈 화면 앱으로 실행 중</span>}
+        {/* 아이폰 앱(사양서 13.3)에서는 이미 앱이라 안내하지 않는다 */}
+        {!isApp() && (
+          <div className="status-item">
+            <div className="status-head">
+              <IconPhone color="#aacae6" />
+              <strong>홈 화면에 추가</strong>
+              {standalone() && <span style={{ color: '#3EE08F' }}>홈 화면 앱으로 실행 중</span>}
+            </div>
+            <span className="dim" style={{ fontSize: 13, lineHeight: 1.6 }}>
+              {isIos() ? '사파리 공유 버튼 → "홈 화면에 추가"' : '크롬 메뉴(⋮) → "앱 설치" 또는 "홈 화면에 추가"'}. 앱처럼 열리고, 오래 안 써도
+              기록이 지워지지 않아요.
+            </span>
           </div>
-          <span className="dim" style={{ fontSize: 13, lineHeight: 1.6 }}>
-            {isIos() ? '사파리 공유 버튼 → "홈 화면에 추가"' : '크롬 메뉴(⋮) → "앱 설치" 또는 "홈 화면에 추가"'}. 앱처럼 열리고, 오래 안 써도
-            기록이 지워지지 않아요.
-          </span>
-        </div>
+        )}
         <div className="status-item">
           <label className="status-head" style={{ cursor: 'pointer' }}>
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} style={{ width: 22, height: 22, accentColor: '#aacae6' }} />
-            <strong style={{ fontSize: 14, lineHeight: 1.5 }}>공도에서는 교통법규를 지키고, 주행 중에는 앱을 조작하지 않겠습니다.</strong>
+            <strong style={{ fontSize: 14, lineHeight: 1.5 }}>
+              공도에서는 교통법규를 지키고, 주행 중에는 앱을 조작하지 않겠습니다. <LegalLink kind="privacy">개인정보처리방침</LegalLink>과{' '}
+              <LegalLink kind="location">위치정보 이용약관</LegalLink>에 동의합니다.
+            </strong>
           </label>
         </div>
       </section>
@@ -97,11 +125,18 @@ export function WelcomeScreen() {
         </div>
       )}
       <div style={{ flex: 1 }} />
-      {kakao && (
-        <div className="card-col" style={{ gap: 6 }}>
-          <KakaoButton label="카카오로 시작하기" disabled={!agree || kakaoBusy || acc.busy} onClick={() => void kakaoStart()} />
+      {(kakao || apple) && (
+        <div className="card-col" style={{ gap: 8 }}>
+          <LoginChooser
+            kakao={kakao}
+            apple={apple}
+            kakaoLabel="카카오로 시작하기"
+            disabled={!agree || kakaoBusy || acc.busy}
+            onKakao={() => void kakaoStart()}
+            onApple={() => void appleStart()}
+          />
           <span className="sub" style={{ textAlign: 'center' }}>
-            폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요
+            {apple ? '폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요' : '폰을 바꿔도 카카오로 로그인하면 기록이 돌아와요'}
           </span>
         </div>
       )}
