@@ -37,7 +37,7 @@ describe('여러 기기 열쇠·로그아웃·providers', () => {
     const t2 = await issueToken(env, u.userId);
     const r = await me(t2);
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ userId: u.userId, nickname: '민수', kakao: false, apple: false });
+    expect(await r.json()).toEqual({ userId: u.userId, nickname: '민수', avatar: null, kakao: false, apple: false });
   });
 
   it('로그아웃하면 그 열쇠만 401, 같은 계정의 다른 열쇠는 그대로', async () => {
@@ -203,7 +203,7 @@ describe('카카오 시작·콜백·마치기', () => {
     const r = await login({ kakaoId: nextKakaoId(), nickname: '드리프트왕' });
     expect(r.kind).toBe('created');
     expect(r.nickname).toBe('드리프트왕');
-    expect(await (await me(r.token)).json()).toEqual({ userId: r.userId, nickname: '드리프트왕', kakao: true, apple: false });
+    expect(await (await me(r.token)).json()).toEqual({ userId: r.userId, nickname: '드리프트왕', avatar: null, kakao: true, apple: false });
   });
 
   it('처음 보는 카카오 + 익명 B → B에 연결 (닉네임은 B 것 그대로)', async () => {

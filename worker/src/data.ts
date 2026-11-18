@@ -32,11 +32,11 @@ function pair(v: unknown, what: string): [number, number] {
 
 export async function getMe(env: Cloudflare.Env, userId: string) {
   const row = await env.DB.prepare(
-    "SELECT id, nickname, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'kakao') AS kakao, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'apple') AS apple FROM users WHERE id = ?",
+    "SELECT id, nickname, avatar, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'kakao') AS kakao, EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND provider = 'apple') AS apple FROM users WHERE id = ?",
   )
     .bind(userId)
-    .first<{ id: string; nickname: string; kakao: number; apple: number }>();
-  return { userId: row!.id, nickname: row!.nickname, kakao: row!.kakao === 1, apple: row!.apple === 1 };
+    .first<{ id: string; nickname: string; avatar: string | null; kakao: number; apple: number }>();
+  return { userId: row!.id, nickname: row!.nickname, avatar: row!.avatar ?? null, kakao: row!.kakao === 1, apple: row!.apple === 1 };
 }
 
 export async function putMe(env: Cloudflare.Env, userId: string, nickname: string) {
@@ -63,6 +63,9 @@ export async function deleteAccount(env: Cloudflare.Env, userId: string, now = D
       // 방이 이미 닫혔으면 그대로
     }
   }
+  // 프로필 사진 파일
+  const av = await env.DB.prepare('SELECT avatar FROM users WHERE id = ?').bind(userId).first<{ avatar: string | null }>();
+  if (av?.avatar) await env.SESSION_FILES.delete(`avatars/${av.avatar}.jpg`);
   let files = 0;
   let cursor: string | undefined;
   do {

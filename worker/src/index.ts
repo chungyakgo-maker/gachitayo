@@ -13,6 +13,7 @@
 //   PUT /api/sessions/{id}/laps [ … ]    세션의 랩을 통째로 바꾸기
 //   DELETE /api/sessions/{id}            기록 지우기 (랩·세션 행, 원본·처리된 파일) (M10)
 //   PUT/GET/HEAD /files/{userId}/{sessionId}.{raw|processed}.json.gz
+//   GET /avatar/{id}.jpg                 프로필 사진 (열쇠 없음, 무작위 id) · PUT/DELETE /api/me/avatar 내 사진 올리기·지우기
 //   GET /api/friends                     내 친구 코드와 친구 목록 (M8)
 //   POST /api/friends {code}             친구 코드로 친구 맺기 (바로 서로 친구)
 //   DELETE /api/friends/{id}             친구 끊기 (양쪽 모두)
@@ -40,6 +41,7 @@ import { searchPlaces } from './places';
 import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 import { finishApple } from './apple';
+import { deleteAvatar, getAvatar, putAvatar } from './avatar';
 
 export { LiveRoom } from './live';
 export { GroupRoom } from './group';
@@ -72,6 +74,13 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
 
   if (path.startsWith('/files/')) return handleFiles(req, env, path, headers);
   if (path.startsWith('/map/')) return handleMap(req, env, path, headers, ctx);
+
+  // 프로필 사진: 열쇠 없이 (주소를 아는 친구·팀원만 볼 수 있다, avatar.ts)
+  const avatar = /^\/avatar\/([^/]+)\.jpg$/.exec(path);
+  if (avatar) {
+    if (method !== 'GET') throw new HttpError(405);
+    return getAvatar(env, avatar[1]!, headers);
+  }
 
   const group = /^\/group\/([^/]+)$/.exec(path);
   if (group) {
@@ -189,6 +198,13 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     if (method !== 'POST') throw new HttpError(405);
     const userId = await authenticate(req, env);
     return json(200, headers, await findRoute(env, userId, await readJson(req, 1024)));
+  }
+
+  if (path === '/api/me/avatar') {
+    const userId = await authenticate(req, env);
+    if (method === 'PUT') return json(200, headers, await putAvatar(env, userId, req));
+    if (method === 'DELETE') return json(200, headers, await deleteAvatar(env, userId));
+    throw new HttpError(405);
   }
 
   if (path === '/api/me') {
