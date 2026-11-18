@@ -14,6 +14,10 @@ export interface Friend {
   since: string;
   /** 지금 위치를 공유하는 중 */
   sharing: boolean;
+  /** 프로필 사진 id (없으면 null) */
+  avatar?: string | null;
+  /** 이미 팀 5개라 새 팀에 넣을 수 없다 */
+  full?: boolean;
 }
 
 export interface FriendPos {

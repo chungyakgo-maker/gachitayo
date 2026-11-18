@@ -124,6 +124,16 @@ describe('그룹 주행 상태', () => {
     expect(socks[0]!.url).toBe(`wss://api.test/group/${ROOM().roomId}`);
   });
 
+  it('팀 주행: 방 id로 바로 들어가고, 팀 이름이 방 상태에 실린다', async () => {
+    fetchRoom = ROOM({ code: '', teamId: 'team-1', teamName: '북악 새벽팀' });
+    await group.enterGroupRoom(ROOM().roomId);
+    expect(calls[0]).toMatchObject({ method: 'GET', url: `https://api.test/api/rooms/${ROOM().roomId}` });
+    expect(group.getGroup().room).toMatchObject({ teamId: 'team-1', teamName: '북악 새벽팀' });
+    expect(socks[0]!.url).toBe(`wss://api.test/group/${ROOM().roomId}`);
+    msg({ type: 'state', ...ROOM({ code: '', teamId: 'team-1', teamName: '북악 새벽팀', gapS: 3 }) });
+    expect(group.getGroup().room).toMatchObject({ teamName: '북악 새벽팀', gapS: 3 });
+  });
+
   it('front member is the one right before me; first has none', async () => {
     await group.joinGroupRoom('482917');
     expect(group.frontMember(group.getGroup())!.nickname).toBe('방장');

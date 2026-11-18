@@ -19,10 +19,15 @@ export interface GroupMember {
   color: number;
   order: number;
   host: boolean;
+  /** 프로필 사진 id (없으면 null) */
+  avatar?: string | null;
 }
 export interface GroupRoomState {
   roomId: string;
   code: string;
+  /** 팀 주행 방이면 팀 (설계 2026-11-18-team-drive, 코드 방이면 null) */
+  teamId?: string | null;
+  teamName?: string | null;
   members: GroupMember[];
   gapS: number;
   dest: { name: string; lat: number; lon: number } | null;
@@ -152,7 +157,9 @@ function onMessage(data: string): void {
   }
   if (m.type === 'state') {
     const room = m as unknown as GroupRoomState;
-    set({ room: { roomId: room.roomId || state.room?.roomId || '', code: room.code, members: room.members, gapS: room.gapS, dest: room.dest, routeVersion: room.routeVersion } });
+    set({
+      room: { roomId: room.roomId || state.room?.roomId || '', code: room.code, teamId: room.teamId ?? null, teamName: room.teamName ?? null, members: room.members, gapS: room.gapS, dest: room.dest, routeVersion: room.routeVersion },
+    });
     void checkRoute();
   } else if (m.type === 'pos' && typeof m.userId === 'string') {
     const p = m as unknown as LivePoint & { userId: string };
@@ -289,6 +296,16 @@ export function joinGroupRoom(code: string): Promise<void> {
     const r = await apiFetch<{ roomId: string }>('POST', '/api/rooms/join', { token: token(), body: { code: code.replace(/\D/g, '') } });
     const keep = remembered();
     await open(r.roomId, seq, keep?.roomId === r.roomId ? keep.accepted : 0);
+  });
+}
+
+/** 방 id로 바로 들어가기 (팀 주행: 서버가 팀원 확인 뒤 방에 넣어 준 다음) */
+export function enterGroupRoom(roomId: string): Promise<void> {
+  return explicit(async (seq) => {
+    const keep = remembered();
+    // 다른 방에 있었으면 그 연결은 닫는다 (서버에서는 24시간 뒤·전원 나감에 닫힘)
+    if (state.room && state.room.roomId !== roomId) leaveGroupLocal();
+    await open(roomId, seq, keep?.roomId === roomId ? keep.accepted : 0);
   });
 }
 
