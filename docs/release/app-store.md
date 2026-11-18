@@ -108,6 +108,8 @@ Team drive: Settings (설정) → "팀" → "+ 팀 만들기" creates a team (te
 
 Bike mode: Settings (설정) → "탈것" (Vehicle) → "바이크" (Motorcycle). The map marker becomes a motorcycle, destination routes avoid expressways and motorways (motorcycles are not allowed on them in Korea; we request Naver Directions' "avoid car-only roads" option and warn by road name if one is still included), and a lean-angle gauge replaces the G-meter. The lean angle is an estimate calculated from speed and turn rate. To try it without riding: Courses (코스) → any course → "모의주행 (코스 미리 보기)" (Simulated drive).
 
+Help: Settings (설정) → "도움말" (Help) → "기능 알아보기" (Feature guide) explains each feature with screenshots.
+
 Profile photo: Settings (설정) → "사진 바꾸기" (Change photo) uses the photo picker or camera; the photo is reduced to 160×160 and shown only to friends and team members.
 
 Account deletion: Settings (설정) → "계정과 모든 기록 지우기" deletes all data on the phone and the server. If the account used Sign in with Apple, the Apple token is revoked.
