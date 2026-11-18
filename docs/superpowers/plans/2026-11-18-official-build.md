@@ -30,7 +30,7 @@
 
 ### Task 1: 스위치 + 보내기·받기 막기
 **Files:** Create `src/features.ts`; Modify `src/vite-env.d.ts`, `src/app/friends.ts`, `src/app/liveLink.ts`, `src/app/drive.ts`, `src/app/group.ts`, `src/app/settings.ts`(effectiveSettings); Test `test/app/officialBuild.test.ts`
-**Interfaces:** `locationSharing(): boolean`, `liveGap(): boolean`, `buildChannel(): '정식' | '테스트'`, `setFeaturesForTest(f: { sharing?: boolean; gap?: boolean } | null)`, `effectiveSettings(s: Settings): Settings`
+**Interfaces:** `locationSharing(): boolean`, `liveGap(): boolean`, `buildChannel(): '정식' | '테스트'`, `effectiveSettings(s: Settings): Settings` (테스트는 `setFeaturesForTest` 대신 `vi.stubEnv`로 값을 바꾼다. `drive.ts`는 liveLink 안에서 막혀 고치지 않음)
 - [ ] 실패 테스트: 끄면 setSharing(true)이 fetch 안 함·sharing false, watchFriendPositions fetch 안 함, startLiveLinks 웹소켓 안 엶, 팀 방에서 GPS 안 보냄·pos 버림, effectiveSettings가 friend→best·gap→none; 켜면 지금과 같음
 - [ ] 구현·통과·커밋
 

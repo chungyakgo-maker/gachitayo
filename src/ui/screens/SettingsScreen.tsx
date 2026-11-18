@@ -423,7 +423,8 @@ export function SettingsScreen() {
           </section>
         )}
         <footer className="build-info">
-          {buildChannel()} · 버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
+          {/* 아이폰 앱만: 정식(위치 공유 끔)·테스트 빌드 구별 (웹에는 안 보인다) */}
+          {isApp() ? `${buildChannel()} · ` : ''}버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
         </footer>
       </main>
     </Tabbed>

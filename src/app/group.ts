@@ -1,6 +1,7 @@
 // 그룹 주행 (설계 docs/superpowers/specs/2026-11-16-group-drive-design.md, 사용자 요청 "방 만들고 그룹주행"):
 // 방 만들기·코드로 들어가기, 방 상태와 다른 사람 위치 받기(웹소켓), 주행 중 내 GPS 보내기, 방장 동작(순서·차 간격·목적지),
 // 방장이 정한 목적지 경로를 참가자에게 "이 경로로 진행"으로 묻고, 받으면 경로 안내를 켠다.
+import { destOnlyRoute } from './destOnly';
 import { useSyncExternalStore } from 'react';
 import { shareAnyLocation } from '../features';
 import { ApiError, apiFetch } from '../server/api';
@@ -339,7 +340,9 @@ const post = (action: string, body?: unknown) => {
 export const setGroupOrder = (userIds: string[]) => post('order', { userIds });
 export const setGroupGap = (gapS: number) => post('gap', { gapS });
 export async function shareGroupDestination(dest: { name: string; lat: number; lon: number }, route: RouteData): Promise<void> {
-  await post('dest', { name: dest.name, lat: dest.lat, lon: dest.lon, route: { points: route.points, distanceM: route.distanceM, durationS: route.durationS } });
+  // 정식 빌드: 방장 위치에서 시작하는 경로 대신 목적지만 보낸다 (받은 사람은 자기 위치에서 찾는다, destOnly.ts)
+  const r = shareAnyLocation() ? route : destOnlyRoute(dest);
+  await post('dest', { name: dest.name, lat: dest.lat, lon: dest.lon, route: { points: r.points, distanceM: r.distanceM, durationS: r.durationS } });
 }
 
 /** 방장: 순서 한 칸 올리기·내리기 */

@@ -65,6 +65,23 @@ describe('스위치', () => {
   });
 });
 
+describe('스위치 값이 틀리면 끈다 (검토 지적: 오타로 정식 빌드가 위치를 공유하지 않게)', () => {
+  for (const v of ['OFF', 'false', '0', 'of', '']) {
+    it(`VITE_LOCATION_SHARING='${v}' → 끔`, async () => {
+      vi.stubEnv('VITE_LOCATION_SHARING', v);
+      const f = await import('../../src/features');
+      expect(f.locationSharing()).toBe(false);
+      expect(f.liveGap()).toBe(false);
+    });
+  }
+  it("VITE_LIVE_GAP 오타도 끔, 'on' 만 켬", async () => {
+    vi.stubEnv('VITE_LIVE_GAP', 'yes');
+    const f = await import('../../src/features');
+    expect(f.locationSharing()).toBe(true);
+    expect(f.liveGap()).toBe(false);
+  });
+});
+
 describe('정식: 위치를 보내지도 받지도 않는다', () => {
   beforeEach(() => vi.stubEnv('VITE_LOCATION_SHARING', 'off'));
 

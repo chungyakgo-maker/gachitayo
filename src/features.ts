@@ -5,7 +5,8 @@
 // 서버에서 원격으로 켜지 않는다 (심사 뒤 숨긴 기능을 켜면 애플 2.3.1 위반). 다시 켤 때는 값을 바꿔 빌드해 업데이트 심사.
 // 화면만 숨기지 않고 보내기·받기를 막는 곳도 이 함수만 본다 (friends·liveLink·group·drive)
 
-const flag = (v: string | undefined): boolean | null => (v === 'off' ? false : v === 'on' ? true : null);
+// 안 적으면 기본값, 'on' 이면 켬, 그 밖의 값(off·OFF·false·오타)은 모두 끔 — 오타로 정식 빌드가 위치를 공유하지 않게 (검토 지적)
+const flag = (v: string | undefined): boolean | null => (v === undefined ? null : v === 'on');
 
 /** 지도에서 서로 위치 보기 (위치 공유 켜기·친구 위치·팀원 차 점) */
 export function locationSharing(): boolean {

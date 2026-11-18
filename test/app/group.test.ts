@@ -160,6 +160,20 @@ describe('그룹 주행 상태', () => {
     }
   });
 
+  it('정식 빌드(위치 공유 끔) 방장: 목적지만 보내고 내 위치에서 시작하는 경로는 보내지 않는다 (검토 지적)', async () => {
+    vi.stubEnv('VITE_LOCATION_SHARING', 'off');
+    try {
+      await group.joinGroupRoom('482917');
+      calls.length = 0;
+      await group.shareGroupDestination({ name: '팔각정', lat: 37.6, lon: 126.98 }, { points: [[37.5, 127], [37.55, 127.01], [37.6, 126.98]], distanceM: 15000, durationS: 1500, destName: '팔각정' });
+      const body = calls.find((c) => c.url.endsWith('/dest'))!.body as { route: { points: Array<[number, number]>; distanceM: number } };
+      expect(body.route.distanceM).toBe(0);
+      for (const [a, b] of body.route.points) expect(Math.abs(a - 37.6) + Math.abs(b - 126.98)).toBeLessThan(0.0001);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('front member is the one right before me; first has none', async () => {
     await group.joinGroupRoom('482917');
     expect(group.frontMember(group.getGroup())!.nickname).toBe('방장');

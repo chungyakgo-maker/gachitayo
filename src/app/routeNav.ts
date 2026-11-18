@@ -1,6 +1,7 @@
 // 목적지로 주행 (설계 docs/superpowers/specs/2026-11-16-destination-route-design.md 5.3·6, 사용자 요청 "경로검색 및 설정후 표지판 주행", "'만항재' 검색하면 나와야"):
 // 목적지 화면의 계획(목적지·경로·기록 남기기)과 주행 중 경로 안내(RouteGuide, 다시 찾기, 도착), 최근 목적지.
 // 일반 주행 위에 얹는다: 코스·랩 엔진은 그대로이고, 주행 화면은 코스가 없을 때 이 안내로 표지판·경로 선을 그린다.
+import { isDestOnly } from './destOnly';
 import { useSyncExternalStore } from 'react';
 import { ApiError, apiFetch } from '../server/api';
 import { fromLocal, toLocal, type LatLon } from '../engine/geo';
@@ -206,6 +207,8 @@ let navSeq = 0;
 let inflight = false;
 let lastReqAt = -Infinity;
 let unsubs: Array<() => void> = [];
+/** 목적지만 받은 경로라 내 위치에서 바로 찾아야 한다 */
+let rerouteNow = false;
 
 /** 목적지 화면의 "이 경로로 출발": 탭 처리 안에서 바로 주행 준비를 연다 (아이폰 모션 권한) */
 export function startRouteDrive(): void {
@@ -226,6 +229,8 @@ export function startNavWithRoute(route: RouteData, dest: LatLon): void {
   stopNav();
   const first = route.points[0]!;
   navDest = { lat: dest.lat, lon: dest.lon };
+  // 목적지만 받은 경로(정식 빌드 팀 주행)면 내 위치가 잡히는 대로 내 위치에서 찾는다
+  rerouteNow = isDestOnly(route);
   setNav({ guide: new RouteGuide(route.points, { lat: first[0], lon: first[1] }), route, step: null, status: 'guiding' });
   unsubs = [
     subscribeLive((s) => {
@@ -247,10 +252,12 @@ export function replaceNavRoute(route: RouteData, dest: LatLon): void {
   inflight = false;
   lastReqAt = -Infinity;
   navDest = { lat: dest.lat, lon: dest.lon };
+  rerouteNow = isDestOnly(route);
   setNav({ guide: new RouteGuide(route.points, nav.guide.origin), route, step: null, status: 'guiding' });
 }
 
 export function stopNav(): void {
+  rerouteNow = false;
   navSeq++;
   inflight = false;
   lastReqAt = -Infinity;
@@ -273,6 +280,11 @@ export function navTick(snap: LiveSnapshot, now = Date.now()): void {
     return;
   }
   if (!snap.pos || !snap.origin) return;
+  // 목적지만 받은 경로: 준비 중이어도 내 위치에서 한 번 찾는다
+  if (rerouteNow && !inflight && online()) {
+    rerouteNow = false;
+    reroute(snap, (snap.state?.speedKmh ?? 0) / 3.6, now);
+  }
   // 주행 평면 원점이 바뀌면(첫 GPS 등) 경로를 새 원점으로 다시 만든다
   const guide = n.guide.origin.lat === snap.origin.lat && n.guide.origin.lon === snap.origin.lon ? n.guide : new RouteGuide(n.route.points, snap.origin);
   if (getDriveState().phase !== 'driving') {
@@ -308,3 +320,5 @@ function reroute(snap: LiveSnapshot, v: number, now: number): void {
     },
   );
 }
+
+export { destOnlyRoute, isDestOnly } from './destOnly';

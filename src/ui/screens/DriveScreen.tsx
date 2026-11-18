@@ -158,8 +158,9 @@ export function DriveView({ snap, gap: gapIn = null, front: frontIn = null, frie
   }, [course, routeGuide]);
 
   // 주행 중 칸 터치로 바꾸기 (사용자 요청)
-  const tapTop = onTop ?? (() => updateSettings(nextTop(settings, gap !== null)));
-  const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settings.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
+  // 누르면 저장된 원래 값에서 다음으로 (정식 빌드에서 바꿔 읽은 값으로 저장하면 친구 델타·앞 친구 간격 설정이 지워졌다, 검토 지적)
+  const tapTop = onTop ?? (() => updateSettings(nextTop(settingsIn, gap !== null)));
+  const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settingsIn.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
 
   // 주행 지도 손 동작은 메인 지도와 같다 (2026-11-18 "주행중일땐 여전히 메인지도랑 동작이 다르잖아"): 끌기·두 손가락 확대·돌리기는
   // 모두 둘러보기 — GPS 버튼이 "내 위치로", 누르거나 3초 뒤 돌아오면 위치·확대(평소 주행 크기, + / − 로 정함)·방향(나침반 보기대로)이 원래대로.

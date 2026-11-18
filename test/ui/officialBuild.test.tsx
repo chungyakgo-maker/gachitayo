@@ -9,6 +9,16 @@ import type { GroupState } from '../../src/app/group';
 const h = vi.hoisted(() => ({
   map: [] as Array<{ frame: OverlayFrame; friend: unknown; friends: unknown[] }>,
   drive: {} as Record<string, unknown>,
+  app: true,
+  offer: null as unknown,
+  mainFriends: [] as unknown[][],
+}));
+vi.mock('../../src/platform', async (orig) => ({ ...(await orig<typeof import('../../src/platform')>()), isApp: () => h.app }));
+vi.mock('../../src/ui/components/MainMap', () => ({
+  MainMap: (p: { friends?: unknown[]; children?: unknown }) => {
+    h.mainFriends.push(p.friends ?? []);
+    return p.children ?? null;
+  },
 }));
 vi.mock('../../src/ui/components/LiveMap', () => ({
   LiveMap: (p: { frame: OverlayFrame; friend?: unknown; friends?: unknown[] }) => {
@@ -62,7 +72,7 @@ const ROOM: NonNullable<GroupState['room']> = {
 };
 vi.mock('../../src/app/group', async (orig) => ({
   ...(await orig<typeof import('../../src/app/group')>()),
-  useGroup: () => ({ room: ROOM, me: 'me', connected: true, offer: null, later: null, acceptedVersion: 0, error: null }),
+  useGroup: () => ({ room: ROOM, me: 'me', connected: true, offer: h.offer, later: null, acceptedVersion: 0, error: null }),
 }));
 
 const { DriveView } = await import('../../src/ui/screens/DriveScreen');
@@ -71,6 +81,9 @@ const { DEFAULT_SETTINGS } = await import('../../src/app/settings');
 beforeEach(() => {
   cleanup();
   h.map.length = 0;
+  h.mainFriends.length = 0;
+  h.app = true;
+  h.offer = null;
   h.drive = { phase: 'preparing', replay: null, courses: [], course: null, courseChosen: true, refs: [], ref: null, mode: 'map', error: null, noRecord: false };
   vi.stubEnv('VITE_LOCATION_SHARING', 'off');
 });
@@ -90,6 +103,9 @@ describe('정식 빌드: 위치 공유·간격 칸이 안 보인다', () => {
     render(<MainScreen />);
     expect(screen.getByRole('button', { name: /주행 시작/ })).toBeInTheDocument();
     expect(screen.queryByText(/위치 공유/)).toBeNull();
+    // 친구 위치가 있어도 지도에 넘기지 않는다
+    expect(h.mainFriends.length).toBeGreaterThan(0);
+    expect(h.mainFriends.every((f) => f.length === 0)).toBe(true);
   });
 
   it('주행 화면: 친구·팀원 점과 앞 차 간격을 그리지 않고, 칸 1은 베스트 델타 (저장된 값이 친구 델타여도)', () => {
@@ -150,6 +166,38 @@ describe('정식 빌드: 위치 공유·간격 칸이 안 보인다', () => {
     expect(screen.queryByText(/주행 중 지도에 모두 보여요/)).toBeNull();
     expect(screen.getByRole('region', { name: '주행 순서' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /주행 열었어요/ })).toBeInTheDocument();
+  });
+});
+
+describe('검토 지적', () => {
+  it('주행 중 칸을 눌러도 저장된 친구 델타·앞 친구 간격 설정은 지우지 않는다 (다시 켜면 그대로)', async () => {
+    const { getSettings, updateSettings } = await import('../../src/app/settings');
+    const { fireEvent } = await import('@testing-library/react');
+    updateSettings({ ...DEFAULT_SETTINGS, topDelta: true, deltaSource: 'friend', widgets: ['gap', 'speed'] });
+    render(<DriveView snap={null} course={null} refLap={null} mode="map" settings={getSettings()} replay={null} error={null} onCycle={() => {}} onEnd={() => {}} />);
+    fireEvent.click(screen.getAllByRole('button', { name: /^칸 1/ })[0]!);
+    expect(getSettings().deltaSource).toBe('friend');
+    expect(getSettings().widgets[0]).toBe('gap');
+    updateSettings(DEFAULT_SETTINGS);
+  });
+
+  it('방장이 목적지만 보낸 경로: 거리·커브 대신 "각자 지금 위치에서 찾아요"', async () => {
+    const { destOnlyRoute } = await import('../../src/app/destOnly');
+    h.offer = { version: 1, dest: { name: '팔각정', lat: 37.6, lon: 126.98 }, route: { ...destOnlyRoute({ lat: 37.6, lon: 126.98 }) } };
+    const { RouteOfferSheet } = await import('../../src/ui/components/RouteOfferSheet');
+    render(<RouteOfferSheet />);
+    expect(screen.getByText('팔각정')).toBeInTheDocument();
+    expect(screen.getByText(/경로는 각자 지금 위치에서 찾아요/)).toBeInTheDocument();
+    expect(screen.queryByText(/커브 \d+개/)).toBeNull();
+    expect(screen.getByRole('button', { name: '이 목적지로 진행' })).toBeInTheDocument();
+  });
+
+  it('웹에는 "정식/테스트" 표시가 없다 (앱에서만)', async () => {
+    h.app = false;
+    const { SettingsScreen } = await import('../../src/ui/screens/SettingsScreen');
+    render(<SettingsScreen />);
+    expect(screen.queryByText(/(정식|테스트) · 버전/)).toBeNull();
+    expect(screen.getByText(/^버전 /)).toBeInTheDocument();
   });
 });
 
