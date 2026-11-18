@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appId: 'kr.dgo.app',
   appName: '디고',
   webDir: 'dist-app',
-  backgroundColor: '#000000',
+  // 앱을 켜고 화면을 그리기 전 바탕: 실행 화면 애니메이션과 같은 파란색 (깜빡임 없이, 2026-11-18)
+  backgroundColor: '#3A86FF',
 };
 
 export default config;

@@ -24,6 +24,9 @@
     <meta name="apple-mobile-web-app-title" content="디고" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon-180x180.png" />
+    <!-- 아이폰 앱: 켜는 순간부터 실행 화면 애니메이션과 같은 파란 바탕 (깜빡임 없이 이어지게, 2026-11-18). 웹은 그대로 -->
+    <script>if ('%MODE%' === 'app') document.documentElement.classList.add('app-launch');</script>
+    <style>html.app-launch, html.app-launch body { background: #3A86FF; }</style>
   </head>
   <body>
     <div id="root"></div>

@@ -1,4 +1,6 @@
-import { useEffect, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
+import { isApp } from '../platform';
+import { SplashIntro } from './components/SplashIntro';
 import { resumeDrive } from '../app/drive';
 import { finishInterruptedSession, useRecording } from '../app/recording';
 import { useSettings } from '../app/settings';
@@ -73,6 +75,8 @@ function route(path: string): ReactElement {
 
 export function App() {
   const path = useHashPath();
+  // 아이폰 앱을 켤 때 한 번 실행 화면 애니메이션 (사용자 결정 2026-11-18: 아이폰 앱만). 그동안 뒤에서 화면을 불러 둔다
+  const [splash, setSplash] = useState(isApp);
   const { interrupted, phase } = useRecording();
   const { deltaPalette } = useSettings();
   const { onboarded } = useAccount();
@@ -103,6 +107,7 @@ export function App() {
           onFinish={() => void finishInterruptedSession(pending.id)}
         />
       )}
+      {splash && <SplashIntro onDone={() => setSplash(false)} />}
     </>
   );
 }

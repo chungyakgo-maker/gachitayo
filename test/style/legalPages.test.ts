@@ -50,3 +50,14 @@ describe('웹 페이지 이름·공유 미리보기', () => {
   });
 });
 
+// 아이폰 앱 실행 화면 (2026-11-18): 켜는 순간부터 파란 바탕 → 실행 화면 애니메이션으로 깜빡임 없이 이어진다
+describe('아이폰 앱 켜는 순간', () => {
+  const index = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const cap = readFileSync(new URL('../../capacitor.config.ts', import.meta.url), 'utf8');
+  it('앱 빌드에서만 첫 화면부터 실행 화면 파란색을 깐다 (웹은 그대로)', () => {
+    expect(index).toMatch(/'%MODE%' === 'app'[^<]*classList\.add\('app-launch'\)/);
+    expect(index).toMatch(/html\.app-launch,\s*html\.app-launch body\s*\{\s*background:\s*#3A86FF/);
+    expect(cap).toMatch(/backgroundColor: '#3A86FF'/);
+  });
+});
+

@@ -3296,3 +3296,39 @@ button.map-gps:active {
   flex-direction: column;
   gap: 8px;
 }
+
+/* 아이폰 앱 실행 화면 애니메이션 (2026-11-18, 시안 DgoSplash): 화면 전체를 덮고, 시안 판(390×844)을 가운데에 화면에 맞게 놓는다 */
+.splash-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  overflow: hidden;
+  pointer-events: auto;
+}
+html.app-h .splash-intro {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--app-h, 100%);
+}
+.splash-board {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 390px;
+  height: 844px;
+  transform-origin: 50% 50%;
+}
+.splash-tag {
+  position: absolute;
+  left: 45px;
+  top: 302px;
+  color: #ffffff;
+  font-size: 33px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
