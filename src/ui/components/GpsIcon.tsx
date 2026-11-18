@@ -14,6 +14,7 @@ export function GpsIcon({
   className = 'gps-icon',
   style,
   onClick,
+  label,
 }: {
   state: GpsState;
   hAcc?: number | null;
@@ -21,12 +22,23 @@ export function GpsIcon({
   style?: CSSProperties;
   /** 있으면 누를 수 있는 버튼 (색은 그대로 GPS 상태) */
   onClick?: () => void;
+  /** 내 위치에서 벗어났을 때 버튼에 붙는 글자 ("내 위치로", 2026-11-18): 알약 모양으로 커진다 */
+  label?: string;
 }) {
   const acc = hAcc === null || hAcc === undefined ? '' : ` · 오차 ${Math.round(Math.min(hAcc, 999))}m`;
   if (onClick) {
     return (
-      <button type="button" className={className} style={style} aria-label={`내 위치로 (GPS ${WORD[state]}${acc})`} data-gps={state} onClick={onClick}>
-        <IconGps size={22} color={COLOR[state]} />
+      <button type="button" className={`${className}${label ? ' gps-pill' : ''}`} style={style} aria-label={`내 위치로 (GPS ${WORD[state]}${acc})`} data-gps={state} onClick={onClick}>
+        {label ? (
+          <>
+            <span className="gps-dot" aria-hidden="true">
+              <IconGps size={18} color={COLOR[state]} />
+            </span>
+            <span aria-hidden="true">{label}</span>
+          </>
+        ) : (
+          <IconGps size={22} color={COLOR[state]} />
+        )}
       </button>
     );
   }

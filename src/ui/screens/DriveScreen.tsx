@@ -158,10 +158,27 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   // 비틀어 돌린 방위는 이번 주행 동안만 (나침반을 누르면 다시 진행 방향 위)
   const [manualBearing, setManualBearing] = useState<number | null>(null);
   const onZoomEnd = (z: number) => updateSettings({ driveZoom: driveZoomOf(z) });
+  // 한 손가락으로 끌어 둘러보기 (2026-11-18 "메인·주행 똑같이"): 벗어나면 GPS 버튼이 "내 위치로", 누르거나 3초 뒤 돌아오면
+  // 위치·확대(평소 주행 크기)·방향(나침반 보기대로)이 원래대로. 둘러보는 중의 + / − 는 잠깐만
+  const [away, setAway] = useState(false);
+  const [recenter, setRecenter] = useState(0);
+  const [nudge, setNudge] = useState<{ seq: number; d: number } | null>(null);
+  const onAway = (a: boolean) => {
+    setAway(a);
+    if (!a) setManualBearing(null);
+  };
+  const toMe = () => {
+    setManualBearing(null);
+    setRecenter((n) => n + 1);
+  };
+  const zoomStep = (d: number) => {
+    if (away) setNudge((n) => ({ seq: (n?.seq ?? 0) + 1, d }));
+    else updateSettings({ driveZoom: driveZoomOf(settings.driveZoom + d) });
+  };
 
   const onPointerDown = (e: React.PointerEvent) => {
     // 칸 터치·버튼은 두 번 탭(화면 모드 바꾸기)으로 치지 않는다
-    if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .replay-bar, .slot-btn, .map-zoom, .map-group')) return;
+    if ((e.target as HTMLElement).closest('.end-btn, .map-compass, .map-gps, .replay-bar, .slot-btn, .map-zoom, .map-group')) return;
     const now = Date.now();
     const prev = lastTap.current;
     if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < 40) {
@@ -170,6 +187,12 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
       return;
     }
     lastTap.current = { t: now, x: e.clientX, y: e.clientY };
+  };
+
+  // 끌었으면 두 번 탭으로 치지 않는다 (지도를 끈 뒤 바로 누른 것으로 화면 모드가 바뀌지 않게)
+  const onPointerMove = (e: React.PointerEvent) => {
+    const prev = lastTap.current;
+    if (prev && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) > 12) lastTap.current = null;
   };
 
   const end = (tall: boolean) => (
@@ -215,7 +238,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
 
   if (mode === 'minimal') {
     return (
-      <div className="drive mode-minimal" onPointerDown={onPointerDown} data-testid="drive">
+      <div className="drive mode-minimal" onPointerDown={onPointerDown} onPointerMove={onPointerMove} data-testid="drive">
         <div className="drive-pad wide">
           <div className="minimal-top">
             <div className="card-col" style={{ gap: 2 }}>
@@ -284,7 +307,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   if (mode === 'dashboard') {
     const best = [st?.bestLapMs ?? null, refLap?.lapTimeMs ?? null].filter((v): v is number => v !== null);
     return (
-      <div className="drive mode-dashboard" onPointerDown={onPointerDown} data-testid="drive">
+      <div className="drive mode-dashboard" onPointerDown={onPointerDown} onPointerMove={onPointerMove} data-testid="drive">
         <div className="drive-pad wide dash">
           <div className={`dash-delta delta-panel full ${offM !== null ? '' : h.cls}`}>
             {offM !== null ? (
@@ -393,7 +416,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   const mapRot = manual !== null ? (manual * Math.PI) / 180 : mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
   return (
     // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
-    <div className="drive mode-map" onPointerDown={onPointerDown} data-testid="drive">
+    <div className="drive mode-map" onPointerDown={onPointerDown} onPointerMove={onPointerMove} data-testid="drive">
       <div className="drive-map" ref={mapRef}>
         {/* 지도는 화면 주사율로 따로 그린다 (사용자 요청 "지도가 뚝뚝 끊긴다"). 바탕 지도(OSM)는 설정으로 끔, 통신이 없으면 타일 없이 */}
         <LiveMap
@@ -414,6 +437,9 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
           bearing={manual}
           onZoomEnd={onZoomEnd}
           onBearing={setManualBearing}
+          onAway={onAway}
+          recenter={recenter}
+          zoomNudge={nudge}
         />
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
         <MapViewButton
@@ -427,13 +453,13 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
           }}
           style={{ top: ins.top + 10 }}
         />
-        <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 10 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} />
+        <GpsIcon className="gps-icon map-gps" style={{ top: ins.top + 10 }} state={gpsStateOf(snap)} hAcc={snap?.gps.hAcc} label={away ? '내 위치로' : undefined} onClick={toMe} />
         {/* 지도 확대·축소 (사용자 요청 "주행 모드중 지도 축소나 확대"): 단계는 설정에 남는다 */}
         <div className="map-zoom" style={{ top: ins.top + 62 }}>
-          <button type="button" aria-label="지도 확대" disabled={settings.driveZoom >= DRIVE_ZOOM_MAX} onClick={() => updateSettings({ driveZoom: driveZoomOf(settings.driveZoom + 1) })}>
+          <button type="button" aria-label="지도 확대" disabled={!away && settings.driveZoom >= DRIVE_ZOOM_MAX} onClick={() => zoomStep(1)}>
             +
           </button>
-          <button type="button" aria-label="지도 축소" disabled={settings.driveZoom <= DRIVE_ZOOM_MIN} onClick={() => updateSettings({ driveZoom: driveZoomOf(settings.driveZoom - 1) })}>
+          <button type="button" aria-label="지도 축소" disabled={!away && settings.driveZoom <= DRIVE_ZOOM_MIN} onClick={() => zoomStep(-1)}>
             −
           </button>
         </div>

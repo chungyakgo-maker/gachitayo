@@ -37,6 +37,11 @@ export interface MainMapApi {
   setRoute(points: ReadonlyArray<readonly [number, number]> | null, dest: { lat: number; lon: number } | null): void;
   /** 길게 눌러 고르기 (목적지 고르기). null이면 끈다 */
   onLongPress(cb: ((lat: number, lon: number) => void) | null): void;
+  /** 지도 상태 알림 (2026-11-18 "메인·주행 똑같이"): away = 내 위치를 따라가지 않음(손으로 옮김·친구·경로 보기) → GPS 버튼이 "내 위치로",
+   *  bearing = 지도 위쪽 방위(°, 돌렸으면 나침반). null이면 끈다 */
+  onView?(cb: ((v: { away: boolean; bearing: number }) => void) | null): void;
+  /** 돌린 지도를 북쪽 위로 */
+  resetNorth?(): void;
   destroy(): void;
 }
 

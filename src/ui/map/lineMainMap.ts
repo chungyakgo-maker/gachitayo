@@ -18,7 +18,8 @@ const STALE_MS = 30_000;
 const ME_LABEL_BELOW_PX = 12;
 
 export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?: (shown: boolean) => void): MainMapApi {
-  const map = newLineMap(el, cfg);
+  // 두 손가락 비틀기로 돌리기 (주행 지도와 같게, 2026-11-18)
+  const map = newLineMap(el, cfg, { rotate: true });
   let loaded = false;
   let course: CourseLayers | null = null;
   let courseKey: string | null = null;
@@ -40,14 +41,28 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
   let routeKey = '';
   let destMarker: Marker | null = null;
   let detachPress: (() => void) | null = null;
+  let viewCb: ((v: { away: boolean; bearing: number }) => void) | null = null;
+  let told = '';
+  /** GPS 버튼("내 위치로")·나침반에 알린다 (바뀐 때만) */
+  const report = () => {
+    const b = map.getBearing();
+    const key = `${userMoved}:${Math.round(b * 10)}`;
+    if (!viewCb || key === told) return;
+    told = key;
+    viewCb({ away: userMoved, bearing: b });
+  };
 
   // 손으로 옮기거나 확대하면 따라가기를 멈춘다 (코드로 옮길 때는 originalEvent가 없다)
   map.on('dragstart', () => {
     userMoved = true;
+    report();
   });
   map.on('zoomstart', (e) => {
     if (e.originalEvent) userMoved = true;
+    report();
   });
+  map.on('rotate', report);
+  map.on('rotateend', report);
 
   const pad = (n: number, extraTop = 0) => ({ top: n + inset.top + extraTop, bottom: n + inset.bottom, left: n, right: n });
 
@@ -118,6 +133,7 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
     if (!routePts || routePts.length < 2) return;
     // 경로가 다 보이게, 그 뒤로는 내 위치를 따라가지 않는다 (GPS 아이콘을 누르면 다시)
     userMoved = true;
+    report();
     map.resize();
     map.fitBounds(boundsOf(routePts.map(([lat, lon]) => [lat, lon] as [number, number])), { padding: pad(44, PIN_TOP_PX), maxZoom: lineZoom(17), duration: 0 });
   }
@@ -206,6 +222,7 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       if (courseChanged || (firstFix && !userMoved)) {
         if (courseChanged) userMoved = false;
         fit(c, me);
+        report();
       } else if (me && !c && !userMoved) {
         // 코스가 없으면 내 위치를 따라간다
         map.jumpTo({ center: [me.lon, me.lat], padding: pad(0) });
@@ -237,12 +254,23 @@ export function createLineMainMap(el: HTMLElement, cfg: LineMapConfig, onTiles?:
       if (me) pts.push([me.lat, me.lon]);
       if (pts.length === 0) return;
       userMoved = true; // 친구를 보는 동안은 내 위치를 따라가지 않는다 (GPS 아이콘을 누르면 다시)
+      report();
       if (pts.length === 1) map.jumpTo({ center: [pts[0]![1], pts[0]![0]], zoom: lineZoom(16), padding: pad(0) });
       else map.fitBounds(boundsOf(pts), { padding: pad(56), maxZoom: lineZoom(16), duration: 0 });
     },
     locate(me) {
+      // 내 위치로 (2026-11-18): 내 위치 · 기본 확대 · 북쪽 위
       userMoved = false;
-      map.jumpTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), lineZoom(16)), padding: pad(0) });
+      map.easeTo({ center: [me.lon, me.lat], zoom: lineZoom(16), bearing: 0, padding: pad(0), duration: 300 });
+      report();
+    },
+    onView(cb) {
+      viewCb = cb;
+      told = '';
+      report();
+    },
+    resetNorth() {
+      map.easeTo({ bearing: 0, duration: 300 });
     },
     setInsets(top, bottom) {
       if (top === inset.top && bottom === inset.bottom) return;

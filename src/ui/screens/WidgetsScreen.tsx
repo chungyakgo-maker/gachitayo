@@ -12,6 +12,8 @@ const SAMPLE: Record<Exclude<WidgetId, 'pace' | 'none'>, string> = {
   vmax: '186 km/h',
   lapno: '랩 4',
   gap: '2.4초',
+  dist: '23.4 km',
+  avg: '58 km/h',
 };
 const IDS = Object.keys(WIDGET_LABEL) as WidgetId[];
 

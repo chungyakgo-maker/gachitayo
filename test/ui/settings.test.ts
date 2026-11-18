@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSettings, setWidget, topSummary, updateSettings, DEFAULT_SETTINGS } from '../../src/app/settings';
+import { getSettings, setWidget, topSummary, updateSettings, DEFAULT_SETTINGS, WIDGET_LABEL } from '../../src/app/settings';
 
 describe('설정 (폰 보관)', () => {
   beforeEach(() => {
@@ -46,6 +46,16 @@ describe('설정 (폰 보관)', () => {
       expect((await import('../../src/app/settings')).getSettings().carMarker).toBe(want);
     }
     localStorage.removeItem('gachitayo.settings');
+  });
+
+  it('상단 칸에 주행 거리·평균 속도를 고를 수 있고, 칸을 눌러 바꾸는 순서에도 들어간다 (2026-11-18)', () => {
+    expect(WIDGET_LABEL.dist).toBe('주행 거리');
+    expect(WIDGET_LABEL.avg).toBe('평균 속도');
+    expect(nextWidget(['gap', 'g'], 0, { hasCourse: true, hasFriend: true })).toEqual(['dist', 'g']);
+    expect(nextWidget(['dist', 'g'], 0, { hasCourse: true, hasFriend: true })).toEqual(['avg', 'g']);
+    expect(nextWidget(['avg', 'pace'], 0, { hasCourse: true, hasFriend: true })).toEqual(['g', 'pace']);
+    updateSettings({ widgets: ['dist', 'avg'] });
+    expect(getSettings().widgets).toEqual(['dist', 'avg']);
   });
 
   it('바탕 지도는 저장된 값이 false일 때만 끈다', () => {
@@ -123,8 +133,10 @@ describe('주행 중 칸을 누르면 다음 값으로', () => {
     expect(nextWidget(['g', 'pace'], 0, on)).toEqual(['speed', 'pace']);
     expect(nextWidget(['g', 'pace'], 1, on)).toEqual(['g', 'speed']);
     expect(nextWidget(['g', 'lapno'], 1, on)).toEqual(['g', 'gap']);
-    expect(nextWidget(['speed', 'gap'], 1, on)).toEqual(['speed', 'g']);
-    expect(nextWidget(['g', 'lapno'], 1, { hasCourse: true, hasFriend: false })).toEqual(['g', 'pace']);
+    // 앞 친구 간격 다음은 주행 거리·평균 속도 (2026-11-18), 그다음 처음(G미터)으로
+    expect(nextWidget(['speed', 'gap'], 1, on)).toEqual(['speed', 'dist']);
+    expect(nextWidget(['g', 'lapno'], 1, { hasCourse: true, hasFriend: false })).toEqual(['g', 'dist']);
+    expect(nextWidget(['speed', 'avg'], 1, on)).toEqual(['speed', 'g']);
     expect(nextWidget(['g', 'none'], 1, { hasCourse: false, hasFriend: false })).toEqual(['g', 'speed']);
     expect(nextWidget(['none', 'none'], 0, on)).toEqual(['g', 'none']);
   });

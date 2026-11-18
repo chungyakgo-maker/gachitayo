@@ -65,3 +65,20 @@ export function upBearing(view: MapViewMode, manual: number | null, headPsi: num
   if (manual !== null) return manual;
   return view === 'heading' && headPsi !== null ? headingToBearing(headPsi) : null;
 }
+
+/**
+ * 화면에서 (dsx, dsy) px 만큼 → 지도 평면에서 몇 m (한 손가락 끌기, 2026-11-18).
+ * P: 지금 그리는 지도의 평면 → 화면 변환 (확대·돌림 포함). at 근처에서 1 m 씩 옮겨 본 기울기를 거꾸로 푼다
+ */
+export function screenToLocal(P: (x: number, y: number) => [number, number], at: readonly [number, number], dsx: number, dsy: number): [number, number] {
+  const [x0, y0] = P(at[0], at[1]);
+  const [x1, y1] = P(at[0] + 1, at[1]);
+  const [x2, y2] = P(at[0], at[1] + 1);
+  const a = x1 - x0;
+  const c = y1 - y0;
+  const b = x2 - x0;
+  const d = y2 - y0;
+  const det = a * d - b * c;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return [0, 0];
+  return [(d * dsx - b * dsy) / det, (-c * dsx + a * dsy) / det];
+}

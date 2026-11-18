@@ -56,6 +56,8 @@ export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, 
   const ctl = useRef<MainMapApi | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
   const [tiles, setTiles] = useState(false);
+  // 내 위치에서 벗어났는지·돌린 방위 (2026-11-18 "메인·주행 똑같이"): GPS 버튼이 "내 위치로", 돌렸으면 왼쪽 위 나침반
+  const [view, setView] = useState<{ away: boolean; bearing: number }>({ away: false, bearing: 0 });
 
   useEffect(() => {
     let alive = true;
@@ -121,6 +123,13 @@ export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, 
     ctl.current?.onLongPress(wantPress ? (lat, lon) => press.current?.(lat, lon) : null);
     return () => ctl.current?.onLongPress(null);
   }, [state, wantPress]);
+  useEffect(() => {
+    if (state !== 'ready') return;
+    ctl.current?.onView?.(setView);
+    return () => ctl.current?.onView?.(null);
+  }, [state]);
+  // −180 ~ 180 으로 (359° 도 거의 북쪽 위)
+  const tilt = ((((view.bearing + 180) % 360) + 360) % 360) - 180;
 
   if (state === 'failed') {
     const local = me ? toLocal(course?.origin ?? { lat: me.lat, lon: me.lon }, me.lat, me.lon) : null;
@@ -140,7 +149,20 @@ export function MainMap({ course, courses = NO_COURSES, showCourses = true, me, 
           위치 공유 중인 친구 {friends.length}명
         </button>
       )}
-      {gps && <GpsIcon className="gps-icon map-gps main" state={gps} hAcc={gpsAcc} onClick={() => me && ctl.current?.locate(me)} />}
+      {Math.abs(tilt) > 0.5 && (
+        <button type="button" className="map-compass main" aria-label="지도가 돌아가 있어요. 누르면 북쪽 위로" onClick={() => ctl.current?.resetNorth?.()}>
+          <span className="dial">
+            <svg width={20} height={20} viewBox="-15 -15 30 30" aria-hidden="true" style={{ transform: `rotate(${-tilt}deg)` }}>
+              <path d="M0 -12L4.5 0L-4.5 0Z" fill="#ff5b4f" />
+              <path d="M0 12L4.5 0L-4.5 0Z" fill="#8a9199" />
+            </svg>
+            <span className="n" style={{ transform: `rotate(${-tilt}deg) translateY(-11px) rotate(${tilt}deg)` }}>
+              N
+            </span>
+          </span>
+        </button>
+      )}
+      {gps && <GpsIcon className="gps-icon map-gps main" state={gps} hAcc={gpsAcc} label={view.away ? '내 위치로' : undefined} onClick={() => me && ctl.current?.locate(me)} />}
       {children}
     </div>
   );
