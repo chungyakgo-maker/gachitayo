@@ -50,4 +50,11 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(release).toMatch(/VITE_API_URL: https:\/\/gachitayo-api\.chungyakgo\.workers\.dev/);
     expect(release).toMatch(/bundle_identifier: kr\.dgo\.app/);
   });
+
+  it('웹 배포도 위치 공유·간격 끔 (세영 "웹도 끔")', () => {
+    const ci = readFileSync(new URL('.github/workflows/ci.yml', root), 'utf8');
+    const pages = ci.slice(ci.indexOf('GitHub Pages 배포'), ci.indexOf('서버(Worker·D1·R2) 배포'));
+    expect(pages).toMatch(/VITE_LOCATION_SHARING: 'off'/);
+    expect(pages).toMatch(/VITE_LIVE_GAP: 'off'/);
+  });
 });

@@ -458,7 +458,7 @@ export function DriveView({ snap, gap: gapIn = null, front: frontIn = null, frie
         </div>
         {/* 그룹 주행 방 (방장은 주행 중에도 목적지를 정해 모두에게 보낸다) */}
         {groupOrder && (
-          <a className="map-group" href="#/group" style={{ top: ins.top + 62 }} aria-label="그룹 주행 방 열기">
+          <a className="map-group" href="#/group" style={{ top: ins.top + 62 }} aria-label="팀 대기실 열기">
             방
           </a>
         )}
@@ -543,7 +543,7 @@ export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targ
 /** 그룹 주행 순서 줄: 번호·이름·색, 나는 밝게 */
 function GroupOrderStrip({ order }: { order: NonNullable<DriveViewProps['groupOrder']> }) {
   return (
-    <div className="group-order" role="list" aria-label="그룹 주행 순서">
+    <div className="group-order" role="list" aria-label="주행 순서">
       {order.map((m) => (
         <span key={m.no} role="listitem" className={`group-car${m.me ? ' me' : ''}`} style={{ borderColor: m.color }}>
           <i style={{ background: m.color }}>{m.no}</i>

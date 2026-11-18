@@ -122,7 +122,7 @@ export function groupErrorText(e: unknown): string {
 
 function token(): string {
   const auth = getAuth();
-  if (!auth) throw new Error('계정이 있어야 그룹 주행을 할 수 있어요');
+  if (!auth) throw new Error('계정이 있어야 팀 주행을 할 수 있어요');
   return auth.token;
 }
 

@@ -29,6 +29,12 @@ describe('약관 페이지 (사양서 13.3)', () => {
       expect(html).toContain('시험판');
       expect(html).toMatch(/정식 앱[^<]*다른 이용자와 위치를 주고받지 않/);
     }
+    // 웹도 위치 공유를 끈다 (세영 "웹도 끔"): 시험판은 TestFlight 만
+    for (const html of [pv, lt]) {
+      expect(html).toContain('시험판(TestFlight)');
+      expect(html).not.toContain('웹·TestFlight');
+      expect(html).toMatch(/웹[^<]*정식 앱과 같/);
+    }
     // 팀 목적지: 정식 앱 방장은 목적지만 보낸다 (경로는 각자 위치에서)
     expect(pv).toMatch(/목적지만/);
     expect(lt).toMatch(/목적지만/);
@@ -58,7 +64,7 @@ describe('웹 페이지 이름·공유 미리보기', () => {
 
   it('공유 미리보기: 제목·설명·새 로고 그림(절대 주소, 1200×630)', () => {
     expect(meta('og:title')).toBe('디고: 드라이브 코스 추천');
-    expect(meta('og:description')).toBe('와인딩 랩타이머 · 그룹 주행');
+    expect(meta('og:description')).toBe('와인딩 랩타이머 · 팀 주행');
     expect(meta('og:image')).toBe('https://chungyakgo-maker.github.io/gachitayo/og-image.png');
     expect(meta('og:image:width')).toBe('1200');
     expect(meta('og:image:height')).toBe('630');
