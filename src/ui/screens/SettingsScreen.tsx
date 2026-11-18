@@ -21,6 +21,8 @@ import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
 import { FriendsSection } from '../components/FriendsSection';
+import { ProfilePhoto } from '../components/ProfilePhoto';
+import { TeamsSection } from '../components/TeamsSection';
 import { Tabbed } from '../components/TabBar';
 import { formatKst } from '../format';
 import { IconCloud, IconWarn } from '../icons';
@@ -154,6 +156,7 @@ function AccountSection() {
   const changed = name.trim() !== (acc.nickname ?? '');
   return (
     <section className="card-col" style={{ gap: 8 }}>
+      <ProfilePhoto />
       <label htmlFor="settings-nickname" className="label">
         닉네임
       </label>
@@ -284,6 +287,7 @@ export function SettingsScreen() {
         </header>
         <AccountSection />
         <FriendsSection />
+        <TeamsSection />
         <SyncSection />
         <section className="card-col" style={{ gap: 8 }} aria-label="기본 화면 모드">
           <span className="label">기본 화면 모드</span>

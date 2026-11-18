@@ -26,7 +26,18 @@ import { KakaoAuthScreen } from './screens/KakaoAuthScreen';
 import { GroupScreen } from './screens/GroupScreen';
 import { JoinScreen } from './screens/JoinScreen';
 import { RouteOfferSheet } from './components/RouteOfferSheet';
-import { rememberPendingJoin, takePendingJoin } from '../app/pendingJoin';
+import { rememberPendingLink, takePendingLink } from '../app/pendingJoin';
+import { TeamEditScreen } from './screens/TeamEditScreen';
+import { TeamDriveLinkScreen } from './screens/TeamDriveLinkScreen';
+import { FriendInviteScreen } from './screens/FriendInviteScreen';
+
+const safeDecode = (v: string): string => {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+};
 
 /** 경로 → 화면 */
 function route(path: string): ReactElement {
@@ -37,6 +48,14 @@ function route(path: string): ReactElement {
   const course = /^\/course\/([^/]+)$/.exec(path);
   if (course) return <CourseDetailScreen courseId={decodeURIComponent(course[1]!)} />;
   if (path === '/course-new') return <NewCourseScreen />;
+  // 팀 (설계 2026-11-18 team-drive): 만들기·편집·보기, 팀 주행 알리기 링크, 카톡 친구 초대 링크
+  if (path === '/team/new') return <TeamEditScreen teamId={null} />;
+  const teamDrive = /^\/team\/([0-9a-f-]{36})\/drive$/.exec(path);
+  if (teamDrive) return <TeamDriveLinkScreen teamId={teamDrive[1]!} />;
+  const team = /^\/team\/([0-9a-f-]{36})$/.exec(path);
+  if (team) return <TeamEditScreen key={team[1]} teamId={team[1]!} />;
+  const friend = /^\/friend\/([^/]+)(?:\/([^/]*))?$/.exec(path);
+  if (friend) return <FriendInviteScreen code={decodeURIComponent(friend[1]!)} name={safeDecode(friend[2] ?? '')} />;
   const join = /^\/join\/([^/]+)$/.exec(path);
   if (join) return <JoinScreen code={decodeURIComponent(join[1]!)} />;
   switch (path) {
@@ -84,13 +103,13 @@ export function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('palette-blue-orange', deltaPalette === 'blue-orange');
   }, [deltaPalette]);
-  // 카톡 초대 링크로 처음 열었으면 첫 실행 안내(또는 카카오 로그인)를 마친 뒤 그 방으로 (설계 2026-11-16 group-drive)
+  // 카톡으로 받은 링크(방 초대·친구 초대·팀 주행 알리기)로 처음 열었으면 첫 실행 안내(또는 카카오 로그인)를 마친 뒤 그 화면으로
+  // (설계 2026-11-16 group-drive, 2026-11-18 team-drive)
   useEffect(() => {
-    const m = /^\/join\/(\d{6})$/.exec(path);
-    if (m && !onboarded) rememberPendingJoin(m[1]!);
+    if (!onboarded) rememberPendingLink(path);
     if (onboarded && path === '/') {
-      const code = takePendingJoin();
-      if (code) window.location.hash = `#/join/${code}`;
+      const link = takePendingLink();
+      if (link) window.location.hash = `#${link}`;
     }
   }, [path, onboarded]);
   // 사양서 9장: 다시 열면 중단된 기록을 이어서 할지 묻는다.

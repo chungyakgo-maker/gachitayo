@@ -26,7 +26,9 @@ import { isFavorite, tagsOf, useCoursePrefs } from '../../app/coursePrefs';
 import { usePopular } from '../../app/popular';
 import { handOffDestination } from '../../app/routeNav';
 import { useGroup } from '../../app/group';
-import { GroupSheet } from '../components/GroupSheet';
+import { TeamSheet } from '../components/TeamSheet';
+import { TeamNotice } from '../components/TeamNotice';
+import { watchTeams } from '../../app/teams';
 
 export function MainScreen() {
   const { needRefresh, update } = usePwaUpdate();
@@ -74,6 +76,8 @@ export function MainScreen() {
   // 그룹 주행: 방에 들어가 있으면 맨 위에 방 바로 가기
   const group = useGroup();
   const [groupSheet, setGroupSheet] = useState(false);
+  // 팀 주행 (설계 2026-11-18 team-drive): 메인이 보이는 동안 내 팀이 주행을 열었는지 30초마다 본다 (알림이 없어서)
+  useEffect(() => (acc.status === 'ready' ? watchTeams() : undefined), [acc.status]);
   const from = fix ? { lat: fix.lat, lon: fix.lon } : null;
 
   // 지도가 화면 전체, 위 카드·아래 탭은 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
@@ -103,9 +107,10 @@ export function MainScreen() {
         />
         {group.room && (
           <a className="notice" href="#/group" style={{ textDecoration: 'none' }}>
-            그룹 주행 방 · {group.room.members.length}명 · 열기
+            {group.room.teamName ? `${group.room.teamName} 대기실` : '그룹 주행 방'} · {group.room.members.length}명 · 열기
           </a>
         )}
+        <TeamNotice />
         {permission === 'denied' && <span className="notice">위치 권한이 꺼져 있어요. 설정에서 허용해 주세요</span>}
         {acc.status === 'none' && acc.lost && (
           <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>
@@ -202,7 +207,7 @@ export function MainScreen() {
           }}
         />
       )}
-      {groupSheet && <GroupSheet onClose={() => setGroupSheet(false)} />}
+      {groupSheet && <TeamSheet onClose={() => setGroupSheet(false)} />}
     </Tabbed>
   );
 }
