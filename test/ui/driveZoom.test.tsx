@@ -54,8 +54,9 @@ describe('주행 지도 + / −', () => {
     expect(onCycle).not.toHaveBeenCalled();
   });
 
-  it('pinching follows the fingers continuously (no steps) and keeps the zoom when the fingers lift', () => {
-    const { container, rerender } = render(<DriveView {...props()} />);
+  it('pinching zooms with the fingers like the main map and is browsing: "내 위치로" shows, the saved driving zoom stays', () => {
+    updateSettings({ mapView: 'follow' });
+    const { container } = render(<DriveView {...props()} />);
     const map = container.querySelector('.drive-map .replay-map, .drive-map .live-map')!;
     const t = (d: number) => [
       { clientX: 100, clientY: 300, identifier: 0 },
@@ -63,15 +64,12 @@ describe('주행 지도 + / −', () => {
     ];
     fireEvent.touchStart(map, { touches: t(100) });
     fireEvent.touchMove(map, { touches: t(141.421356) });
-    fireEvent.touchMove(map, { touches: t(200) });
     fireEvent.touchMove(map, { touches: t(282.842712) });
     fireEvent.touchEnd(map, { touches: [] });
-    expect(getSettings().driveZoom).toBeCloseTo(1.5, 2);
-    rerender(<DriveView {...props()} />);
-    fireEvent.touchStart(map, { touches: t(100) });
-    fireEvent.touchMove(map, { touches: t(70.710678) });
-    fireEvent.touchEnd(map, { touches: [] });
-    expect(getSettings().driveZoom).toBeCloseTo(1, 2);
+    expect(screen.getByRole('button', { name: /^내 위치로/ })).toHaveTextContent('내 위치로');
+    expect(getSettings().driveZoom).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: /^내 위치로/ }));
+    expect(screen.getByRole('button', { name: /^내 위치로/ })).not.toHaveTextContent('내 위치로');
     expect(onCycle).not.toHaveBeenCalled();
   });
 
@@ -98,7 +96,7 @@ describe('두 손가락으로 지도 돌리기', () => {
   };
   const compass = () => screen.getByRole('button', { name: /^지도 보기/ });
 
-  it('진행 방향 위에서 비틀면 자동 회전을 멈추고 그 방향 그대로, 나침반을 누르면 다시 진행 방향 위', () => {
+  it('비틀면 메인 지도처럼 돌아가고 둘러보기("내 위치로"), GPS 버튼을 누르면 다시 진행 방향 위로', () => {
     updateSettings({ mapView: 'heading' });
     const { container, rerender } = render(<DriveView {...props()} />);
     const map = container.querySelector('.drive-map .replay-map, .drive-map .live-map')!;
@@ -106,25 +104,28 @@ describe('두 손가락으로 지도 돌리기', () => {
     fireEvent.touchMove(map, { touches: t(15) });
     fireEvent.touchMove(map, { touches: t(45) });
     fireEvent.touchEnd(map, { touches: [] });
-    expect(compass()).toHaveAccessibleName('지도 보기: 손으로 돌림 (누르면 진행 방향 위)');
-    fireEvent.click(compass());
+    const gps = () => screen.getByRole('button', { name: /^내 위치로/ });
+    expect(gps()).toHaveTextContent('내 위치로');
+    fireEvent.click(gps());
     rerender(<DriveView {...props()} />);
+    expect(gps()).not.toHaveTextContent('내 위치로');
     expect(getSettings().mapView).toBe('heading');
     expect(compass()).toHaveAccessibleName('지도 보기: 진행 방향 위 (누르면 전체 코스)');
     expect(onCycle).not.toHaveBeenCalled();
   });
 
-  it('나를 가운데(북쪽 위)에서도 돌릴 수 있고, 나침반을 누르면 진행 방향 위로', () => {
+  it('둘러보는 중에 나침반으로 보기를 바꾸면 내 위치로 돌아와 그 보기로', () => {
     updateSettings({ mapView: 'follow' });
     const { container, rerender } = render(<DriveView {...props()} />);
     const map = container.querySelector('.drive-map .replay-map, .drive-map .live-map')!;
     fireEvent.touchStart(map, { touches: t(0) });
     fireEvent.touchMove(map, { touches: t(-40) });
     fireEvent.touchEnd(map, { touches: [] });
-    expect(compass()).toHaveAccessibleName('지도 보기: 손으로 돌림 (누르면 진행 방향 위)');
+    expect(screen.getByRole('button', { name: /^내 위치로/ })).toHaveTextContent('내 위치로');
     fireEvent.click(compass());
     rerender(<DriveView {...props()} />);
     expect(getSettings().mapView).toBe('heading');
+    expect(screen.getByRole('button', { name: /^내 위치로/ })).not.toHaveTextContent('내 위치로');
   });
 
   it('전체 코스 보기에서는 돌리지 않는다', () => {
@@ -199,25 +200,6 @@ describe('주행 지도 끌어서 둘러보기', () => {
     expect(getSettings().driveZoom).toBe(0.5);
   });
 
-  it('손으로 돌려 둔 방향도 GPS 버튼을 누르면 나침반 보기대로', () => {
-    updateSettings({ mapView: 'heading' });
-    const { container, rerender } = render(<DriveView {...props()} />);
-    const m = mapEl(container);
-    const t = (deg: number) => {
-      const a = (deg * Math.PI) / 180;
-      return [
-        { clientX: 200 - Math.cos(a) * 60, clientY: 300 - Math.sin(a) * 60, identifier: 0 },
-        { clientX: 200 + Math.cos(a) * 60, clientY: 300 + Math.sin(a) * 60, identifier: 1 },
-      ];
-    };
-    fireEvent.touchStart(m, { touches: t(0) });
-    fireEvent.touchMove(m, { touches: t(40) });
-    fireEvent.touchEnd(m, { touches: [] });
-    expect(screen.getByRole('button', { name: /^지도 보기/ })).toHaveAccessibleName('지도 보기: 손으로 돌림 (누르면 진행 방향 위)');
-    fireEvent.click(gps());
-    rerender(<DriveView {...props()} />);
-    expect(screen.getByRole('button', { name: /^지도 보기/ })).toHaveAccessibleName('지도 보기: 진행 방향 위 (누르면 전체 코스)');
-  });
 
   it('끌기 뒤에 바로 누른 것은 두 번 탭(화면 모드 바꾸기)으로 치지 않는다', () => {
     updateSettings({ mapView: 'follow' });

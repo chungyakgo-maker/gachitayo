@@ -154,23 +154,14 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   const tapTop = onTop ?? (() => updateSettings(nextTop(settings, gap !== null)));
   const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settings.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
 
-  // 주행 지도 두 손가락 (사용자 요청 2026-11-17): 확대는 손가락을 따라 연속으로(LiveMap), 손을 떼면 설정에 남긴다.
-  // 비틀어 돌린 방위는 이번 주행 동안만 (나침반을 누르면 다시 진행 방향 위)
-  const [manualBearing, setManualBearing] = useState<number | null>(null);
-  const onZoomEnd = (z: number) => updateSettings({ driveZoom: driveZoomOf(z) });
-  // 한 손가락으로 끌어 둘러보기 (2026-11-18 "메인·주행 똑같이"): 벗어나면 GPS 버튼이 "내 위치로", 누르거나 3초 뒤 돌아오면
-  // 위치·확대(평소 주행 크기)·방향(나침반 보기대로)이 원래대로. 둘러보는 중의 + / − 는 잠깐만
+  // 주행 지도 손 동작은 메인 지도와 같다 (2026-11-18 "주행중일땐 여전히 메인지도랑 동작이 다르잖아"): 끌기·두 손가락 확대·돌리기는
+  // 모두 둘러보기 — GPS 버튼이 "내 위치로", 누르거나 3초 뒤 돌아오면 위치·확대(평소 주행 크기, + / − 로 정함)·방향(나침반 보기대로)이 원래대로.
+  // 둘러보는 중의 + / − 는 잠깐만
   const [away, setAway] = useState(false);
   const [recenter, setRecenter] = useState(0);
   const [nudge, setNudge] = useState<{ seq: number; d: number } | null>(null);
-  const onAway = (a: boolean) => {
-    setAway(a);
-    if (!a) setManualBearing(null);
-  };
-  const toMe = () => {
-    setManualBearing(null);
-    setRecenter((n) => n + 1);
-  };
+  const onAway = (a: boolean) => setAway(a);
+  const toMe = () => setRecenter((n) => n + 1);
   const zoomStep = (d: number) => {
     if (away) setNudge((n) => ({ seq: (n?.seq ?? 0) + 1, d }));
     else updateSettings({ driveZoom: driveZoomOf(settings.driveZoom + d) });
@@ -411,9 +402,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
     const at = settings.widgets.indexOf('pace');
     slots[at >= 0 ? at : 1] = <OffCourseTile key="off" distM={offM} />;
   }
-  // 손으로 돌렸으면 그 방위 (전체 코스 보기는 늘 북쪽 위)
-  const manual = mapView !== 'fit' ? manualBearing : null;
-  const mapRot = manual !== null ? (manual * Math.PI) / 180 : mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
+  const mapRot = mapView === 'heading' && me && headPsi !== null ? Math.PI / 2 - headPsi : 0;
   return (
     // 지도가 화면 전체, 델타·고른 값·종료 버튼은 위에 얹는다. 내 위치는 가려지지 않은 영역의 가운데 (사용자 요청)
     <div className="drive mode-map" onPointerDown={onPointerDown} onPointerMove={onPointerMove} data-testid="drive">
@@ -434,9 +423,6 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
           speedKmh={st?.speedKmh ?? null}
           zoom={settings.driveZoom}
           marker={settings.carMarker}
-          bearing={manual}
-          onZoomEnd={onZoomEnd}
-          onBearing={setManualBearing}
           onAway={onAway}
           recenter={recenter}
           zoomNudge={nudge}
@@ -444,11 +430,10 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
         {/* 왼쪽 위 나침반(지도 보기), 오른쪽 위 GPS 아이콘: 가려지지 않은 지도의 위 모서리 */}
         <MapViewButton
           view={mapView}
-          manual={manual !== null}
           rot={mapRot}
           onChange={(v) => {
-            // 손으로 돌린 지도에서 누르면 다시 진행 방향 위(자동으로 돈다)
-            setManualBearing(null);
+            // 둘러보는 중에 보기를 바꾸면 내 위치로 돌아와 그 보기로
+            if (away) toMe();
             onMapView(v);
           }}
           style={{ top: ins.top + 10 }}
