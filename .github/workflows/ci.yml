@@ -82,6 +82,10 @@ jobs:
           VITE_API_URL: ${{ needs.deploy-worker.outputs.api_url || vars.VITE_API_URL || 'https://gachitayo-api.chungyakgo.workers.dev' }}
           # 그룹 주행 카톡 초대 카드 (카카오 JavaScript 키, 웹 페이지에 그대로 보이는 공개 키). 없으면 폰 공유 창·링크 복사
           VITE_KAKAO_JS_KEY: ${{ secrets.KAKAO_JS_KEY }}
+          # 웹도 정식 앱과 같게 위치 공유·앞 차 간격 끔 (세영 "웹도 끔", 설계 2026-11-18 official-build, src/features.ts).
+          # 위치 공유 시험은 TestFlight 테스트 빌드(Codemagic "디고 아이폰 → TestFlight")로만. 다시 켤 때는 이 두 줄을 지운다
+          VITE_LOCATION_SHARING: 'off'
+          VITE_LIVE_GAP: 'off'
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

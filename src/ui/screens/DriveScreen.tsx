@@ -1,6 +1,7 @@
 // 주행 화면 (사양서 8.4, 디자인 시안 DriveMap·DriveMinimal·DriveDashboard)
 // 두 번 탭하면 모드 전환(지도 → 미니멀 → 대시보드), 2초 길게 눌러 종료. 그 밖의 터치는 무시한다.
 // 지도 모드의 델타·고른 값·미니맵은 오버레이 그리기 함수(src/ui/overlay)로 캔버스에 그린다 (사양서 13.1 확장 지점).
+import { liveGap, locationSharing } from '../../features';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { useAccount } from '../../app/account';
 import { useFriends, watchFriendPositions } from '../../app/friends';
@@ -10,7 +11,7 @@ import { GapTracker } from '../../engine/live/gap';
 import { FriendMarker, type FriendRoad } from '../../engine/live/friendMotion';
 import { makePolyline } from '../../engine/course/polyline';
 import { cycleDriveMode, cycleReplaySpeed, endDrive, getDriveState, seekReplay, setReplayPlaying, useDrive, useLiveSnapshot, type DriveState } from '../../app/drive';
-import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN, driveZoomOf } from '../../app/settings';
+import { nextTop, nextWidget, updateSettings, useSettings, WIDGET_LABEL, type DriveMode, type MapViewMode, type Settings, type WidgetId, type CurveTint, DRIVE_ZOOM_MAX, DRIVE_ZOOM_MIN, driveZoomOf, effectiveSettings } from '../../app/settings';
 import type { LiveSnapshot } from '../../engine/live/livePipeline';
 import type { Course } from '../../types/course';
 import type { RefLapRecord } from '../../types/drive';
@@ -109,7 +110,13 @@ function WidgetCanvas({ id, frame, th }: { id: Exclude<WidgetId, 'pace' | 'none'
   return <OverlayCanvas className="tile" label={`${v.label} ${v.value}${v.unit ? ` ${v.unit}` : ''}`} draw={(ctx, w, h) => drawValueTile(ctx, w, h, v, th)} />;
 }
 
-export function DriveView({ snap, gap = null, front = null, friends = [], groupOrder = null, course, refLap, mode, settings, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, noRecord = false, nav = null, replayControls }: DriveViewProps) {
+export function DriveView({ snap, gap: gapIn = null, front: frontIn = null, friends: friendsIn = [], groupOrder = null, course, refLap, mode, settings: settingsIn, replay, error, onCycle, onEnd, onMapView = (v) => updateSettings({ mapView: v }), onTop, onSlot, noRecord = false, nav = null, replayControls }: DriveViewProps) {
+  // 정식 빌드(features.ts): 남의 위치는 받지도 않지만, 들어와도 지도에 그리지 않고(친구·팀원 점, 앞 차) 간격도 쓰지 않는다.
+  // 칸 설정은 읽을 때만 바꾼다 (친구 델타 → 베스트 델타, 앞 친구 간격 → 표시 안 함)
+  const gap = liveGap() ? gapIn : null;
+  const front = locationSharing() ? frontIn : null;
+  const friends = locationSharing() ? friendsIn : [];
+  const settings = effectiveSettings(settingsIn);
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   // 지도 모드: 위에 얹은 칸들이 지도를 가리는 높이 (다른 모드에서는 0)
   const mapRef = useRef<HTMLDivElement>(null);
@@ -151,8 +158,9 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
   }, [course, routeGuide]);
 
   // 주행 중 칸 터치로 바꾸기 (사용자 요청)
-  const tapTop = onTop ?? (() => updateSettings(nextTop(settings, gap !== null)));
-  const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settings.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
+  // 누르면 저장된 원래 값에서 다음으로 (정식 빌드에서 바꿔 읽은 값으로 저장하면 친구 델타·앞 친구 간격 설정이 지워졌다, 검토 지적)
+  const tapTop = onTop ?? (() => updateSettings(nextTop(settingsIn, gap !== null)));
+  const tapSlot = onSlot ?? ((i: 0 | 1) => updateSettings({ widgets: nextWidget(settingsIn.widgets, i, { hasCourse: pace !== null, hasFriend: gap !== null }) }));
 
   // 주행 지도 손 동작은 메인 지도와 같다 (2026-11-18 "주행중일땐 여전히 메인지도랑 동작이 다르잖아"): 끌기·두 손가락 확대·돌리기는
   // 모두 둘러보기 — GPS 버튼이 "내 위치로", 누르거나 3초 뒤 돌아오면 위치·확대(평소 주행 크기, + / − 로 정함)·방향(나침반 보기대로)이 원래대로.
@@ -450,7 +458,7 @@ export function DriveView({ snap, gap = null, front = null, friends = [], groupO
         </div>
         {/* 그룹 주행 방 (방장은 주행 중에도 목적지를 정해 모두에게 보낸다) */}
         {groupOrder && (
-          <a className="map-group" href="#/group" style={{ top: ins.top + 62 }} aria-label="그룹 주행 방 열기">
+          <a className="map-group" href="#/group" style={{ top: ins.top + 62 }} aria-label="팀 대기실 열기">
             방
           </a>
         )}
@@ -535,7 +543,7 @@ export function useFrontGap(snap: LiveSnapshot | null, follow: FollowState, targ
 /** 그룹 주행 순서 줄: 번호·이름·색, 나는 밝게 */
 function GroupOrderStrip({ order }: { order: NonNullable<DriveViewProps['groupOrder']> }) {
   return (
-    <div className="group-order" role="list" aria-label="그룹 주행 순서">
+    <div className="group-order" role="list" aria-label="주행 순서">
       {order.map((m) => (
         <span key={m.no} role="listitem" className={`group-car${m.me ? ' me' : ''}`} style={{ borderColor: m.color }}>
           <i style={{ background: m.color }}>{m.no}</i>

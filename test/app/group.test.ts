@@ -124,6 +124,56 @@ describe('그룹 주행 상태', () => {
     expect(socks[0]!.url).toBe(`wss://api.test/group/${ROOM().roomId}`);
   });
 
+  it('팀 주행: 방 id로 바로 들어가고, 팀 이름이 방 상태에 실린다', async () => {
+    fetchRoom = ROOM({ code: '', teamId: 'team-1', teamName: '북악 새벽팀' });
+    await group.enterGroupRoom(ROOM().roomId);
+    expect(calls[0]).toMatchObject({ method: 'GET', url: `https://api.test/api/rooms/${ROOM().roomId}` });
+    expect(group.getGroup().room).toMatchObject({ teamId: 'team-1', teamName: '북악 새벽팀' });
+    expect(socks[0]!.url).toBe(`wss://api.test/group/${ROOM().roomId}`);
+    msg({ type: 'state', ...ROOM({ code: '', teamId: 'team-1', teamName: '북악 새벽팀', gapS: 3 }) });
+    expect(group.getGroup().room).toMatchObject({ teamName: '북악 새벽팀', gapS: 3 });
+  });
+
+  it('다른 방에 있다가 팀 주행 방으로 들어가면 예전 방은 서버에서도 나간다 (검토 지적)', async () => {
+    await group.joinGroupRoom('482917');
+    const other = '22222222-2222-4222-8222-222222222222';
+    fetchRoom = ROOM({ roomId: other, code: '', teamId: 'team-1', teamName: '팀' });
+    await group.enterGroupRoom(other);
+    expect(calls).toContainEqual(expect.objectContaining({ method: 'POST', url: `https://api.test/api/rooms/${ROOM().roomId}/leave` }));
+    expect(group.getGroup().room?.teamId).toBe('team-1');
+  });
+
+  it('정식 빌드(위치 공유 끔): 팀 방에 붙어 순서·목적지는 받지만 내 위치는 안 보내고 남의 위치는 버린다', async () => {
+    vi.stubEnv('VITE_LOCATION_SHARING', 'off');
+    try {
+      await group.joinGroupRoom('482917');
+      h.phase = 'driving';
+      // 다른 테스트의 "마지막으로 보낸 시각"에 영향을 주지 않게 오래전 시각
+      h.sampleCb!({ kind: 'gps', s: { tFix: 1.0e12, lat: 37.5, lon: 127, speed: 10, heading: 90, hAcc: 5 } });
+      expect(socks[0]!.sent).toEqual([]);
+      msg({ type: 'pos', userId: 'host', t: 1.8e12, lat: 37.5, lon: 127, speed: 10, heading: 90, hAcc: 5 });
+      expect(group.getGroupPoints()).toEqual({});
+      msg({ type: 'state', ...ROOM({ gapS: 3 }) });
+      expect(group.getGroup().room!.gapS).toBe(3);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('정식 빌드(위치 공유 끔) 방장: 목적지만 보내고 내 위치에서 시작하는 경로는 보내지 않는다 (검토 지적)', async () => {
+    vi.stubEnv('VITE_LOCATION_SHARING', 'off');
+    try {
+      await group.joinGroupRoom('482917');
+      calls.length = 0;
+      await group.shareGroupDestination({ name: '팔각정', lat: 37.6, lon: 126.98 }, { points: [[37.5, 127], [37.55, 127.01], [37.6, 126.98]], distanceM: 15000, durationS: 1500, destName: '팔각정' });
+      const body = calls.find((c) => c.url.endsWith('/dest'))!.body as { route: { points: Array<[number, number]>; distanceM: number } };
+      expect(body.route.distanceM).toBe(0);
+      for (const [a, b] of body.route.points) expect(Math.abs(a - 37.6) + Math.abs(b - 126.98)).toBeLessThan(0.0001);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('front member is the one right before me; first has none', async () => {
     await group.joinGroupRoom('482917');
     expect(group.frontMember(group.getGroup())!.nickname).toBe('방장');

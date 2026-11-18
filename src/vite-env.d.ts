@@ -9,4 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
   /** 카카오 JavaScript 키 (그룹 주행 카톡 초대 카드). 공개되는 키라 빌드에 넣는다 */
   readonly VITE_KAKAO_JS_KEY?: string;
+  /** 정식 빌드 스위치 (features.ts): 'off'면 지도 위치 공유 끔 */
+  readonly VITE_LOCATION_SHARING?: string;
+  /** 'off'면 앞 친구·앞 차 간격 끔 (안 적으면 위와 같은 값) */
+  readonly VITE_LIVE_GAP?: string;
 }

@@ -3296,3 +3296,210 @@ button.map-gps:active {
   flex-direction: column;
   gap: 8px;
 }
+
+/* 아이폰 앱 실행 화면 애니메이션 (2026-11-18, 시안 DgoSplash): 화면 전체를 덮고, 시안 판(390×844)을 가운데에 화면에 맞게 놓는다 */
+.splash-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  overflow: hidden;
+  pointer-events: auto;
+}
+html.app-h .splash-intro {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--app-h, 100%);
+}
+.splash-board {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 390px;
+  height: 844px;
+  transform-origin: 50% 50%;
+}
+.splash-tag {
+  position: absolute;
+  left: 45px;
+  top: 302px;
+  color: #ffffff;
+  font-size: 33px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+
+/* 팀·팀 주행·프로필 사진 (설계 docs/superpowers/specs/2026-11-18-team-drive-design.md, 시안 6장 + 프사 시안) */
+.avatar {
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--line-strong);
+}
+.avatar-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg);
+  font-weight: 700;
+  line-height: 1;
+}
+.badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+.badge.mem {
+  border: 1px solid var(--card-line);
+  background: var(--tile);
+  color: var(--fg-2);
+}
+.team-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--card-line);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--fg);
+}
+a.team-item {
+  text-decoration: none;
+}
+.team-pick {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+.team-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+.team-live {
+  color: var(--ok);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.team-count {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.team-notice {
+  border-color: var(--accent);
+  color: var(--fg);
+  font-size: 14px;
+}
+.live-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(62, 224, 143, 0.2);
+}
+.btn.accent {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border-top: 1px solid var(--card-line);
+  font-size: 15.5px;
+}
+.pick-label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+}
+.pick-label input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+.pick.off {
+  color: var(--fg-off);
+}
+.pick .why {
+  margin-left: auto;
+  color: var(--fg-off);
+  font-size: 12px;
+}
+.team-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.team-waiting > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 5px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+.group-member .avatar {
+  margin-left: -2px;
+}
+.profile-photo {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+.profile-photo label.btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.profile-photo label.btn.disabled {
+  opacity: 0.5;
+}
+.ghost-btn.small {
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.ghost-btn.danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.friend-list li .avatar {
+  margin-right: 2px;
+}
+.team-item a.btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

@@ -1,6 +1,7 @@
 // 상단 표시 값 (디자인 시안 Widgets, 사용자 요청): 지도 모드 위쪽 세 칸. 칸 1(위 넓은 칸)은 델타 또는 표시 안 함,
 // 칸 2(왼쪽)·칸 3(오른쪽)은 고른 값(표지판·표시 안 함 포함). 같은 값을 고르면 두 칸이 서로 바뀐다(표시 안 함은 둘 다 가능).
-import { setWidget, updateSettings, useSettings, WIDGET_LABEL, type WidgetId } from '../../app/settings';
+import { liveGap } from '../../features';
+import { effectiveSettings, setWidget, updateSettings, useSettings, WIDGET_LABEL, type WidgetId } from '../../app/settings';
 import { IconBack } from '../icons';
 import { PaceNoteSign } from '../components/PaceNoteSign';
 
@@ -15,7 +16,8 @@ const SAMPLE: Record<Exclude<WidgetId, 'pace' | 'none'>, string> = {
   dist: '23.4 km',
   avg: '58 km/h',
 };
-const IDS = Object.keys(WIDGET_LABEL) as WidgetId[];
+// 정식 빌드(간격 끔, features.ts): "앞 친구 간격"은 고를 수 없다
+const ids = (): WidgetId[] => (Object.keys(WIDGET_LABEL) as WidgetId[]).filter((id) => id !== 'gap' || liveGap());
 
 const tileStyle = { minWidth: 0, padding: '10px 12px', borderRadius: 12, background: 'var(--tile)', border: '1px solid var(--tile-line)', minHeight: 64 } as const;
 const emptyStyle = { ...tileStyle, background: 'none', border: '1px dashed var(--line-strong)', justifyContent: 'center', alignItems: 'center' } as const;
@@ -53,7 +55,7 @@ function Preview({ id, slot }: { id: WidgetId; slot: number }) {
 }
 
 export function WidgetsScreen({ back }: { back: string }) {
-  const { topDelta, widgets } = useSettings();
+  const { topDelta, widgets } = effectiveSettings(useSettings());
   return (
     <main className="page page-full">
       <header className="page-head">
@@ -103,7 +105,7 @@ export function WidgetsScreen({ back }: { back: string }) {
           <section key={slot} aria-label={name} className="card-col" style={{ gap: 10 }}>
             <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{name}</h2>
             <div className="chips">
-              {IDS.map((id) => (
+              {ids().map((id) => (
                 <button key={id} type="button" aria-pressed={widgets[slot] === id} onClick={() => setWidget(slot, id)}>
                   {WIDGET_LABEL[id]}
                 </button>

@@ -1,4 +1,5 @@
-// 그룹 주행 초대 (사용자 결정 "카톡 카드로"): 카카오 JavaScript SDK 카카오톡 공유로 카드를 보낸다.
+// 카톡 카드 보내기 (사용자 결정 "카톡 카드로"): 카카오 JavaScript SDK 카카오톡 공유로 카드를 보낸다.
+// 그룹 방 초대(예전 빌드용), 친구 초대·팀 주행 알리기 (설계 2026-11-18 team-drive, 사용자 결정 A-가 "카톡 초대는 친구 초대로")
 // 키(VITE_KAKAO_JS_KEY)가 없거나 SDK를 못 불러오면 폰 공유 창, 그것도 없으면 링크 복사.
 // 링크는 웹 앱 주소 #/join/{코드} (앱 출시 뒤 유니버설 링크는 따로)
 import { Share } from '@capacitor/share';
@@ -31,6 +32,16 @@ function appBase(): string {
 
 export function inviteLink(code: string): string {
   return `${appBase()}#/join/${code}`;
+}
+
+/** 친구 초대: 받은 사람이 누르면 "○○님과 친구가 될까요?" */
+export function friendInviteLink(code: string, nickname: string): string {
+  return `${appBase()}#/friend/${code}/${encodeURIComponent(nickname.slice(0, 20))}`;
+}
+
+/** 팀 주행 알리기: 팀원이 누르면 그 팀 대기실로 */
+export function teamDriveLink(teamId: string): string {
+  return `${appBase()}#/team/${teamId}/drive`;
 }
 
 export const formatRoomCode = (c: string): string => (c.length === 6 ? `${c.slice(0, 3)} ${c.slice(3)}` : c);
@@ -91,19 +102,59 @@ export async function copyInviteLink(code: string): Promise<boolean> {
   }
 }
 
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** 초대 보내기: 카톡 카드 → 폰 공유 창 → 링크 복사 */
 export async function shareInvite(o: { code: string; destName: string | null; count: number }): Promise<ShareResult> {
-  const url = inviteLink(o.code);
-  const title = `${appName()} · 그룹 주행 초대`;
-  const desc = `방 코드 ${formatRoomCode(o.code)}${o.destName ? ` · ${o.destName}까지 같이 달려요` : ' · 같이 달려요'}\n${o.count}명 참여 중`;
+  return shareCard({
+    url: inviteLink(o.code),
+    title: `${appName()} · 그룹 주행 초대`,
+    desc: `방 코드 ${formatRoomCode(o.code)}${o.destName ? ` · ${o.destName}까지 같이 달려요` : ' · 같이 달려요'}\n${o.count}명 참여 중`,
+    button: '방에 들어가기',
+    dialogTitle: '그룹 주행 초대',
+  });
+}
+
+/** 친구 초대 카드 */
+export function shareFriendInvite(o: { code: string; nickname: string }): Promise<ShareResult> {
+  return shareCard({
+    url: friendInviteLink(o.code, o.nickname),
+    title: `${appName()} · 친구 초대`,
+    desc: `${o.nickname}님이 친구 초대를 보냈어요\n누르면 바로 서로 친구가 돼요`,
+    button: '친구 되기',
+    dialogTitle: '친구 초대',
+  });
+}
+
+/** 팀 주행 "주행 열었어요" 알리기 카드 (알림이 없어서) */
+export function shareTeamDrive(o: { teamId: string; teamName: string; destName: string | null; count: number }): Promise<ShareResult> {
+  return shareCard({
+    url: teamDriveLink(o.teamId),
+    title: `${o.teamName} · 팀 주행 열었어요`,
+    desc: `${o.destName ? `${o.destName}까지 같이 달려요` : '같이 달려요'} · ${o.count}명 들어옴`,
+    button: '대기실로',
+    dialogTitle: '팀 주행 알리기',
+  });
+}
+
+/** 카톡 카드 → 폰 공유 창 → 링크 복사 */
+async function shareCard(o: { url: string; title: string; desc: string; button: string; dialogTitle: string }): Promise<ShareResult> {
+  const { url, title, desc } = o;
   // 아이폰 앱: 폰 공유 창 (카톡을 고르면 링크가 간다)
   if (isApp()) {
     try {
-      await Share.share({ title, text: desc, url, dialogTitle: '그룹 주행 초대' });
+      await Share.share({ title, text: desc, url, dialogTitle: o.dialogTitle });
       return 'shared';
     } catch (e) {
       if (/cancel/i.test(String((e as { message?: unknown }).message ?? e))) return 'shared';
-      return (await copyInviteLink(o.code)) ? 'copied' : 'failed';
+      return (await copyText(url)) ? 'copied' : 'failed';
     }
   }
   // 미리 불러 둔 SDK만 쓴다. 아직이면 이번에는 폰 공유 창으로 (다음에는 카톡 카드)
@@ -115,7 +166,7 @@ export async function shareInvite(o: { code: string; destName: string | null; co
       k.Share.sendDefault({
         objectType: 'feed',
         content: { title, description: desc, imageUrl: new URL('og-image.png', appBase()).toString(), link },
-        buttons: [{ title: '방에 들어가기', link }],
+        buttons: [{ title: o.button, link }],
       });
       return 'kakao';
     } catch {
@@ -131,5 +182,5 @@ export async function shareInvite(o: { code: string; destName: string | null; co
       if ((e as { name?: string }).name === 'AbortError') return 'shared';
     }
   }
-  return (await copyInviteLink(o.code)) ? 'copied' : 'failed';
+  return (await copyText(url)) ? 'copied' : 'failed';
 }

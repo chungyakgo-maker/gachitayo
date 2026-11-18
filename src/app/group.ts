@@ -1,7 +1,9 @@
 // 그룹 주행 (설계 docs/superpowers/specs/2026-11-16-group-drive-design.md, 사용자 요청 "방 만들고 그룹주행"):
 // 방 만들기·코드로 들어가기, 방 상태와 다른 사람 위치 받기(웹소켓), 주행 중 내 GPS 보내기, 방장 동작(순서·차 간격·목적지),
 // 방장이 정한 목적지 경로를 참가자에게 "이 경로로 진행"으로 묻고, 받으면 경로 안내를 켠다.
+import { destOnlyRoute } from './destOnly';
 import { useSyncExternalStore } from 'react';
+import { shareAnyLocation } from '../features';
 import { ApiError, apiFetch } from '../server/api';
 import { friendlyServerError, getAuth } from './account';
 import { getDriveState, subscribeDrive } from './drive';
@@ -19,10 +21,15 @@ export interface GroupMember {
   color: number;
   order: number;
   host: boolean;
+  /** 프로필 사진 id (없으면 null) */
+  avatar?: string | null;
 }
 export interface GroupRoomState {
   roomId: string;
   code: string;
+  /** 팀 주행 방이면 팀 (설계 2026-11-18-team-drive, 코드 방이면 null) */
+  teamId?: string | null;
+  teamName?: string | null;
   members: GroupMember[];
   gapS: number;
   dest: { name: string; lat: number; lon: number } | null;
@@ -115,7 +122,7 @@ export function groupErrorText(e: unknown): string {
 
 function token(): string {
   const auth = getAuth();
-  if (!auth) throw new Error('계정이 있어야 그룹 주행을 할 수 있어요');
+  if (!auth) throw new Error('계정이 있어야 팀 주행을 할 수 있어요');
   return auth.token;
 }
 
@@ -152,9 +159,13 @@ function onMessage(data: string): void {
   }
   if (m.type === 'state') {
     const room = m as unknown as GroupRoomState;
-    set({ room: { roomId: room.roomId || state.room?.roomId || '', code: room.code, members: room.members, gapS: room.gapS, dest: room.dest, routeVersion: room.routeVersion } });
+    set({
+      room: { roomId: room.roomId || state.room?.roomId || '', code: room.code, teamId: room.teamId ?? null, teamName: room.teamName ?? null, members: room.members, gapS: room.gapS, dest: room.dest, routeVersion: room.routeVersion },
+    });
     void checkRoute();
   } else if (m.type === 'pos' && typeof m.userId === 'string') {
+    // 정식 빌드: 남의 위치는 버린다 (순서·간격 안내·목적지만 쓴다, features.ts)
+    if (!shareAnyLocation()) return;
     const p = m as unknown as LivePoint & { userId: string };
     if (!Number.isFinite(p.t) || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return;
     const pts = (points[p.userId] ?? []).filter((q) => q.t > p.t - KEEP_MS && q.t < p.t).slice(-(KEEP_POINTS - 1));
@@ -238,6 +249,8 @@ function connect(roomId: string): void {
   unsubGps = subscribeSamples((e) => {
     const ev = e as { kind: string; s: { tFix: number; lat: number; lon: number; speed: number | null; heading: number | null; hAcc: number | null } };
     if (ev.kind !== 'gps' || getDriveState().phase !== 'driving') return;
+    // 정식 빌드: 내 위치를 팀 방으로 보내지 않는다
+    if (!shareAnyLocation()) return;
     const g = ev.s;
     if (g.tFix - lastSent < 900) return;
     lastSent = g.tFix;
@@ -292,6 +305,16 @@ export function joinGroupRoom(code: string): Promise<void> {
   });
 }
 
+/** 방 id로 바로 들어가기 (팀 주행: 서버가 팀원 확인 뒤 방에 넣어 준 다음) */
+export function enterGroupRoom(roomId: string): Promise<void> {
+  return explicit(async (seq) => {
+    const keep = remembered();
+    // 다른 방에 있었으면 서버에서도 나간다 (검토 지적: 폰에서만 나가면 예전 방에 방장으로 남아 아무도 목적지를 못 정했다)
+    if (state.room && state.room.roomId !== roomId) await leaveGroupRoom();
+    await open(roomId, seq, keep?.roomId === roomId ? keep.accepted : 0);
+  });
+}
+
 /** 앱을 다시 열면 들어가 있던 방으로. 방이 닫혔거나(24시간) 내가 빠졌으면 잊고, 통신이 안 되면 기억해 두고 연결되면 다시 */
 export async function resumeGroupRoom(): Promise<void> {
   const keep = remembered();
@@ -317,7 +340,9 @@ const post = (action: string, body?: unknown) => {
 export const setGroupOrder = (userIds: string[]) => post('order', { userIds });
 export const setGroupGap = (gapS: number) => post('gap', { gapS });
 export async function shareGroupDestination(dest: { name: string; lat: number; lon: number }, route: RouteData): Promise<void> {
-  await post('dest', { name: dest.name, lat: dest.lat, lon: dest.lon, route: { points: route.points, distanceM: route.distanceM, durationS: route.durationS } });
+  // 정식 빌드: 방장 위치에서 시작하는 경로 대신 목적지만 보낸다 (받은 사람은 자기 위치에서 찾는다, destOnly.ts)
+  const r = shareAnyLocation() ? route : destOnlyRoute(dest);
+  await post('dest', { name: dest.name, lat: dest.lat, lon: dest.lon, route: { points: r.points, distanceM: r.distanceM, durationS: r.durationS } });
 }
 
 /** 방장: 순서 한 칸 올리기·내리기 */

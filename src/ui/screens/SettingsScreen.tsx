@@ -1,4 +1,5 @@
 // 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
+import { buildChannel, locationSharing } from '../../features';
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useEffect, useState } from 'react';
 import { friendlyServerError, recreateAccount, signedIn, updateNickname, useAccount } from '../../app/account';
@@ -14,13 +15,15 @@ import { RestoreBanner } from '../components/RestoreBanner';
 import { Overlay } from '../components/Overlay';
 import { isApp } from '../../platform';
 import { LegalLink } from '../legal';
-import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CAR_MARKER_LABEL, CURVE_TINT_LABEL, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type CarMarker, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CAR_MARKER_LABEL, CURVE_TINT_LABEL, MAP_VIEW_LABEL, effectiveSettings, updateSettings, useSettings, topSummary, type CarMarker, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { drawMeIcon } from '../overlay/minimap';
 import { MountTips } from '../components/MountTips';
 import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
 import { FriendsSection } from '../components/FriendsSection';
+import { ProfilePhoto } from '../components/ProfilePhoto';
+import { TeamsSection } from '../components/TeamsSection';
 import { Tabbed } from '../components/TabBar';
 import { formatKst } from '../format';
 import { IconCloud, IconWarn } from '../icons';
@@ -154,6 +157,7 @@ function AccountSection() {
   const changed = name.trim() !== (acc.nickname ?? '');
   return (
     <section className="card-col" style={{ gap: 8 }}>
+      <ProfilePhoto />
       <label htmlFor="settings-nickname" className="label">
         닉네임
       </label>
@@ -284,6 +288,7 @@ export function SettingsScreen() {
         </header>
         <AccountSection />
         <FriendsSection />
+        <TeamsSection />
         <SyncSection />
         <section className="card-col" style={{ gap: 8 }} aria-label="기본 화면 모드">
           <span className="label">기본 화면 모드</span>
@@ -332,7 +337,7 @@ export function SettingsScreen() {
           </div>
           <span className="sub">주행 화면 지도에서 내 위치를 이 모양으로 그려요. 처음에는 화살표예요.</span>
         </section>
-        <DriveFriendsToggle />
+        {locationSharing() && <DriveFriendsToggle />}
         <section className="card-col" style={{ gap: 8 }} aria-label="커브 방향 화면 색">
           <span className="label">커브 방향 화면 색</span>
           <div className="chips">
@@ -358,7 +363,7 @@ export function SettingsScreen() {
           <span className="card-col" style={{ gap: 3 }}>
             <span className="label">상단 표시 값 (지도 모드)</span>
             <span style={{ fontSize: 15, fontWeight: 600 }}>
-              {topSummary(s)}
+              {topSummary(effectiveSettings(s))}
             </span>
           </span>
           <IconChevron size={20} color="#9AA1A9" />
@@ -418,7 +423,8 @@ export function SettingsScreen() {
           </section>
         )}
         <footer className="build-info">
-          버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
+          {/* 아이폰 앱만: 정식(위치 공유 끔)·테스트 빌드 구별 (웹에는 안 보인다) */}
+          {isApp() ? `${buildChannel()} · ` : ''}버전 {buildInfo.version} · {formatKst(Date.parse(buildInfo.builtAt))} 빌드
         </footer>
       </main>
     </Tabbed>

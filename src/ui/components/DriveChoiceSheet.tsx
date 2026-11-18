@@ -1,6 +1,6 @@
 // 주행 시작 때 묻기 (사용자 요청 "근처에 코스가 있어도 코스 주행만 되면 안 된다. 혼자 달리고 싶을 수 있으니 물어",
 // "기록 주행 말고도 그냥 일반 주행 모드 버튼"): 코스 주행(근처 코스가 있을 때) / 일반 기록 주행 / 일반 주행(기록 안 남김)
-// / 목적지로 주행 (메인에서만, 사용자 요청 "경로검색 및 설정후 표지판 주행") / 그룹 주행 (메인에서만, 사용자 요청 "방 만들고 그룹주행")
+// / 목적지로 주행 (메인에서만, 사용자 요청 "경로검색 및 설정후 표지판 주행") / 팀 주행 (메인에서만, 사용자 요청 "그룹 주행 (팀 주행으로 변경)")
 import type { Course } from '../../types/course';
 import { Sheet } from './Sheet';
 
@@ -17,7 +17,7 @@ export function DriveChoiceSheet({
   onFree: () => void;
   /** 있으면 "목적지로 주행" (목적지 고르기 화면으로) */
   onDestination?: () => void;
-  /** 있으면 "그룹 주행" (방 만들기·코드로 들어가기, 들어가 있으면 방으로) */
+  /** 있으면 "팀 주행" (팀 고르기, 들어가 있으면 방으로) */
   onGroup?: () => void;
   onClose: () => void;
 }) {
@@ -54,8 +54,8 @@ export function DriveChoiceSheet({
       {onGroup && (
         <button type="button" className="sheet-item" onClick={onGroup}>
           <span className="card-col">
-            <strong>그룹 주행</strong>
-            <span className="sub">방을 만들어 카톡으로 초대해요 · 순서·차 간격·목적지를 같이</span>
+            <strong>팀 주행</strong>
+            <span className="sub">친구들과 만든 팀으로 · 순서·차 간격·목적지를 같이</span>
           </span>
         </button>
       )}

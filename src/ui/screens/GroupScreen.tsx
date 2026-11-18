@@ -1,6 +1,8 @@
 // 그룹 주행 방 대기실 (설계 docs/superpowers/specs/2026-11-16-group-drive-design.md, 시안 "방장 대기실"):
 // 방 코드·카톡 초대·링크 복사, 주행 순서(방장은 ↑↓), 차 간격(방장은 − +), 목적지(방장은 정하기·바꾸기), 출발 준비, 방 나가기.
 // 주행 중에도 열 수 있다 (방장이 중간에 목적지를 정해 모두에게 보낸다)
+// 팀 주행 방(설계 2026-11-18 team-drive, 시안 ③)이면 방 코드 대신 팀 이름·"주행 열었어요" 알리기·아직 안 들어온 팀원·프사
+import { liveGap, locationSharing } from '../../features';
 import { useEffect, useState } from 'react';
 import { beginPrepare, chooseCourse, getDriveState, useDrive } from '../../app/drive';
 import {
@@ -15,8 +17,10 @@ import {
   startGroupNav,
   useGroup,
 } from '../../app/group';
-import { copyInviteLink, formatRoomCode, kakaoShareReady, preloadKakaoSdk, shareInvite } from '../../app/kakaoShare';
-import { GroupSheet } from '../components/GroupSheet';
+import { copyInviteLink, formatRoomCode, kakaoShareReady, preloadKakaoSdk, shareInvite, shareTeamDrive } from '../../app/kakaoShare';
+import { loadTeams, useTeams } from '../../app/teams';
+import { Avatar } from '../components/Avatar';
+import { TeamSheet } from '../components/TeamSheet';
 import { IconBack } from '../icons';
 
 const GAP_MIN = 1;
@@ -24,6 +28,7 @@ const GAP_MAX = 10;
 
 export function GroupScreen() {
   const g = useGroup();
+  const ts = useTeams();
   const drive = useDrive();
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,6 +39,11 @@ export function GroupScreen() {
   useEffect(() => {
     if (kakaoShareReady()) preloadKakaoSdk();
   }, []);
+  // 팀 방: 아직 안 들어온 팀원을 보여 주려고 팀 목록을 받아 둔다
+  const teamId = room?.teamId ?? null;
+  useEffect(() => {
+    if (teamId && !ts.loaded) void loadTeams().catch(() => undefined);
+  }, [teamId, ts.loaded]);
   const back = driving ? (drive.phase === 'preparing' ? '#/prepare' : '#/drive') : '#/';
 
   if (!room) {
@@ -43,19 +53,28 @@ export function GroupScreen() {
           <a className="back-btn" href={back} aria-label="뒤로">
             <IconBack size={24} />
           </a>
-          <h1 style={{ flex: 1 }}>그룹 주행</h1>
+          <h1 style={{ flex: 1 }}>팀 주행</h1>
         </header>
-        <div className="empty">들어가 있는 방이 없어요</div>
+        <div className="empty">들어가 있는 팀 주행이 없어요</div>
         <button type="button" className="primary-btn" onClick={() => setSheet(true)}>
-          방 만들기 · 코드로 들어가기
+          팀 고르기
         </button>
-        {sheet && <GroupSheet onClose={() => setSheet(false)} />}
+        {sheet && <TeamSheet onClose={() => setSheet(false)} />}
       </main>
     );
   }
 
   const host = isGroupHost(g);
+  // 정식 빌드(features.ts): 차 간격은 계산하지 않고 안내로만, 지도에 서로 위치 없음
+  const gapOn = liveGap();
   const members = [...room.members].sort((a, b) => a.order - b.order);
+  const team = room.teamId ? (ts.teams.find((t) => t.id === room.teamId) ?? null) : null;
+  const waiting = team ? team.members.filter((m) => !members.some((x) => x.userId === m.userId)) : [];
+  const notify = () =>
+    void shareTeamDrive({ teamId: room.teamId!, teamName: room.teamName ?? '팀', destName: room.dest?.name ?? null, count: members.length }).then((r) => {
+      if (r === 'copied') setNote('링크를 복사했어요. 카톡에 붙여 넣어 보내 주세요');
+      else if (r === 'failed') setNote('보내지 못했어요. 팀원에게 앱에서 "팀 주행"을 눌러 달라고 알려 주세요');
+    });
   const act = (f: () => Promise<unknown>) => {
     setBusy(true);
     setNote(null);
@@ -88,8 +107,8 @@ export function GroupScreen() {
         <a className="back-btn" href={back} aria-label="뒤로">
           <IconBack size={24} />
         </a>
-        <h1 style={{ flex: 1 }}>그룹 주행 방</h1>
-        <span className="sub">{members.length}명</span>
+        <h1 style={{ flex: 1 }}>{room.teamName ?? '그룹 주행 방'}</h1>
+        <span className="sub">{team ? `${members.length} / ${team.members.length}명` : `${members.length}명`}</span>
       </header>
       {!g.connected && (
         <span className="sub" role="status">
@@ -97,20 +116,22 @@ export function GroupScreen() {
         </span>
       )}
 
-      <section className="card card-col" style={{ gap: 10 }}>
-        <span className="label">방 코드</span>
-        <div className="group-code" aria-label={`방 코드 ${room.code.split('').join(' ')}`}>
-          {formatRoomCode(room.code)}
-        </div>
-        <div className="group-row">
-          <button type="button" className="kakao-btn" style={{ flex: 1.5 }} onClick={invite}>
-            {kakaoShareReady() ? '카카오톡으로 초대' : '초대 보내기'}
-          </button>
-          <button type="button" className="btn" style={{ flex: 1, minHeight: 52 }} onClick={copy}>
-            링크 복사
-          </button>
-        </div>
-      </section>
+      {!room.teamId && (
+        <section className="card card-col" style={{ gap: 10 }}>
+          <span className="label">방 코드</span>
+          <div className="group-code" aria-label={`방 코드 ${room.code.split('').join(' ')}`}>
+            {formatRoomCode(room.code)}
+          </div>
+          <div className="group-row">
+            <button type="button" className="kakao-btn" style={{ flex: 1.5 }} onClick={invite}>
+              {kakaoShareReady() ? '카카오톡으로 초대' : '초대 보내기'}
+            </button>
+            <button type="button" className="btn" style={{ flex: 1, minHeight: 52 }} onClick={copy}>
+              링크 복사
+            </button>
+          </div>
+        </section>
+      )}
       {note && (
         <span className="notice" role="status">
           {note}
@@ -156,6 +177,7 @@ export function GroupScreen() {
               <span className="group-num" style={{ background: groupColor(m.color) }}>
                 {m.order}
               </span>
+              <Avatar id={m.avatar} name={m.nickname} />
               <span className="name">{name}</span>
               {m.host && <span className="group-badge">방장</span>}
               {host && (
@@ -171,11 +193,26 @@ export function GroupScreen() {
             </div>
           );
         })}
-        {members.length === 1 && <span className="sub">초대한 사람이 들어오면 여기 보여요 (최대 8명)</span>}
+        {members.length === 1 && !room.teamId && <span className="sub">초대한 사람이 들어오면 여기 보여요 (최대 8명)</span>}
+        {waiting.length > 0 && (
+          <>
+            <span className="label" style={{ marginTop: 2 }}>
+              아직 안 들어온 팀원
+            </span>
+            <div className="team-waiting" aria-label="아직 안 들어온 팀원">
+              {waiting.map((m) => (
+                <span key={m.userId}>
+                  <Avatar id={m.avatar} name={m.nickname} size={20} />
+                  {m.nickname}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
       <section className="card card-col" style={{ gap: 8 }}>
-        <span className="label">차 간격 (앞 차와)</span>
+        <span className="label">{gapOn ? '차 간격 (앞 차와)' : '권장 차 간격 (안내)'}</span>
         {host ? (
           <div className="group-stepper">
             <button type="button" aria-label="차 간격 줄이기" disabled={busy || room.gapS <= GAP_MIN} onClick={() => act(() => setGroupGap(Math.max(GAP_MIN, room.gapS - 0.5)))}>
@@ -193,8 +230,20 @@ export function GroupScreen() {
             {room.gapS.toFixed(1)}초
           </span>
         )}
-        <span className="sub">{host ? '1초부터 0.5초 단위 · 모두에게 같은 값' : '방장이 정해요 · 주행 중 칸 1에 앞 차와의 간격이 보여요'}</span>
+        <span className="sub">
+          {!gapOn
+            ? '모두에게 안내로만 보여요 · 지도에서 서로 위치는 보이지 않아요'
+            : host
+              ? '1초부터 0.5초 단위 · 모두에게 같은 값'
+              : '방장이 정해요 · 주행 중 칸 1에 앞 차와의 간격이 보여요'}
+        </span>
       </section>
+
+      {room.teamId && (
+        <button type="button" className="kakao-btn" style={{ minHeight: 48 }} onClick={notify}>
+          {kakaoShareReady() ? '카카오톡으로 "주행 열었어요" 알리기' : '"주행 열었어요" 알리기'}
+        </button>
+      )}
 
       <div className="group-bottom">
         {driving ? (
@@ -207,7 +256,7 @@ export function GroupScreen() {
               출발 준비
             </button>
             <span className="sub" style={{ textAlign: 'center' }}>
-              각자 출발 준비를 누르고 출발해요 · 주행 중 지도에 모두 보여요
+              {locationSharing() ? '각자 출발 준비를 누르고 출발해요 · 주행 중 지도에 모두 보여요' : '각자 출발 준비를 누르고 출발해요 · 목적지 경로는 모두 같아요'}
             </span>
           </>
         )}
@@ -224,7 +273,7 @@ export function GroupScreen() {
             });
           }}
         >
-          {leaving ? '한 번 더 누르면 방에서 나가요' : '방 나가기'}
+          {leaving ? (room.teamId ? '한 번 더 누르면 팀 주행에서 나가요' : '한 번 더 누르면 방에서 나가요') : room.teamId ? '팀 주행에서 나가기' : '방 나가기'}
         </button>
       </div>
     </main>

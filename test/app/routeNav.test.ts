@@ -315,6 +315,28 @@ describe('주행 중 안내', () => {
     expect(n.step!.s!).toBeCloseTo(100, 0);
   });
 
+  it('목적지만 받은 경로(정식 빌드 팀 주행)는 내 위치가 잡히면 바로 내 위치에서 찾는다 (준비 중이어도)', async () => {
+    const [lat, lon] = ll(340, 340);
+    const only = nav.destOnlyRoute({ lat, lon });
+    expect(nav.isDestOnly(only)).toBe(true);
+    expect(nav.isDestOnly(ROUTE_A)).toBe(false);
+    // 방장 위치는 실리지 않는다: 점이 모두 목적지 바로 옆
+    for (const [a, b] of only.points) expect(Math.abs(a - lat) + Math.abs(b - lon)).toBeLessThan(0.0001);
+    h.phase = 'preparing';
+    nav.startNavWithRoute(only, { lat, lon });
+    nav.navTick(snap(0, 10, 20), 100_000);
+    expect(pending).toHaveLength(1);
+    const from = toLocal(O, pending[0]!.body.from.lat, pending[0]!.body.from.lon);
+    expect(from.x).toBeCloseTo(10, 0);
+    expect(from.y).toBeCloseTo(20, 0);
+    pending[0]!.resolve(json(200, ROUTE_A));
+    await flush();
+    expect(nav.getNavLive()!.route.distanceM).toBe(663);
+    // 한 번만
+    nav.navTick(snap(100, 10, 20), 100_100);
+    expect(pending).toHaveLength(1);
+  });
+
   it('only while driving', async () => {
     await readyPlan();
     nav.startRouteDrive();

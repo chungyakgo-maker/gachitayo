@@ -1,13 +1,18 @@
-// 설정 · 친구 (사양서 8.8, M8): 내 친구 코드(복사·보내기), 친구 코드로 친구 추가, 친구 목록(공유 중 표시, 끊기)
+// 설정 · 친구 (사양서 8.8, M8): 내 친구 코드(복사), 카톡으로 친구 초대(사용자 결정 A-가, 설계 2026-11-18 team-drive),
+// 친구 코드로 친구 추가, 친구 목록(프사, 공유 중 표시, 끊기)
+import { locationSharing } from '../../features';
 import { useEffect, useState } from 'react';
 import { useAccount } from '../../app/account';
 import { addFriendByCode, formatCode, loadFriends, removeFriend, useFriends } from '../../app/friends';
-import { appName } from '../brand';
+import { kakaoShareReady, shareFriendInvite } from '../../app/kakaoShare';
+import { Avatar } from './Avatar';
 
 export function FriendsSection() {
   const fr = useFriends();
   const acc = useAccount();
   const [code, setCode] = useState('');
+  // 정식 빌드(features.ts): 위치 공유 글자 없음
+  const mapOn = locationSharing();
   const [confirm, setConfirm] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -24,18 +29,12 @@ export function FriendsSection() {
     );
   }
 
-  const share = async () => {
+  // 카톡 친구 초대: 받은 사람이 누르면 "○○님과 친구가 될까요?" → 바로 친구 (예전 "보내기"는 코드 글자만 보냈다)
+  const invite = () => {
     if (!fr.code) return;
-    const text = `${appName()} 친구 코드: ${formatCode(fr.code)}`;
-    try {
-      if (navigator.share) await navigator.share({ text });
-      else {
-        await navigator.clipboard.writeText(formatCode(fr.code));
-        setCopied(true);
-      }
-    } catch {
-      // 사용자가 닫음
-    }
+    void shareFriendInvite({ code: fr.code, nickname: acc.nickname ?? '친구' }).then((r) => {
+      if (r === 'copied') setCopied(true);
+    });
   };
   const copy = async () => {
     if (!fr.code) return;
@@ -61,11 +60,12 @@ export function FriendsSection() {
           <button type="button" className="btn small" disabled={!fr.code} onClick={() => void copy()}>
             {copied ? '복사됨' : '복사'}
           </button>
-          <button type="button" className="btn small" disabled={!fr.code} onClick={() => void share()}>
-            보내기
-          </button>
         </span>
       </div>
+      <button type="button" className="kakao-btn" style={{ minHeight: 46 }} disabled={!fr.code} onClick={invite}>
+        {kakaoShareReady() ? '카카오톡으로 친구 초대' : '친구 초대 보내기'}
+      </button>
+      <span className="sub">받은 사람이 누르면 바로 서로 친구가 돼요</span>
       <label htmlFor="friend-code-input" className="label">
         친구 코드 넣기
       </label>
@@ -98,9 +98,10 @@ export function FriendsSection() {
         <ul className="friend-list" aria-label="친구 목록">
           {fr.friends.map((f) => (
             <li key={f.userId}>
-              <span className="card-col" style={{ gap: 2, minWidth: 0 }}>
+              <Avatar id={f.avatar} name={f.nickname} />
+              <span className="card-col" style={{ gap: 2, minWidth: 0, flex: 1 }}>
                 <span className="friend-name">{f.nickname}</span>
-                <span className={`sub${f.sharing ? ' sharing' : ''}`}>{f.sharing ? '위치 공유 중' : '공유 안 함'}</span>
+                {mapOn && <span className={`sub${f.sharing ? ' sharing' : ''}`}>{f.sharing ? '위치 공유 중' : '공유 안 함'}</span>}
               </span>
               {confirm === f.userId ? (
                 <span style={{ display: 'flex', gap: 6 }}>
@@ -121,7 +122,9 @@ export function FriendsSection() {
         </ul>
       )}
       <span className="sub" style={{ lineHeight: 1.6 }}>
-        친구 코드를 넣으면 바로 서로 친구가 돼요. 위치는 메인 지도에서 "위치 공유"를 켠 동안만 친구에게 보여요.
+        {mapOn
+          ? '친구 코드를 넣으면 바로 서로 친구가 돼요. 위치는 메인 지도에서 "위치 공유"를 켠 동안만 친구에게 보여요.'
+          : '친구 코드를 넣으면 바로 서로 친구가 돼요. 친구와 팀을 만들어 팀 주행을 할 수 있어요.'}
       </span>
     </section>
   );
