@@ -30,6 +30,12 @@ vi.mock('../../src/ui/components/MainMap', () => ({
 vi.mock('../../src/ui/components/PickMap', () => ({ PickMap: (p: { label: string }) => <div aria-label={p.label} /> }));
 vi.mock('../../src/app/routeNav', async (orig) => ({ ...(await orig<typeof import('../../src/app/routeNav')>()), findPlaces: (q: string) => findPlaces(q) }));
 vi.mock('../../src/app/popular', () => ({ usePopular: (_p: string, on: boolean) => ({ rows: on ? popularRows : null, error: null }) }));
+vi.mock('../../src/app/sharedCourses', async (orig) => ({
+  ...(await orig<typeof import('../../src/app/sharedCourses')>()),
+  fetchShared: async () => [
+    { id: 'pub-1', name: '유명산 업힐', region: '경기', kind: 'point_to_point', lengthM: 7800, start: { lat: 37.58, lon: 127.48 }, thumb: [[37.58, 127.48], [37.6, 127.5]], adds: 3, by: '바람', byId: 'o', createdAt: 1, mine: false },
+  ],
+}));
 
 const { MainScreen } = await import('../../src/ui/screens/MainScreen');
 const { peekHandedDestination, clearHandedDestination } = await import('../../src/app/routeNav');
@@ -107,5 +113,14 @@ describe('메인 둘러보기', () => {
     fireEvent.click(screen.getByRole('button', { name: '이 코스로 주행' }));
     // 이미 주행 중이면 코스를 바꾸지 않는 길로 (검토 지적: 진행 중인 주행의 코스가 바뀌었다)
     expect(calls).toEqual(['prepare:hao']);
+  });
+
+  it('모두의 코스 칩: 공개 코스(폰에 없는 것도)를 지도에 넘기고, 누르면 공개 코스 상세로', async () => {
+    render(<MainScreen />);
+    fireEvent.click(screen.getByRole('button', { name: '모두의 코스' }));
+    await act(async () => {});
+    expect(mapIds()).toEqual(['pub-1']);
+    act(() => (mapProps.onCourseTap as (id: string) => void)('pub-1'));
+    expect(window.location.hash).toBe('#/shared/pub-1');
   });
 });

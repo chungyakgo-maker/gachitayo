@@ -1,5 +1,8 @@
 // 메인 · 주행 전 (사양서 8.2, 디자인 시안 Main): 감지된 코스, 주행 시작, 지도(통신이 되면 OSM 타일, 안 되면 타일 없이),
 // 위치 공유 켜기/끄기와 공유 중인 친구 (M8: 사용자 요청으로 2단계에서 앞당김). 같이 달리기는 3단계라 넣지 않는다.
+import { fetchShared } from '../../app/sharedCourses';
+import type { SharedSummary } from '../../types/shared';
+import { thumbCourse } from '../components/SharedCourseList';
 import { locationSharing } from '../../features';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFriends, watchFriendPositions, loadFriends } from '../../app/friends';
@@ -66,9 +69,26 @@ export function MainScreen() {
   // 코스 둘러보기 (설계 2026-11-16 course-browse): 분류 칩, 즐겨찾기 보라, 코스 누르면 창, 맨 위 검색
   const prefs = useCoursePrefs();
   const popular = usePopular(settings.popularPeriod, settings.courseFilter === 'popular');
+  // 모두의 코스 칩 (설계 2부): 서버의 공개 코스를 작은 선(요약)으로 지도에 — 폰에 받지 않은 것도. 누르면 공개 코스 상세
+  const sharedMode = settings.courseFilter === 'shared';
+  const [sharedList, setSharedList] = useState<SharedSummary[] | null>(null);
+  useEffect(() => {
+    if (!sharedMode) return;
+    let alive = true;
+    fetchShared().then(
+      (l) => alive && setSharedList(l),
+      () => alive && setSharedList([]),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [sharedMode]);
   const shown = useMemo(
-    () => filterCourses(drive.courses, settings.courseFilter, { isFavorite: (c) => isFavorite(c, prefs), tagsOf: (c) => tagsOf(c, prefs) }, popular.rows).map((x) => x.course),
-    [drive.courses, settings.courseFilter, prefs, popular.rows],
+    () =>
+      sharedMode
+        ? (sharedList ?? []).map(thumbCourse)
+        : filterCourses(drive.courses, settings.courseFilter, { isFavorite: (c) => isFavorite(c, prefs), tagsOf: (c) => tagsOf(c, prefs) }, popular.rows).map((x) => x.course),
+    [sharedMode, sharedList, drive.courses, settings.courseFilter, prefs, popular.rows],
   );
   const favorites = useMemo(() => new Set(drive.courses.filter((c) => isFavorite(c, prefs)).map((c) => c.id)), [drive.courses, prefs]);
   const [sheetId, setSheetId] = useState<string | null>(null);
@@ -141,7 +161,10 @@ export function MainScreen() {
         course={null}
         courses={shown}
         favorites={favorites}
-        onCourseTap={setSheetId}
+        onCourseTap={(id) => {
+          if (sharedMode) window.location.hash = `#/shared/${encodeURIComponent(id)}`;
+          else setSheetId(id);
+        }}
         me={fix}
         label="지도: 코스와 내 위치 (코스 선을 누르면 출발점 안내)"
         friends={friendsOn ? fr.positions : []}
