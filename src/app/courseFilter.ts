@@ -2,12 +2,14 @@
 import type { Course } from '../types/course';
 import type { CourseTag } from './coursePrefs';
 
-export type CourseFilter = 'all' | 'builtin' | 'fav' | 'mine' | 'coast' | 'mountain' | 'popular';
+export type CourseFilter = 'all' | 'builtin' | 'shared' | 'fav' | 'mine' | 'coast' | 'mountain' | 'popular';
 export type PopularPeriod = 'live' | '7d' | '30d' | 'all' | 'spring' | 'summer' | 'autumn' | 'winter';
 
 export const FILTERS: Array<{ id: CourseFilter; label: string }> = [
   { id: 'all', label: '전체' },
   { id: 'builtin', label: '기본 코스' },
+  // 모두의 코스 (설계 2부, 시안 ⑦): 코스 탭은 서버 목록, 다른 곳은 받아 둔 코스
+  { id: 'shared', label: '모두의 코스' },
   { id: 'fav', label: '즐겨찾기' },
   { id: 'mine', label: '내 코스' },
   { id: 'coast', label: '해안 길' },
@@ -46,6 +48,8 @@ export function filterCourses(courses: Course[], f: CourseFilter, p: FilterPrefs
     switch (f) {
       case 'builtin':
         return !!c.builtin;
+      case 'shared':
+        return !!c.shared;
       case 'fav':
         return p.isFavorite(c);
       case 'mine':

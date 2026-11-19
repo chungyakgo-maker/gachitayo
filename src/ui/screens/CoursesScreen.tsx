@@ -11,6 +11,7 @@ import { Tabbed } from '../components/TabBar';
 import { formatLapTime, formatLength } from '../format';
 import { useBestTimes } from './useBestTimes';
 import { CourseChips } from '../components/CourseChips';
+import { SharedCourseList } from '../components/SharedCourseList';
 import { filterCourses } from '../../app/courseFilter';
 import { isFavorite, TAG_LABEL, tagsOf, toggleFavorite, useCoursePrefs } from '../../app/coursePrefs';
 import { usePopular } from '../../app/popular';
@@ -64,7 +65,14 @@ export function CoursesScreen() {
         <header className="page-head">
           <h1 className="big">코스</h1>
         </header>
-        <CourseChips filter={filter} period={settings.popularPeriod} onFilter={(f) => updateSettings({ courseFilter: f })} onPeriod={(p) => updateSettings({ popularPeriod: p })} />
+        <CourseChips
+          filter={filter}
+          period={settings.popularPeriod}
+          onFilter={(f) => updateSettings({ courseFilter: f })}
+          onPeriod={(p) => updateSettings({ popularPeriod: p })}
+          sharedSort={settings.sharedSort}
+          onSharedSort={(s) => updateSettings({ sharedSort: s })}
+        />
         <div className="button-pair">
           <a className="btn" href="#/course-new" style={{ textAlign: 'center', textDecoration: 'none' }}>
             지도에서 새 코스
@@ -75,7 +83,12 @@ export function CoursesScreen() {
         </div>
         <input ref={file} type="file" accept=".gpx,application/gpx+xml" hidden onChange={(e) => void onFile(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
         {error && <div className="notice warn">{error}</div>}
-        {courses.length === 0 ? (
+        {filter === 'shared' ? (
+          // 모두의 코스 (설계 2부, 시안 ⑦): 서버의 공개 코스 목록 (내 폰에 없는 것도)
+          <section className="card-col" style={{ gap: 8 }} aria-label="모두의 코스">
+            <SharedCourseList sort={settings.sharedSort} />
+          </section>
+        ) : courses.length === 0 ? (
           <div className="empty">
             아직 코스가 없어요.
             <br />

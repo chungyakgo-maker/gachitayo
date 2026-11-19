@@ -399,6 +399,17 @@ html.app-h .modal-backdrop {
   gap: 8px;
 }
 
+/* 모두의 코스 상세 아래 작은 단추 (신고·이 사람 코스 안 보기) */
+.shared-actions {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+}
+.shared-actions .link-btn {
+  align-self: auto;
+  color: var(--fg-dim);
+}
+
 /* 로그아웃·계정 지우기 창의 "기록도 지우기" (기록은 폰에만 6단계, 시안 ④): 손가락으로 누르기 쉽게 44px */
 .check-row {
   display: flex;

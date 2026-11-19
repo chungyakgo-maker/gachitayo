@@ -2,7 +2,28 @@
 // 인기 도로를 고르면 둘째 줄에 기간 (사용자 요청 "최근30일, 최근7일, 전체기간, 계절, 실시간")
 import { FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from '../../app/courseFilter';
 
-export function CourseChips({ filter, period, onFilter, onPeriod }: { filter: CourseFilter; period: PopularPeriod; onFilter: (f: CourseFilter) => void; onPeriod: (p: PopularPeriod) => void }) {
+const SORTS: Array<{ id: 'near' | 'adds' | 'new'; label: string }> = [
+  { id: 'near', label: '가까운 순' },
+  { id: 'adds', label: '많이 받은 순' },
+  { id: 'new', label: '새로 올라온 순' },
+];
+
+export function CourseChips({
+  filter,
+  period,
+  onFilter,
+  onPeriod,
+  sharedSort,
+  onSharedSort,
+}: {
+  filter: CourseFilter;
+  period: PopularPeriod;
+  onFilter: (f: CourseFilter) => void;
+  onPeriod: (p: PopularPeriod) => void;
+  /** 모두의 코스 정렬 칩 (코스 탭에서만) */
+  sharedSort?: 'near' | 'adds' | 'new';
+  onSharedSort?: (s: 'near' | 'adds' | 'new') => void;
+}) {
   return (
     <>
       <div className="browse-chips" role="group" aria-label="코스 분류">
@@ -17,6 +38,15 @@ export function CourseChips({ filter, period, onFilter, onPeriod }: { filter: Co
           </button>
         ))}
       </div>
+      {filter === 'shared' && sharedSort && onSharedSort && (
+        <div className="browse-chips small" role="group" aria-label="모두의 코스 정렬">
+          {SORTS.map((x) => (
+            <button key={x.id} type="button" className="browse-chip" aria-pressed={sharedSort === x.id} onClick={() => onSharedSort(x.id)}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+      )}
       {filter === 'popular' && (
         <div className="browse-chips small" role="group" aria-label="인기 도로 기간">
           {PERIODS.map((p) => (

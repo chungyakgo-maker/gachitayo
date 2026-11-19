@@ -62,6 +62,8 @@ export interface Settings {
   courseFilter: CourseFilter;
   /** 인기 도로 기간 */
   popularPeriod: PopularPeriod;
+  /** 모두의 코스 정렬 (가까운 순은 폰에서 정렬, 위치를 서버로 보내지 않는다) */
+  sharedSort: 'near' | 'adds' | 'new';
   /** 주행 지도 확대 단계 (−4 ~ +2, 사용자 요청 "주행 모드중 지도 축소나 확대"). 한 단계 = 두 배, 두 손가락으로 고르면 소수 */
   driveZoom: number;
   /** 주행 지도의 내 차 표시 (기본 화살표) */
@@ -100,6 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
   curveTint: 'D',
   courseFilter: 'all',
   popularPeriod: '30d',
+  sharedSort: 'near',
   // 2026-11-18 세영 "기본 축척이 너무 멀어 … 확대한 정도가 기본이어야해": 보여 준 사진의 확대 정도 ≈ 따라가기 기준 한 단계 축소
   driveZoom: DRIVE_ZOOM_DEFAULT,
   carMarker: 'arrow',
@@ -173,6 +176,7 @@ function load(): Settings {
       curveTint: (raw.curveTint as unknown) === false ? 'off' : CURVE_TINTS.includes(raw.curveTint as CurveTint) ? raw.curveTint! : 'D',
       courseFilter: FILTERS.some((f) => f.id === raw.courseFilter) ? raw.courseFilter! : 'all',
       popularPeriod: PERIODS.some((p) => p.id === raw.popularPeriod) ? raw.popularPeriod! : '30d',
+      sharedSort: raw.sharedSort === 'adds' || raw.sharedSort === 'new' ? raw.sharedSort : 'near',
       driveZoom:
         localStorage.getItem(ZOOM_RESET_KEY) === ZOOM_RESET_V && typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom)
           ? driveZoomOf(raw.driveZoom)

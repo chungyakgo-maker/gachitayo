@@ -18,6 +18,7 @@ import { ReplayScreen } from './screens/ReplayScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
 import { AnalysisScreen } from './screens/AnalysisScreen';
+import { SharedCourseScreen } from './screens/SharedCourseScreen';
 import { CourseDetailScreen } from './screens/CourseDetailScreen';
 import { NewCourseScreen } from './screens/NewCourseScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
@@ -49,6 +50,9 @@ function route(path: string): ReactElement {
   const course = /^\/course\/([^/]+)$/.exec(path);
   if (course) return <CourseDetailScreen courseId={decodeURIComponent(course[1]!)} />;
   if (path === '/course-new') return <NewCourseScreen />;
+  // 모두의 코스 상세 (설계 2부)
+  const shared = /^\/shared\/([^/]+)$/.exec(path);
+  if (shared) return <SharedCourseScreen id={decodeURIComponent(shared[1]!)} />;
   // 팀 (설계 2026-11-18 team-drive): 만들기·편집·보기, 팀 주행 알리기 링크, 카톡 친구 초대 링크
   if (path === '/team/new') return <TeamEditScreen teamId={null} />;
   const teamDrive = /^\/team\/([0-9a-f-]{36})\/drive$/.exec(path);
