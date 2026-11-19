@@ -5,8 +5,6 @@
 // 서버에서 원격으로 켜지 않는다 (심사 뒤 숨긴 기능을 켜면 애플 2.3.1 위반). 다시 켤 때는 값을 바꿔 빌드해 업데이트 심사.
 // 화면만 숨기지 않고 보내기·받기를 막는 곳도 이 함수만 본다 (friends·liveLink·group·drive)
 
-import { isApp } from './platform';
-
 // 안 적으면 기본값, 'on' 이면 켬, 그 밖의 값(off·OFF·false·오타)은 모두 끔 — 오타로 정식 빌드가 위치를 공유하지 않게 (검토 지적)
 const flag = (v: string | undefined): boolean | null => (v === undefined ? null : v === 'on');
 
@@ -26,6 +24,6 @@ export const shareAnyLocation = (): boolean => locationSharing() || liveGap();
 /** 설정 맨 아래 표시: 정식 빌드인지 */
 export const buildChannel = (): '정식' | '테스트' => (locationSharing() ? '테스트' : '정식');
 
-/** 바이크 기울기를 센서 기울기 + 계산 기울기로 (2026-11-19 세영 "웹에서 테스트하게 앱은 건들지말고", leanFusion.ts).
- *  웹 빌드에서만 켠다 — 심사 중인 아이폰 앱은 예전 계산 그대로 */
-export const leanFused = (): boolean => !isApp();
+/** 바이크 기울기를 센서 기울기 + 계산 기울기로 (leanFusion.ts). 2026-11-19 웹에서 먼저 시험(세영 "웹에서 테스트하게 앱은 건들지말고")한 뒤
+ *  세영 "이대로 정식버전(위치공유 x)도 배포해" → 웹·아이폰 앱 모두 켠다. 빌드 값 VITE_LEAN_FUSED=off 면 예전 계산(lean.ts)만 */
+export const leanFused = (): boolean => flag(import.meta.env.VITE_LEAN_FUSED) ?? true;

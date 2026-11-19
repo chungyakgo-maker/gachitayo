@@ -45,7 +45,7 @@
 ■ 바이크 모드
 · 설정에서 탈것을 바이크로 바꾸면 지도에 내 바이크(스쿠터·R차·크루저·네이키드·모타드)를 보여줘요
 · 목적지 길찾기는 고속도로·자동차전용도로를 피하는 길을 먼저 찾고, 그래도 섞이면 도로 이름으로 알려줘요
-· G미터 대신 기울기(뱅크각)를 보여주고, 주행 요약에 왼쪽·오른쪽 최대 기울기를 남겨요 (속도와 도는 빠르기로 계산한 추정값)
+· G미터 대신 기울기(뱅크각)를 보여주고, 주행 요약에 왼쪽·오른쪽 최대 기울기를 남겨요 (폰 기울기 센서 + 속도와 도는 빠르기로 계산한 추정값, 서 있을 때도 움직여요)
 
 ■ 팀 주행
 · 친구로 팀을 만들어 두고(최대 15명), 팀으로 바로 함께 달려요
@@ -122,7 +122,7 @@ Motion sensors: Used during a drive to show and record acceleration/braking/corn
 
 Team drive: Settings (설정) → "팀" → "+ 팀 만들기" creates a team (teams are made from friends; a team with only yourself is fine for review). Then Main → "주행 시작" (Start driving) → "팀 주행" (Team drive) opens the team lobby: driving order, a recommended gap shown as guidance, and a destination set by the host. In this version users do NOT share their locations with each other: there is no friend location on the map, no live gap to the car ahead, and the host shares only the destination (each member's route is calculated from their own position).
 
-Bike mode: Settings (설정) → "탈것" (Vehicle) → "바이크" (Motorcycle). The map marker becomes a motorcycle, destination routes avoid expressways and motorways (motorcycles are not allowed on them in Korea; we request Naver Directions' "avoid car-only roads" option and warn by road name if one is still included), and a lean-angle gauge replaces the G-meter. The lean angle is an estimate calculated from speed and turn rate. To try it without riding: Courses (코스) → any course → "모의주행 (코스 미리 보기)" (Simulated drive).
+Bike mode: Settings (설정) → "탈것" (Vehicle) → "바이크" (Motorcycle). The map marker becomes a motorcycle, destination routes avoid expressways and motorways (motorcycles are not allowed on them in Korea; we request Naver Directions' "avoid car-only roads" option and warn by road name if one is still included), and a lean-angle gauge replaces the G-meter. The lean angle is an estimate: the phone's tilt from an upright "0점" (zero, set in 주행 준비 / Prepare → "기울기 0점" → "0점 맞추기"; works when stopped) plus an estimate from speed and turn rate. To try it without riding: Courses (코스) → any course → "모의주행 (코스 미리 보기)" (Simulated drive).
 
 Help: Settings (설정) → "도움말" (Help) → "기능 알아보기" (Feature guide) explains each feature with screenshots.
 

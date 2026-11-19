@@ -6,7 +6,7 @@
 //   폰이 똑바로 선 것처럼 느끼므로 센서 기울기는 0이고, 이 값이 기울기다.
 // 둘을 더하면 정차·저속(센서)과 코너(계산)가 이어지고, 몸을 안쪽으로 빼서 바이크가 덜 누운 만큼도 센서 쪽에 잡힌다.
 // 도는 빠르기는 자이로를 믿을 수 있으면(거치 보정·축 부호 확인 뒤) 자이로로 — GPS 방향 기울기(1.5초)보다 늦지 않다.
-// 앱(심사 중 1.0.1)은 예전 계산(lean.ts) 그대로이고, 이 합치기는 웹 빌드에서만 켠다 (features.ts leanFused).
+// 켜고 끄기는 features.ts leanFused (웹에서 먼저 시험한 뒤 2026-11-19 정식 앱에도 켬). 재생·모의주행(replayTimeline)은 예전 계산 그대로.
 import { cross, dot, norm, normalize, scale, sub, type Vec3 } from '../linalg';
 import { LEAN, leanDegOf } from './lean';
 
