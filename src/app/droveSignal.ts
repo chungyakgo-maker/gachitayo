@@ -10,9 +10,11 @@ import { getAuth } from './account';
 const FRESH_MS = 24 * 3_600_000;
 
 /** 보낼 코스 열쇠. 보낼 것이 아니면 null */
-export function droveKeyOf(result: Pick<DriveResultRecord, 'laps'>, course: Pick<Course, 'builtin'> | null, startedAt: number, now = Date.now()): string | null {
-  if (!course?.builtin || now - startedAt > FRESH_MS) return null;
-  return result.laps.some((l) => l.valid) ? `b:${course.builtin}` : null;
+export function droveKeyOf(result: Pick<DriveResultRecord, 'laps'>, course: Pick<Course, 'builtin' | 'shared'> | null, startedAt: number, now = Date.now()): string | null {
+  // 기본 코스 b:{key}, 받은 모두의 코스 s:{공개 번호} (내 코스는 세지 않는다)
+  const key = course?.builtin ? `b:${course.builtin}` : course?.shared ? `s:${course.shared.id}` : null;
+  if (!key || now - startedAt > FRESH_MS) return null;
+  return result.laps.some((l) => l.valid) ? key : null;
 }
 
 export async function reportDrove(courseKey: string): Promise<void> {

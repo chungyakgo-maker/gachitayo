@@ -36,7 +36,8 @@ export function filterCourses(courses: Course[], f: CourseFilter, p: FilterPrefs
     if (!popular) return [];
     const out: Array<{ course: Course; drivers: number }> = [];
     for (const r of popular) {
-      const course = courses.find((c) => c.builtin === r.builtin);
+      // 모두의 코스는 's:{공개 번호}' 로 온다 (폰에 받아 둔 것만 보인다)
+      const course = courses.find((c) => (r.builtin.startsWith('s:') ? c.shared?.id === r.builtin.slice(2) : c.builtin === r.builtin));
       if (course && r.drivers > 0) out.push({ course, drivers: r.drivers });
     }
     return out;

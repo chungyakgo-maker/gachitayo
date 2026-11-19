@@ -19,6 +19,8 @@ export interface AccountState {
   kakao: boolean;
   /** 애플에 연결된 계정 (아이폰 앱, 앱 로그인 설계 2026-11-17) */
   apple: boolean;
+  /** 모두의 코스 관리자 (서버 /api/me, 폰에 저장하지 않음) */
+  admin?: boolean;
   busy: boolean;
   error: string | null;
 }
@@ -187,7 +189,7 @@ export function initAccount(): Promise<void> {
     // 보낸 열쇠를 기억한다: 그사이 로그인으로 열쇠가 바뀌면 이 결과는 버린다 (검토 지적)
     const used = token;
     try {
-      const me = await apiFetch<{ userId: string; nickname: string; kakao?: boolean; apple?: boolean }>('GET', '/api/me', { token: used });
+      const me = await apiFetch<{ userId: string; nickname: string; kakao?: boolean; apple?: boolean; admin?: boolean }>('GET', '/api/me', { token: used });
       if (used !== token) return;
       if (me.nickname && me.nickname !== state.nickname) {
         write(NICKNAME_KEY, me.nickname);
@@ -203,6 +205,7 @@ export function initAccount(): Promise<void> {
         write(APPLE_KEY, apple ? '1' : null);
         set({ apple });
       }
+      if ((me.admin === true) !== (state.admin === true)) set({ admin: me.admin === true });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) markAccountLost(used);
     }

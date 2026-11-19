@@ -9,3 +9,5 @@ export const MY_COURSE_LIMIT = 200;
 export const BACKUP_REMIND_DAYS = 30;
 /** 기록이 이만큼은 있어야 백업 알림을 띄운다 (처음 깐 사람에게 바로 띄우지 않게) */
 export const BACKUP_REMIND_MIN = 5;
+/** 계정당 모두의 코스 공개 수 (서버 worker/src/shared.ts PUBLISH_LIMIT 와 같게) */
+export const PUBLISH_LIMIT = 20;

@@ -15,7 +15,8 @@ export interface CoursePrefs {
 
 const KEY = 'gachitayo.coursePrefs.v1';
 
-export const prefKey = (c: Pick<Course, 'id' | 'builtin'>): string => (c.builtin ? `b:${c.builtin}` : c.id);
+/** 열쇠: 기본 코스 b:{key}, 받은 모두의 코스 s:{공개 번호} (폰을 바꾸거나 다시 받아도 같다), 내 코스 id */
+export const prefKey = (c: Pick<Course, 'id' | 'builtin' | 'shared'>): string => (c.builtin ? `b:${c.builtin}` : c.shared ? `s:${c.shared.id}` : c.id);
 
 function loadLocal(): CoursePrefs {
   try {
@@ -65,21 +66,21 @@ export function useCoursePrefs(): CoursePrefs {
   }, getCoursePrefs);
 }
 
-export const isFavorite = (c: Pick<Course, 'id' | 'builtin'>, p: CoursePrefs = prefs): boolean => p.favorites.includes(prefKey(c));
+export const isFavorite = (c: Pick<Course, 'id' | 'builtin' | 'shared'>, p: CoursePrefs = prefs): boolean => p.favorites.includes(prefKey(c));
 
-export function toggleFavorite(c: Pick<Course, 'id' | 'builtin'>): void {
+export function toggleFavorite(c: Pick<Course, 'id' | 'builtin' | 'shared'>): void {
   const k = prefKey(c);
   const favorites = prefs.favorites.includes(k) ? prefs.favorites.filter((x) => x !== k) : [...prefs.favorites, k];
   set({ ...prefs, favorites });
 }
 
-export function tagsOf(c: Pick<Course, 'id' | 'builtin'>, p: CoursePrefs = prefs): CourseTag[] {
+export function tagsOf(c: Pick<Course, 'id' | 'builtin' | 'shared'>, p: CoursePrefs = prefs): CourseTag[] {
   const t = p.tags[prefKey(c)];
   if (t) return t;
   return c.builtin ? ['mountain'] : [];
 }
 
-export function setTag(c: Pick<Course, 'id' | 'builtin'>, tag: CourseTag, on: boolean): void {
+export function setTag(c: Pick<Course, 'id' | 'builtin' | 'shared'>, tag: CourseTag, on: boolean): void {
   const cur = tagsOf(c);
   const next = on ? TAGS.filter((t) => t === tag || cur.includes(t)) : cur.filter((t) => t !== tag);
   set({ ...prefs, tags: { ...prefs.tags, [prefKey(c)]: next } });
