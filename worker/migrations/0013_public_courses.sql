@@ -35,6 +35,8 @@ CREATE TABLE course_reports (
   reason TEXT NOT NULL,
   note TEXT,
   at INTEGER NOT NULL,
+  -- 관리자가 숨김을 풀면 1 (세지 않지만 줄은 남겨 같은 사람이 다시 신고하지 못하게)
+  cleared INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (course_id, user_id)
 );
 CREATE TABLE user_blocks (

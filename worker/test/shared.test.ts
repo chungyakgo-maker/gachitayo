@@ -291,3 +291,72 @@ describe('인기 도로: 모두의 코스 신호', () => {
     expect(rows.find((r) => r.builtin === key)).toEqual({ builtin: key, drivers: 2 });
   });
 });
+
+describe('검토 고침 (2부)', () => {
+  it('신고하고 계정을 지웠다 다시 만들어 또 신고해도 3이 되지 않는다 (지운 계정의 신고·받기는 셈에서 뺀다)', async () => {
+    const owner = await signedIn();
+    const id = await publish(owner);
+    for (let i = 0; i < 3; i++) {
+      const r = await signedIn();
+      await report(r, id);
+      await call('POST', `/api/shared/${id}/add`, { token: r.token });
+      expect((await call('DELETE', '/api/me', { token: r.token })).status).toBe(200);
+    }
+    const row = await env.DB.prepare('SELECT reports, adds, status FROM public_courses WHERE id = ?').bind(id).first<{ reports: number; adds: number; status: string }>();
+    expect(row).toEqual({ reports: 0, adds: 0, status: 'open' });
+  });
+
+  it('상세도 차단한 사람·공개 막힌 사람의 코스는 404 (올린 사람·관리자는 본다)', async () => {
+    const a = await signedIn();
+    const id = await publish(a);
+    const me = await newUser();
+    await call('POST', '/api/blocks', { token: me.token, body: { userId: a.userId } });
+    expect((await call('GET', `/api/shared/${id}`, { token: me.token })).status).toBe(404);
+    const admin = await newUser();
+    asAdmin(admin);
+    await call('POST', '/api/admin/bans', { token: admin.token, body: { userId: a.userId } });
+    await call('POST', `/api/admin/shared/${id}`, { token: admin.token, body: { action: 'show' } });
+    expect((await call('GET', `/api/shared/${id}`, { token: (await newUser()).token })).status).toBe(404);
+    expect((await call('GET', `/api/shared/${id}`, { token: a.token })).status).toBe(200);
+    expect((await call('GET', `/api/shared/${id}`, { token: admin.token })).status).toBe(200);
+  });
+
+  it('관리자 목록에 공개 막힘 표시, 숨김 풀기는 신고 수를 0으로 (같은 사람은 다시 신고 못 함)', async () => {
+    const a = await signedIn();
+    const id = await publish(a);
+    const reporters = [await signedIn(), await signedIn(), await signedIn()];
+    for (const r of reporters) await report(r, id);
+    const admin = await newUser();
+    asAdmin(admin);
+    await call('POST', '/api/admin/bans', { token: admin.token, body: { userId: a.userId } });
+    let rows = (await (await call('GET', '/api/admin/shared', { token: admin.token })).json()) as Array<{ id: string; banned: boolean; reports: number }>;
+    expect(rows.find((r) => r.id === id)).toMatchObject({ banned: true, reports: 3 });
+    await call('DELETE', `/api/admin/bans/${a.userId}`, { token: admin.token });
+    await call('POST', `/api/admin/shared/${id}`, { token: admin.token, body: { action: 'show' } });
+    rows = (await (await call('GET', '/api/admin/shared', { token: admin.token })).json()) as Array<{ id: string; banned: boolean; reports: number }>;
+    expect(rows.find((r) => r.id === id)).toMatchObject({ banned: false, reports: 0 });
+    await report(reporters[0]!, id);
+    expect((await call('GET', `/api/shared/${id}`, { token: (await newUser()).token })).status).toBe(200);
+  });
+
+  it('올린 사람이 자기 코스를 받아도 받은 수는 그대로', async () => {
+    const a = await signedIn();
+    const id = await publish(a);
+    expect(await (await call('POST', `/api/shared/${id}/add`, { token: a.token })).json()).toEqual({ adds: 0 });
+  });
+
+  it('게이트는 네 칸만 저장한다 (다른 칸이 따라 들어가지 않게)', async () => {
+    const a = await signedIn();
+    const id = await publish(a, { startGate: { ...gate(37.5), extra: 'x' } });
+    const d = (await (await call('GET', `/api/shared/${id}`, { token: a.token })).json()) as { startGate: Record<string, unknown> };
+    expect(d.startGate).toEqual(gate(37.5));
+  });
+
+  it('나쁜 말 거르기: 땅 이름·붙은 낱말은 통과, 보이지 않는 글자로 숨긴 말은 막는다', async () => {
+    const a = await signedIn();
+    const ok = async (name: string) => (await call('POST', '/api/shared', { token: a.token, body: body({ name }) })).status;
+    for (const name of ['한남대교 야경', '시발점 코스', '화성시 발안 드라이브', '서울시 발산역', '뒤돌아보지마', '살인미소 와인딩', '새끼줄 고개']) expect(await ok(name)).toBe(201);
+    expect(await ok('씨​발 코스')).toBe(400);
+    expect(await ok('개새끼 길')).toBe(400);
+  }, 30_000);
+});

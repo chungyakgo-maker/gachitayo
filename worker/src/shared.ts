@@ -47,7 +47,8 @@ const gate = (v: unknown): v is Gate => {
 export function validBody(body: unknown): SharedBody {
   const b = body as Partial<SharedBody> | null;
   if (!b || typeof b.name !== 'string') throw new HttpError(400, '잘못된 코스');
-  const name = b.name.trim();
+  // 보이지 않는 글자·조절 글자는 지운다 (길이·거르기를 피해 가지 못하게)
+  const name = b.name.replace(/[\p{Cf}\p{Cc}]/gu, '').trim();
   if (name.length < 1 || name.length > 40) throw new HttpError(400, '이름은 1~40자로 적어 주세요');
   if (hasBadWord(name)) throw new HttpError(400, '이름에 쓸 수 없는 말이 있어요');
   if (typeof b.region !== 'string' || (b.region !== '' && !(SIDOS as readonly string[]).includes(b.region))) throw new HttpError(400, '잘못된 지역');
@@ -57,7 +58,9 @@ export function validBody(body: unknown): SharedBody {
   const sb = b.sectorBoundsM;
   if (sb !== null && sb !== undefined && !(Array.isArray(sb) && sb.length === 2 && sb.every((x) => num(x, 0, MAX_LEN_M)))) throw new HttpError(400, '잘못된 구간');
   if (!pts(b.line, 2, MAX_POINTS) || !pts(b.thumb, 2, MAX_THUMB)) throw new HttpError(400, '잘못된 코스 선');
-  return { name, region: b.region, kind: b.kind, lengthM: b.lengthM, startGate: b.startGate, finishGate: b.finishGate, sectorBoundsM: sb ?? null, line: b.line, thumb: b.thumb };
+  // 게이트는 네 칸만 새로 만든다 (보낸 다른 칸이 저장돼 모든 사람에게 가지 않게)
+  const g = (x: Gate): Gate => ({ lat: x.lat, lon: x.lon, bearingDeg: x.bearingDeg, widthM: x.widthM });
+  return { name, region: b.region, kind: b.kind, lengthM: b.lengthM, startGate: g(b.startGate), finishGate: g(b.finishGate), sectorBoundsM: sb ?? null, line: b.line, thumb: b.thumb };
 }
 
 /** 관리자인지 (Worker 비밀값 ADMIN_USER_IDS, 쉼표로 여러 계정) */
@@ -185,7 +188,15 @@ export async function listShared(env: Cloudflare.Env, userId: string, after: str
 export async function getShared(env: Cloudflare.Env, userId: string, id: string) {
   const r = await env.DB.prepare(`${SELECT.replace('p.thumb,', 'p.thumb, p.line,')} WHERE p.id = ?`).bind(id).first<Row>();
   const owner = r?.owner_id === userId;
-  if (!r || (!owner && !isAdmin(env, userId) && r.status !== 'open')) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  if (!r) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  if (!owner && !isAdmin(env, userId)) {
+    // 목록과 같게: 숨김·내가 안 보기로 한 사람·공개 막힌 사람의 코스는 없는 것으로 (검토 지적)
+    const hiddenForMe =
+      r.status !== 'open' ||
+      !!(await env.DB.prepare('SELECT 1 FROM user_blocks WHERE user_id = ? AND blocked_id = ?').bind(userId, r.owner_id).first()) ||
+      !!(await env.DB.prepare('SELECT 1 FROM publish_bans WHERE user_id = ?').bind(r.owner_id).first());
+    if (hiddenForMe) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  }
   return {
     ...summary(r, userId),
     line: JSON.parse(r.line!) as LatLon[],
@@ -198,7 +209,10 @@ export async function getShared(env: Cloudflare.Env, userId: string, id: string)
 
 /** 받기: 한 사람 한 번만 센다 */
 export async function addShared(env: Cloudflare.Env, userId: string, id: string, now = Date.now()): Promise<{ adds: number }> {
-  if (!(await env.DB.prepare('SELECT 1 FROM public_courses WHERE id = ?').bind(id).first())) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  const row = await env.DB.prepare('SELECT owner_id, adds FROM public_courses WHERE id = ?').bind(id).first<{ owner_id: string; adds: number }>();
+  if (!row) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  // 올린 사람이 자기 코스를 받아도 세지 않는다
+  if (row.owner_id === userId) return { adds: Number(row.adds) };
   const ins = await env.DB.prepare('INSERT OR IGNORE INTO course_adds (course_id, user_id, at) VALUES (?, ?, ?)').bind(id, userId, now).run();
   if (ins.meta.changes > 0) await env.DB.prepare('UPDATE public_courses SET adds = adds + 1 WHERE id = ?').bind(id).run();
   const r = await env.DB.prepare('SELECT adds FROM public_courses WHERE id = ?').bind(id).first<{ adds: number }>();
@@ -219,7 +233,7 @@ export async function reportShared(env: Cloudflare.Env, userId: string, id: stri
   const row = await env.DB.prepare('SELECT owner_id FROM public_courses WHERE id = ?').bind(id).first<{ owner_id: string }>();
   if (!row) throw new HttpError(404, '공개 코스를 찾지 못했어요');
   if (row.owner_id === userId) throw new HttpError(400, '내 코스는 신고할 수 없어요');
-  const ins = await env.DB.prepare('INSERT OR IGNORE INTO course_reports (course_id, user_id, reason, note, at) VALUES (?, ?, ?, ?, ?)').bind(id, userId, b.reason, note, now).run();
+  const ins = await env.DB.prepare('INSERT OR IGNORE INTO course_reports (course_id, user_id, reason, note, at, cleared) VALUES (?, ?, ?, ?, ?, 0)').bind(id, userId, b.reason, note, now).run();
   if (ins.meta.changes > 0) {
     await env.DB.prepare(`UPDATE public_courses SET reports = reports + 1, status = CASE WHEN reports + 1 >= ${REPORT_HIDE} THEN 'hidden' ELSE status END WHERE id = ?`).bind(id).run();
   }
@@ -252,19 +266,23 @@ function adminOnly(env: Cloudflare.Env, userId: string): void {
 /** 관리자 목록: 숨김·신고 있는 것 먼저, 그다음 새것부터 (이유별 수 포함) */
 export async function adminListShared(env: Cloudflare.Env, userId: string) {
   adminOnly(env, userId);
-  const r = await env.DB.prepare(`${SELECT} ORDER BY (p.status = 'hidden') DESC, (p.reports > 0) DESC, p.created_at DESC LIMIT 1000`).all<Row>();
-  const reasons = await env.DB.prepare('SELECT course_id, reason, COUNT(*) AS n FROM course_reports GROUP BY course_id, reason').all<{ course_id: string; reason: string; n: number }>();
+  const r = await env.DB.prepare(
+    `${SELECT.replace(' FROM public_courses p', ', EXISTS (SELECT 1 FROM publish_bans b WHERE b.user_id = p.owner_id) AS banned FROM public_courses p')} ORDER BY (p.status = 'hidden') DESC, (p.reports > 0) DESC, p.created_at DESC LIMIT 1000`,
+  ).all<Row & { banned: number }>();
+  const reasons = await env.DB.prepare('SELECT course_id, reason, COUNT(*) AS n FROM course_reports WHERE cleared = 0 GROUP BY course_id, reason').all<{ course_id: string; reason: string; n: number }>();
   const by = new Map<string, Record<string, number>>();
   for (const x of reasons.results) by.set(x.course_id, { ...(by.get(x.course_id) ?? {}), [x.reason]: Number(x.n) });
-  return r.results.map((x) => ({ ...summary(x, userId), status: x.status, reports: Number(x.reports), reasons: by.get(x.id) ?? {} }));
+  return r.results.map((x) => ({ ...summary(x, userId), status: x.status, reports: Number(x.reports), reasons: by.get(x.id) ?? {}, banned: Number(x.banned) === 1 }));
 }
 
 export async function adminSetShared(env: Cloudflare.Env, userId: string, id: string, body: unknown): Promise<{ ok: true }> {
   adminOnly(env, userId);
   const action = (body as { action?: unknown } | null)?.action;
   if (action !== 'hide' && action !== 'show') throw new HttpError(400, '잘못된 동작');
-  const r = await env.DB.prepare('UPDATE public_courses SET status = ? WHERE id = ?').bind(action === 'hide' ? 'hidden' : 'open', id).run();
+  // 숨김을 풀면 지금까지의 신고는 세지 않는다 (줄은 남겨 같은 사람이 다시 신고하지 못하게) — 하나만 더 와도 다시 숨겨지지 않게 (검토 지적)
+  const r = await env.DB.prepare(`UPDATE public_courses SET status = ?${action === 'show' ? ', reports = 0' : ''} WHERE id = ?`).bind(action === 'hide' ? 'hidden' : 'open', id).run();
   if (r.meta.changes === 0) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  if (action === 'show') await env.DB.prepare('UPDATE course_reports SET cleared = 1 WHERE course_id = ?').bind(id).run();
   return { ok: true };
 }
 
@@ -290,6 +308,13 @@ export async function adminUnban(env: Cloudflare.Env, userId: string, target: st
 export function deleteSharedOfUser(env: Cloudflare.Env, userId: string): D1PreparedStatement[] {
   const db = env.DB;
   return [
+    // 이 사람이 신고·받기한 남의 코스는 수를 남은 줄로 다시 센다 (계정을 지웠다 다시 만들며 신고를 쌓아 숨기지 못하게, 검토 지적)
+    db.prepare(
+      `UPDATE public_courses SET
+         reports = (SELECT COUNT(*) FROM course_reports r WHERE r.course_id = public_courses.id AND r.cleared = 0 AND r.user_id != ?1),
+         adds = (SELECT COUNT(*) FROM course_adds a WHERE a.course_id = public_courses.id AND a.user_id != ?1)
+       WHERE owner_id != ?1 AND (id IN (SELECT course_id FROM course_reports WHERE user_id = ?1) OR id IN (SELECT course_id FROM course_adds WHERE user_id = ?1))`,
+    ).bind(userId),
     db.prepare('DELETE FROM course_adds WHERE course_id IN (SELECT id FROM public_courses WHERE owner_id = ?) OR user_id = ?').bind(userId, userId),
     db.prepare('DELETE FROM course_reports WHERE course_id IN (SELECT id FROM public_courses WHERE owner_id = ?) OR user_id = ?').bind(userId, userId),
     db.prepare('DELETE FROM public_courses WHERE owner_id = ?').bind(userId),

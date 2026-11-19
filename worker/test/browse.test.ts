@@ -152,4 +152,15 @@ describe('주행 신호 /api/drove (위치 없음)', () => {
     }
     expect((await call('POST', '/api/drove', { token: a.token, body: { course: 's:abc' } })).status).toBe(200);
   });
+
+  it('모두의 코스 신호가 많아도 기본 코스 20줄은 그대로 (예전 앱의 인기 도로가 밀리지 않게)', async () => {
+    const users = await Promise.all(Array.from({ length: 3 }, () => newUser()));
+    for (let i = 0; i < 25; i++) for (const u of users) await call('POST', '/api/drove', { token: u.token, body: { course: `s:flood-${i}` } });
+    const a = await newUser();
+    await call('POST', '/api/drove', { token: a.token, body: { course: 'b:quiet-builtin' } });
+    const rows = (await (await call('GET', '/api/popular?period=all', { token: a.token })).json()) as Array<{ builtin: string }>;
+    expect(rows.some((r) => r.builtin === 'quiet-builtin')).toBe(true);
+    expect(rows.filter((r) => !r.builtin.startsWith('s:')).length).toBeLessThanOrEqual(20);
+    expect(rows.filter((r) => r.builtin.startsWith('s:')).length).toBeLessThanOrEqual(20);
+  }, 60_000);
 });

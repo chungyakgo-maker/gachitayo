@@ -58,10 +58,13 @@ export async function putPrefs(env: Cloudflare.Env, userId: string, body: unknow
 
 export async function popular(env: Cloudflare.Env, period: string | null, now = Date.now()): Promise<Array<{ builtin: string; drivers: number }>> {
   if (period === 'live') {
-    const r = await env.DB.prepare('SELECT builtin, COUNT(*) AS drivers FROM driving_now WHERE at > ? GROUP BY builtin ORDER BY drivers DESC, builtin LIMIT 20')
-      .bind(now - LIVE_MS)
-      .all<{ builtin: string; drivers: number }>();
-    return r.results.map((x) => ({ builtin: x.builtin, drivers: Number(x.drivers) }));
+    // 기본 코스 20줄과 모두의 코스('s:') 20줄을 따로 (모두의 코스가 많아도 예전 앱의 기본 코스 순위가 밀리지 않게, 검토 지적)
+    const q = (cond: string) =>
+      env.DB.prepare(`SELECT builtin, COUNT(*) AS drivers FROM driving_now WHERE at > ? AND ${cond} GROUP BY builtin ORDER BY drivers DESC, builtin LIMIT 20`)
+        .bind(now - LIVE_MS)
+        .all<{ builtin: string; drivers: number }>();
+    const [b, sh] = await Promise.all([q("builtin NOT LIKE 's:%'"), q("builtin LIKE 's:%'")]);
+    return [...b.results, ...sh.results].map((x) => ({ builtin: x.builtin, drivers: Number(x.drivers) }));
   }
   // 예전 앱이 올린 기록(sessions) + 새 신호(course_drives)를 합쳐 계정 수를 센다 (같은 사람은 한 번)
   let whereS = '';
@@ -80,18 +83,22 @@ export async function popular(env: Cloudflare.Env, period: string | null, now = 
     whereS = `AND CAST(strftime('%m', s.started_at, '+9 hours') AS INTEGER) IN (${months})`;
     whereD = `AND CAST(substr(d.day, 6, 2) AS INTEGER) IN (${months})`;
   } else if (period !== 'all') throw new HttpError(400, '모르는 기간');
-  const r = await env.DB.prepare(
+  // 기본 코스 20줄 (예전 앱이 보는 그대로) + 모두의 코스('s:{id}') 20줄은 따로 센다 (검토 지적: 한 LIMIT 에 섞으면 기본 코스가 밀렸다)
+  const builtins = await env.DB.prepare(
     `SELECT builtin, COUNT(DISTINCT uid) AS drivers FROM (
        SELECT c.builtin AS builtin, s.owner_id AS uid FROM sessions s JOIN courses c ON c.id = s.course_id WHERE c.builtin IS NOT NULL ${whereS}
        UNION
        SELECT substr(d.course_key, 3) AS builtin, d.user_id AS uid FROM course_drives d WHERE d.course_key LIKE 'b:%' ${whereD}
-       UNION
-       SELECT d.course_key AS builtin, d.user_id AS uid FROM course_drives d WHERE d.course_key LIKE 's:%' ${whereD}
      ) GROUP BY builtin ORDER BY drivers DESC, builtin LIMIT 20`,
   )
-    .bind(...bindsS, ...bindsD, ...bindsD)
+    .bind(...bindsS, ...bindsD)
     .all<{ builtin: string; drivers: number }>();
-  return r.results.map((x) => ({ builtin: x.builtin, drivers: Number(x.drivers) }));
+  const shared = await env.DB.prepare(
+    `SELECT d.course_key AS builtin, COUNT(DISTINCT d.user_id) AS drivers FROM course_drives d WHERE d.course_key LIKE 's:%' ${whereD} GROUP BY d.course_key ORDER BY drivers DESC, d.course_key LIMIT 20`,
+  )
+    .bind(...bindsD)
+    .all<{ builtin: string; drivers: number }>();
+  return [...builtins.results, ...shared.results].map((x) => ({ builtin: x.builtin, drivers: Number(x.drivers) }));
 }
 
 /** 한국 날짜 YYYY-MM-DD */
