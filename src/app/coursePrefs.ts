@@ -52,6 +52,11 @@ export function clearCoursePrefs(): void {
   listeners.forEach((l) => l());
 }
 
+/** 백업 파일의 즐겨찾기·분류를 합친다: 즐겨찾기는 둘 다, 분류는 이 폰에서 정한 것이 이긴다 */
+export function mergeCoursePrefs(p: CoursePrefs): void {
+  set({ favorites: [...prefs.favorites, ...p.favorites.filter((k) => !prefs.favorites.includes(k))], tags: { ...p.tags, ...prefs.tags } });
+}
+
 export const getCoursePrefs = (): CoursePrefs => prefs;
 export function useCoursePrefs(): CoursePrefs {
   return useSyncExternalStore((cb) => {
