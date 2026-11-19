@@ -40,7 +40,7 @@ import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
 import { drivingNow, drove, getPrefs, popular, putPrefs } from './browse';
-import { connectRoom, createRoom, joinRoom, roomAction, roomRoute, roomState } from './group';
+import { connectRoom, createRoom, joinRoom, roomAction, roomRoute, roomCourse, roomState } from './group';
 import { searchPlaces } from './places';
 import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
@@ -160,7 +160,7 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     const userId = await authenticate(req, env);
     return json(200, headers, await joinRoom(env, userId, await readJson(req, 1024)));
   }
-  const rm = /^\/api\/rooms\/([0-9a-f-]{36})(?:\/(order|gap|dest|leave|route))?$/.exec(path);
+  const rm = /^\/api\/rooms\/([0-9a-f-]{36})(?:\/(order|gap|dest|course|leave|route))?$/.exec(path);
   if (rm) {
     const userId = await authenticate(req, env);
     const [, id, act] = rm;
@@ -172,6 +172,7 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
       if (method !== 'GET') throw new HttpError(405);
       return json(200, headers, await roomRoute(env, id!, userId));
     }
+    if (act === 'course' && method === 'GET') return json(200, headers, await roomCourse(env, id!, userId));
     if (method !== 'POST') throw new HttpError(405);
     const body = act === 'leave' ? null : await readJson(req, 1_048_576);
     return json(200, headers, await roomAction(env, id!, userId, act, body));

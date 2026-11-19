@@ -5,6 +5,7 @@
 //   GET  /api/rooms/{id}        방 상태 (참가자만)
 //   POST /api/rooms/{id}/order {userIds} · /gap {gapS} · /dest {name, lat, lon, route} (방장만) · /leave
 //   GET  /api/rooms/{id}/route  경로 점들 (참가자만)
+//   POST /api/rooms/{id}/course {코스 모양} (방장만) · GET /api/rooms/{id}/course (참가자) — 방장이 목적지 대신 코스를 정한다 (3부)
 //   웹소켓 /group/{id}          위치 보내기·받기, 방 상태 받기
 import { DurableObject } from 'cloudflare:workers';
 import { HttpError } from './http';
@@ -41,6 +42,28 @@ export interface Dest {
   lat: number;
   lon: number;
 }
+/** 방장이 정한 코스 요약 (방 상태에 실린다, 3부 팀 방 코스 지정) */
+export interface RoomCourseMeta {
+  name: string;
+  kind: 'loop' | 'point_to_point';
+  lengthM: number;
+  /** 기본 코스 b:{key} · 모두의 코스 s:{공개 번호} · 그 밖엔 null (팀원 폰에서 같은 코스를 찾는 열쇠) */
+  key: string | null;
+}
+interface Gate {
+  lat: number;
+  lon: number;
+  bearingDeg: number;
+  widthM: number;
+}
+/** 코스 모양 (방 저장소 'course', 참가자가 받는다) */
+export interface RoomCourse extends RoomCourseMeta {
+  startGate: Gate;
+  finishGate: Gate;
+  sectorBoundsM: [number, number] | null;
+  /** 줄인 선 (없으면 빈 배열 — 지도로 만든 코스) */
+  line: Array<[number, number]>;
+}
 export interface RoomRoute {
   points: Array<[number, number]>;
   distanceM: number;
@@ -56,6 +79,8 @@ interface RoomData {
   gapS: number;
   dest: Dest | null;
   routeVersion: number;
+  /** 방장이 정한 코스 (목적지 대신, 3부). 정하면 dest 는 그 코스 출발점 — 예전 앱은 출발점 목적지로 받는다 */
+  course?: RoomCourseMeta | null;
   /** 팀 주행 방이면 팀 (설계 2026-11-18-team-drive). 코드 방은 null */
   teamId?: string | null;
   teamName?: string | null;
@@ -129,7 +154,7 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
   }
   private view(d: RoomData): RoomState {
     const { createdAt: _c, pref: _p, ...rest } = d;
-    return { roomId: this.ctx.id.name ?? '', ...rest, teamId: d.teamId ?? null, teamName: d.teamName ?? null, max: d.max ?? ROOM_MAX, members: sorted(d.members) };
+    return { roomId: this.ctx.id.name ?? '', ...rest, course: d.course ?? null, teamId: d.teamId ?? null, teamName: d.teamName ?? null, max: d.max ?? ROOM_MAX, members: sorted(d.members) };
   }
   private broadcast(msg: string, except?: WebSocket): void {
     for (const ws of this.ctx.getWebSockets()) {
@@ -222,10 +247,35 @@ export class GroupRoom extends DurableObject<Cloudflare.Env> {
     const d = await this.hostOnly(userId);
     if ('error' in d) return d;
     d.dest = dest;
+    d.course = null;
     d.routeVersion += 1;
     await this.ctx.storage.put('route', route);
+    await this.ctx.storage.delete('course');
     await this.save(d);
     return this.view(d);
+  }
+
+  /** 방장이 코스를 정한다: 목적지는 그 코스 출발점, 경로는 목적지만(거리 0 — 각자 내 위치에서 찾는다). 판 +1 */
+  async setCourse(userId: string, course: RoomCourse): Promise<RoomState | Fail> {
+    const d = await this.hostOnly(userId);
+    if ('error' in d) return d;
+    const { lat, lon } = course.startGate;
+    d.course = { name: course.name, kind: course.kind, lengthM: course.lengthM, key: course.key };
+    d.dest = { name: `${course.name} · 출발점`, lat, lon };
+    d.routeVersion += 1;
+    await this.ctx.storage.put('course', course);
+    await this.ctx.storage.put('route', { points: [[lat, lon], [lat + 0.00001, lon]], distanceM: 0, durationS: 0 } satisfies RoomRoute);
+    await this.save(d);
+    return this.view(d);
+  }
+
+  async courseShape(userId: string): Promise<(RoomCourse & { version: number }) | null | Fail> {
+    const d = await this.data();
+    if (!d) return { error: 'missing' };
+    if (!d.members.some((m) => m.userId === userId)) return { error: 'forbidden' };
+    if (!d.course) return null;
+    const c = (await this.ctx.storage.get<RoomCourse>('course')) ?? null;
+    return c ? { ...c, version: d.routeVersion } : null;
   }
 
   async route(userId: string): Promise<RoomRoute | null | Fail> {
@@ -394,6 +444,8 @@ export async function roomAction(env: Cloudflare.Env, roomId: string, userId: st
         await r.setDest(userId, { name: b.name, lat: b.lat as number, lon: b.lon as number }, { points: pts as Array<[number, number]>, distanceM: route!.distanceM as number, durationS: route!.durationS as number }),
       );
     }
+    case 'course':
+      return unwrap(await r.setCourse(userId, validRoomCourse(b)));
     case 'leave':
       return unwrap(await r.leave(userId));
     default:
@@ -413,6 +465,33 @@ async function rememberTeamOrder(env: Cloudflare.Env, st: RoomState): Promise<vo
   const now = sorted(st.members).map((m) => m.userId);
   const next = [...now, ...prev.filter((id) => !now.includes(id))];
   await env.DB.prepare('UPDATE teams SET order_json = ? WHERE id = ?').bind(JSON.stringify(next), st.teamId).run();
+}
+
+const MAX_COURSE_POINTS = 3000;
+const isGate = (v: unknown): v is Gate => {
+  const g = v as Gate | null;
+  return !!g && num(g.lat, -90, 90) && num(g.lon, -180, 180) && num(g.bearingDeg, -360, 360) && num(g.widthM, 1, 200);
+};
+/** 방장이 보낸 코스 모양 검사 (모양만 새로 만들어 저장한다 — 다른 칸이 따라 들어오지 않게) */
+function validRoomCourse(b: Record<string, unknown>): RoomCourse {
+  const name = typeof b.name === 'string' ? b.name.trim() : '';
+  if (name.length < 1 || name.length > 40) throw new HttpError(400, '잘못된 코스 이름');
+  if (b.kind !== 'loop' && b.kind !== 'point_to_point') throw new HttpError(400, '잘못된 코스 종류');
+  if (!num(b.lengthM, 0, 100_000)) throw new HttpError(400, '잘못된 코스 길이');
+  if (!isGate(b.startGate) || !isGate(b.finishGate)) throw new HttpError(400, '잘못된 출발선·도착선');
+  const key = b.key ?? null;
+  if (key !== null && (typeof key !== 'string' || !/^[bs]:.+/.test(key) || key.length > 80)) throw new HttpError(400, '잘못된 코스 열쇠');
+  const sb = b.sectorBoundsM ?? null;
+  if (sb !== null && !(Array.isArray(sb) && sb.length === 2 && sb.every((x) => num(x, 0, 100_000)))) throw new HttpError(400, '잘못된 구간');
+  const line = b.line;
+  if (!Array.isArray(line) || line.length === 1 || line.length > MAX_COURSE_POINTS || !line.every((p) => Array.isArray(p) && p.length === 2 && num(p[0], -90, 90) && num(p[1], -180, 180))) throw new HttpError(400, '잘못된 코스 선');
+  const gate = (g: Gate): Gate => ({ lat: g.lat, lon: g.lon, bearingDeg: g.bearingDeg, widthM: g.widthM });
+  return { name, kind: b.kind, lengthM: b.lengthM as number, key: key as string | null, startGate: gate(b.startGate), finishGate: gate(b.finishGate), sectorBoundsM: sb as [number, number] | null, line: line as Array<[number, number]> };
+}
+
+export async function roomCourse(env: Cloudflare.Env, roomId: string, userId: string): Promise<(RoomCourse & { version: number }) | null> {
+  await guarded(env, roomId, userId);
+  return unwrap<(RoomCourse & { version: number }) | null>(await room(env, roomId).courseShape(userId));
 }
 
 export async function roomRoute(env: Cloudflare.Env, roomId: string, userId: string): Promise<RoomRoute | null> {
