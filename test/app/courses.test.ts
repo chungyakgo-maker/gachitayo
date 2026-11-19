@@ -163,6 +163,9 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     const base = (await d.listCourses())[0]!;
     const filler = Array.from({ length: 200 - mine }, (_, i) => `fill-${i}`);
     for (const id of filler) await d.putCourse({ ...base, id, builtin: undefined, name: id });
+    // 역방향을 만들 코스는 다른 코스와 겹치지 않는 곳에 (역방향이 이미 있는 코스와 같으면 새로 만들지 않아 한도를 안 본다)
+    const g = (lat: number, bearingDeg: number) => ({ lat, lon: 10, bearingDeg, widthM: 30 });
+    await d.putCourse({ ...base, id: filler[0]!, builtin: undefined, name: '외딴 편도', kind: 'point_to_point', origin: { lat: 10, lon: 10 }, startGate: g(10, 0), finishGate: g(10.01, 0), centerline: [[10, 10], [10.005, 10], [10.01, 10]], lengthM: 1110 });
     const at = { lat: 37.5, lon: 127 };
     const msg = '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요';
     await expect(createMapCourse({ name: 'x', kind: 'loop', start: { at, toward: { lat: 37.5, lon: 127.001 } } })).rejects.toThrow(msg);
