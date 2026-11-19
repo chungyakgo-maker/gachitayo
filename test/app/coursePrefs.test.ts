@@ -1,4 +1,4 @@
-// 즐겨찾기·분류 (설계 docs/superpowers/specs/2026-11-16-course-browse-design.md): 폰에 두고 계정과 맞춘다
+// 즐겨찾기·분류 (설계 docs/superpowers/specs/2026-11-16-course-browse-design.md): 폰에만 둔다 (기록은 폰에만 4단계 — 서버와 맞추지 않는다)
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Course } from '../../src/types/course';
 
@@ -69,59 +69,24 @@ describe('coursePrefs', () => {
     expect(p.tagsOf(builtin)).toEqual(['coast']);
   });
 
-  it('favorite toggles, persists on the phone and uploads after a pause', async () => {
+  it('favorite toggles and persists on the phone only (never calls the server)', async () => {
     const p = await load();
     p.toggleFavorite(mine);
     expect(p.isFavorite(mine)).toBe(true);
     expect(JSON.parse(storage.getItem('gachitayo.coursePrefs.v1')!).prefs.favorites).toEqual(['c-123']);
+    p.setTag(mine, 'coast', true);
+    await vi.advanceTimersByTimeAsync(5000);
     expect(calls).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(calls).toEqual([{ method: 'PUT', url: expect.stringMatching(/\/api\/prefs$/), body: { favorites: ['c-123'], tags: {} } }]);
     p.toggleFavorite(mine);
     expect(p.isFavorite(mine)).toBe(false);
   });
 
-  it('sync takes the server copy when nothing changed here', async () => {
-    serverPrefs = { favorites: ['b:haogogae'], tags: { 'c-123': ['coast'] } };
+  it('reads what an older app saved on this phone (prefs with a dirty flag)', async () => {
+    storage.setItem('gachitayo.coursePrefs.v1', JSON.stringify({ prefs: { favorites: ['b:haogogae'], tags: { 'c-123': ['coast'] } }, dirty: true }));
     const p = await load();
-    await p.syncCoursePrefs();
     expect(p.isFavorite(builtin)).toBe(true);
     expect(p.tagsOf(mine)).toEqual(['coast']);
-  });
-
-  it('account change keeps both: local and server favorites are merged and uploaded', async () => {
-    const p = await load();
-    p.toggleFavorite(mine);
-    await vi.advanceTimersByTimeAsync(1000);
-    serverPrefs = { favorites: ['b:haogogae'], tags: { 'b:haogogae': ['coast'] } };
-    calls.length = 0;
-    await p.syncCoursePrefs({ accountChanged: true });
-    expect(p.isFavorite(mine)).toBe(true);
-    expect(p.isFavorite(builtin)).toBe(true);
-    expect(p.tagsOf(builtin)).toEqual(['coast']);
-    expect(calls.at(-1)).toEqual({ method: 'PUT', url: expect.stringMatching(/\/api\/prefs$/), body: { favorites: ['b:haogogae', 'c-123'], tags: { 'b:haogogae': ['coast'] } } });
-  });
-
-  it('only one upload at a time; the newest copy wins', async () => {
-    const p = await load();
-    let release: (() => void) | null = null;
-    const order: unknown[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_u: string, init: RequestInit) => {
-        order.push(JSON.parse(String(init.body)).favorites);
-        if (!release) await new Promise<void>((r) => (release = r));
-        return json(200, {});
-      }),
-    );
-    p.toggleFavorite(mine);
-    await vi.advanceTimersByTimeAsync(1000);
-    p.toggleFavorite(builtin);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(order).toEqual([['c-123']]);
-    release!();
-    await vi.advanceTimersByTimeAsync(10);
-    expect(order).toEqual([['c-123'], ['c-123', 'b:haogogae']]);
+    expect(calls).toHaveLength(0);
   });
 
   it('clearCoursePrefs forgets this phone copy (logout)', async () => {
@@ -134,16 +99,4 @@ describe('coursePrefs', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('sync uploads changes made while offline', async () => {
-    h.auth = null;
-    const p = await load();
-    p.toggleFavorite(builtin);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(calls).toHaveLength(0);
-    h.auth = { userId: 'u1', token: 'tok' };
-    serverPrefs = { favorites: [], tags: {} };
-    await p.syncCoursePrefs();
-    expect(calls.at(-1)).toEqual({ method: 'PUT', url: expect.stringMatching(/\/api\/prefs$/), body: { favorites: ['b:haogogae'], tags: {} } });
-    expect(p.isFavorite(builtin)).toBe(true);
-  });
 });

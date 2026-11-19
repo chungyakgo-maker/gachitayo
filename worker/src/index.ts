@@ -25,6 +25,7 @@
 //   GET/PUT /api/prefs                   즐겨찾기·분류 (코스 둘러보기)
 //   GET /api/popular?period=             인기 도로 (기본 코스별 달린 사람 수)
 //   POST /api/driving {builtin}          기본 코스로 주행 중 신호 (실시간 인기, 위치 없음)
+//   POST /api/drove {course}             코스를 달렸다는 신호 (인기 도로, 코스 열쇠·한국 날짜만)
 //   /api/rooms…, 웹소켓 /group/{id}      그룹 주행 방 (group.ts)
 //   /api/teams…                          팀·팀 주행 (teams.ts)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
@@ -36,7 +37,7 @@ import { handleFiles } from './files';
 import { handleMap } from './map';
 import { addFriend, deletePresence, friendPresence, listFriends, putPresence, removeFriend } from './friends';
 import { tokenFromProtocol } from './live';
-import { drivingNow, getPrefs, popular, putPrefs } from './browse';
+import { drivingNow, drove, getPrefs, popular, putPrefs } from './browse';
 import { connectRoom, createRoom, joinRoom, roomAction, roomRoute, roomState } from './group';
 import { searchPlaces } from './places';
 import { findRoute } from './route';
@@ -204,6 +205,12 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     await authenticate(req, env);
     return json(200, headers, await popular(env, new URL(req.url).searchParams.get('period')));
   }
+  if (path === '/api/drove') {
+    if (method !== 'POST') throw new HttpError(405);
+    const userId = await authenticate(req, env);
+    return json(200, headers, await drove(env, userId, await readJson(req, 1024)));
+  }
+
   if (path === '/api/driving') {
     if (method !== 'POST') throw new HttpError(405);
     const userId = await authenticate(req, env);

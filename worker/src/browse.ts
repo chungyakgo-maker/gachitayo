@@ -2,6 +2,7 @@
 //   GET/PUT /api/prefs        즐겨찾기·분류 (계정마다 JSON 하나, 16 KB 이하)
 //   GET /api/popular?period=  기본 코스별 달린 사람 수 (많은 순 20개). 기간: live 7d 30d all spring summer autumn winter
 //   POST /api/driving {builtin} 기본 코스로 주행 중 신호 (위치 없음). 실시간 = 최근 10분 안에 신호 온 계정 수
+//   POST /api/drove {course}    코스를 달렸다는 신호 (기록은 폰에만 2026-11-18: 기록 대신 이것으로 센다. 코스 열쇠·한국 날짜만)
 import { HttpError } from './http';
 
 export interface Prefs {
@@ -61,22 +62,44 @@ export async function popular(env: Cloudflare.Env, period: string | null, now = 
       .all<{ builtin: string; drivers: number }>();
     return r.results.map((x) => ({ builtin: x.builtin, drivers: Number(x.drivers) }));
   }
-  let where = '';
-  const binds: Array<string | number> = [];
+  // 예전 앱이 올린 기록(sessions) + 새 신호(course_drives)를 합쳐 계정 수를 센다 (같은 사람은 한 번)
+  let whereS = '';
+  let whereD = '';
+  const bindsS: Array<string | number> = [];
+  const bindsD: Array<string | number> = [];
   if (period === '7d' || period === '30d') {
-    where = 'AND s.started_at >= ?';
-    binds.push(new Date(now - (period === '7d' ? 7 : 30) * DAY).toISOString());
+    const from = now - (period === '7d' ? 7 : 30) * DAY;
+    whereS = 'AND s.started_at >= ?';
+    bindsS.push(new Date(from).toISOString());
+    whereD = 'AND d.day >= ?';
+    bindsD.push(kstDay(from));
   } else if (period && Object.hasOwn(SEASON, period)) {
     // 한국 시각 달
-    where = `AND CAST(strftime('%m', s.started_at, '+9 hours') AS INTEGER) IN (${SEASON[period]!.join(',')})`;
+    const months = SEASON[period]!.join(',');
+    whereS = `AND CAST(strftime('%m', s.started_at, '+9 hours') AS INTEGER) IN (${months})`;
+    whereD = `AND CAST(substr(d.day, 6, 2) AS INTEGER) IN (${months})`;
   } else if (period !== 'all') throw new HttpError(400, '모르는 기간');
   const r = await env.DB.prepare(
-    `SELECT c.builtin AS builtin, COUNT(DISTINCT s.owner_id) AS drivers FROM sessions s JOIN courses c ON c.id = s.course_id
-     WHERE c.builtin IS NOT NULL ${where} GROUP BY c.builtin ORDER BY drivers DESC, c.builtin LIMIT 20`,
+    `SELECT builtin, COUNT(DISTINCT uid) AS drivers FROM (
+       SELECT c.builtin AS builtin, s.owner_id AS uid FROM sessions s JOIN courses c ON c.id = s.course_id WHERE c.builtin IS NOT NULL ${whereS}
+       UNION
+       SELECT substr(d.course_key, 3) AS builtin, d.user_id AS uid FROM course_drives d WHERE d.course_key LIKE 'b:%' ${whereD}
+     ) GROUP BY builtin ORDER BY drivers DESC, builtin LIMIT 20`,
   )
-    .bind(...binds)
+    .bind(...bindsS, ...bindsD)
     .all<{ builtin: string; drivers: number }>();
   return r.results.map((x) => ({ builtin: x.builtin, drivers: Number(x.drivers) }));
+}
+
+/** 한국 날짜 YYYY-MM-DD */
+const kstDay = (t: number): string => new Date(t + 9 * 3_600_000).toISOString().slice(0, 10);
+
+/** 코스를 달렸다는 신호: 계정·코스·한국 날짜마다 한 줄 (같은 날 여러 번은 한 번) */
+export async function drove(env: Cloudflare.Env, userId: string, body: unknown, now = Date.now()): Promise<{ ok: true }> {
+  const course = (body as { course?: unknown } | null)?.course;
+  if (typeof course !== 'string' || !/^[bs]:.+/.test(course) || course.length > MAX_KEY_LEN) throw new HttpError(400, '잘못된 코스 열쇠');
+  await env.DB.prepare('INSERT OR IGNORE INTO course_drives (user_id, course_key, day) VALUES (?, ?, ?)').bind(userId, course, kstDay(now)).run();
+  return { ok: true };
 }
 
 export async function drivingNow(env: Cloudflare.Env, userId: string, body: unknown, now = Date.now()): Promise<{ ok: true }> {

@@ -27,6 +27,7 @@ import {
 } from './recording';
 import { getSettings, type DriveMode } from './settings';
 import { pruneOldRaw } from './storageLimits';
+import { droveKeyOf, reportDrove } from './droveSignal';
 import { changeProposedKind, dismissDetour, loadRaw, overwriteWithDetour, processStoredSession, saveDetourAsNew, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
@@ -356,7 +357,16 @@ async function afterProcess<T>(r: T | null): Promise<T | null> {
 }
 
 export async function processSession(sessionId: string, kind?: CourseKind): Promise<DriveResultRecord | null> {
-  return afterProcess(await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
+  const r = await afterProcess(await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
+  if (r) void signalDrove(sessionId, r);
+  return r;
+}
+
+/** 기본 코스로 달린 주행이면 인기 도로 신호 (코스 열쇠만, droveSignal.ts) */
+async function signalDrove(sessionId: string, r: DriveResultRecord): Promise<void> {
+  const [session, course] = await Promise.all([getRepo().get(sessionId), r.courseId ? getDriveRepo().getCourse(r.courseId) : Promise.resolve(undefined)]);
+  const key = session ? droveKeyOf(r, course ?? null, session.startedAt) : null;
+  if (key) await reportDrove(key);
 }
 
 /** 벗어난 길을 새 코스로 저장하고 이 주행을 그 코스로 옮긴다 (코스 이탈) */

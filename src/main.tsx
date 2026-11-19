@@ -1,18 +1,16 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { initRecording } from './app/recording';
-import { getAccountState, initAccount } from './app/account';
+import { initAccount } from './app/account';
 import { finishFromHash, setAfterKakaoLogin } from './app/kakaoLogin';
 import { setAfterAppleLogin } from './app/appleLogin';
 import { startMigrateLocal } from './app/migrateLocal';
 import { initRecords } from './app/records';
 import { initFriends } from './app/friends';
 import { seedBuiltinCourses } from './app/courses';
-import { syncCoursePrefs } from './app/coursePrefs';
 import { startDrivingSignal } from './app/drivingSignal';
 import { resumeGroupRoom } from './app/group';
 import { startAppLinks } from './app/appLinks';
-import { subscribeAccount } from './app/account';
 import { App } from './ui/App';
 import { registerServiceWorker } from './ui/pwa/registration';
 import { installAppHeight, lockPageZoom } from './ui/viewport';
@@ -41,17 +39,6 @@ void finishFromHash(window.location.hash)
     void startMigrateLocal();
     // 들어가 있던 그룹 주행 방으로 다시 (24시간이 지났거나 나갔으면 잊는다)
     void resumeGroupRoom();
-    // 즐겨찾기·분류를 계정과 맞춘다 (카카오 로그인으로 계정이 바뀌어도 다시)
-    void syncCoursePrefs();
-    let lastUser = getAccountState().userId;
-    subscribeAccount(() => {
-      const u = getAccountState().userId;
-      if (u !== lastUser) {
-        const changed = lastUser !== null && u !== null;
-        lastUser = u;
-        void syncCoursePrefs({ accountChanged: changed });
-      }
-    });
   });
 // 아이폰 앱: 방 초대 링크로 열리면 그 방으로
 startAppLinks();

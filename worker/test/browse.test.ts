@@ -116,3 +116,40 @@ describe('인기 도로 /api/popular', () => {
     expect((await call('POST', '/api/driving', { token: a.token, body: {} })).status).toBe(400);
   });
 });
+
+// 기록은 폰에만 (설계 2026-11-18-local-records-course-share-design.md "인기 도로"): 기록을 안 올리니 코스 열쇠만 받는 새 신호
+describe('주행 신호 /api/drove (위치 없음)', () => {
+  it('같은 날 두 번 보내도 한 줄, 날짜는 한국 날짜', async () => {
+    const a = await newUser();
+    const key = `b:dr-${crypto.randomUUID().slice(0, 8)}`;
+    expect((await call('POST', '/api/drove', { token: a.token, body: { course: key } })).status).toBe(200);
+    expect((await call('POST', '/api/drove', { token: a.token, body: { course: key } })).status).toBe(200);
+    const rows = await env.DB.prepare('SELECT day FROM course_drives WHERE user_id = ? AND course_key = ?').bind(a.userId, key).all<{ day: string }>();
+    expect(rows.results.length).toBe(1);
+    expect(rows.results[0]!.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('인기 = 예전 세션 계정 ∪ 새 신호 계정 (같은 사람은 한 번)', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const c = await newUser();
+    const key = `mix-${crypto.randomUUID().slice(0, 8)}`;
+    await builtinSession(a.userId, key, iso(Date.now() - 2 * 86_400_000));
+    await call('POST', '/api/drove', { token: a.token, body: { course: `b:${key}` } });
+    await call('POST', '/api/drove', { token: b.token, body: { course: `b:${key}` } });
+    await call('POST', '/api/drove', { token: c.token, body: { course: `b:${key}` } });
+    await env.DB.prepare('UPDATE course_drives SET day = ? WHERE user_id = ?').bind('2020-01-15', c.userId).run(); // 오래전 겨울
+    const get = async (p: string) => ((await (await call('GET', `/api/popular?period=${p}`, { token: a.token })).json()) as Array<{ builtin: string; drivers: number }>).find((r) => r.builtin === key);
+    expect(await get('7d')).toEqual({ builtin: key, drivers: 2 });
+    expect(await get('all')).toEqual({ builtin: key, drivers: 3 });
+    expect(await get('winter')).toEqual({ builtin: key, drivers: 1 });
+  });
+
+  it('잘못된 열쇠는 400 (b: 또는 s: 로 시작, 80자 이하)', async () => {
+    const a = await newUser();
+    for (const course of [undefined, '', 'haogogae', `b:${'x'.repeat(80)}`, 12]) {
+      expect((await call('POST', '/api/drove', { token: a.token, body: { course } })).status).toBe(400);
+    }
+    expect((await call('POST', '/api/drove', { token: a.token, body: { course: 's:abc' } })).status).toBe(200);
+  });
+});
