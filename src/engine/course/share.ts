@@ -8,6 +8,7 @@ import { makePolyline, resamplePolyline } from './polyline';
 
 export const SHARE_TOLERANCE_M = 2;
 const THUMB_MAX = 40;
+const LINE_MAX = 5000;
 
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
@@ -71,7 +72,14 @@ export function expandLine(pts: LatLonPair[], spacingM: number): LatLonPair[] {
 export function sharedBody(c: Course, region: string): SharedBody {
   if (!c.centerline || c.centerline.length < 2 || !c.lengthM) throw new Error('한 번 달려 코스 선이 생긴 뒤에 공개할 수 있어요');
   const r = (pts: LatLonPair[]) => pts.map(([lat, lon]) => [round6(lat), round6(lon)] as LatLonPair);
-  const line = r(simplifyLine(c.centerline, SHARE_TOLERANCE_M));
+  // 서버는 5000점까지 받는다: 아주 긴·구불구불한 코스는 허용 오차를 키워 맞춘다 (검토 지적: 보내면 알 수 없는 오류였다)
+  let lineTol = SHARE_TOLERANCE_M;
+  let rough = simplifyLine(c.centerline, lineTol);
+  while (rough.length > LINE_MAX) {
+    lineTol *= 1.5;
+    rough = simplifyLine(rough, lineTol);
+  }
+  const line = r(rough);
   let tol = SHARE_TOLERANCE_M * 4;
   let thumb = simplifyLine(line, tol);
   while (thumb.length > THUMB_MAX) {

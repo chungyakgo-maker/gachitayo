@@ -2,7 +2,7 @@
 // 기록은 서버에 없으니 폰을 바꿀 땐 이 파일로 옮긴다. 불러오기는 "없는 것만 더한다" — 같은 id 기록은 건너뛰고,
 // 기본 코스는 그 폰의 같은 기본 코스(열쇠)로, 같은 모양 코스(sameCourse)는 있는 코스로 잇는다. 코스 한도를 넘으면 아무것도 안 바꾼다.
 import { buildBackup, readBackup, type BackupManifest, type BackupSessionInput } from '../backup/backupFile';
-import { sameCourse } from '../engine/course/edit';
+import { sameCourseShape } from '../engine/course/edit';
 import { shareOrDownload } from '../storage/exportFile';
 import { gunzipJson, gzipJson } from '../storage/gzip';
 import { buildRawFile, readRawFile } from '../storage/rawFile';
@@ -73,7 +73,7 @@ async function importContents(c: Awaited<ReturnType<typeof readBackup>>): Promis
   const map = new Map<string, Course>();
   const toAdd: Course[] = [];
   for (const bc of c.courses) {
-    const same = bc.builtin ? local.find((l) => l.builtin === bc.builtin) : (local.find((l) => l.id === bc.id) ?? local.find((l) => !l.builtin && sameCourse(l, bc)));
+    const same = bc.builtin ? local.find((l) => l.builtin === bc.builtin) : (local.find((l) => l.id === bc.id) ?? local.find((l) => !l.builtin && sameCourseShape(l, bc)));
     if (same) map.set(bc.id, same);
     else {
       toAdd.push(bc);

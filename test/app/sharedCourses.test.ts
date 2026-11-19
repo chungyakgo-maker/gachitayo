@@ -75,11 +75,35 @@ describe('받기', () => {
 
   it('이미 같은 모양 코스가 있으면 그 코스', async () => {
     const { rec, shared } = await fresh();
-    await rec.getDriveRepo().putCourse(myCourse({ id: 'mine', startGate: gate(37.5), finishGate: gate(37.5099) }));
+    await rec.getDriveRepo().putCourse(myCourse({ id: 'mine', startGate: gate(37.5), finishGate: gate(37.5099), centerline: line(100), lengthM: 1100 }));
     routes['GET /api/shared/p2'] = () => json(200, detail('p2'));
     routes['POST /api/shared/p2/add'] = () => json(200, { adds: 1 });
     expect((await shared.addSharedToPhone('p2')).id).toBe('mine');
     expect((await rec.getDriveRepo().listCourses()).length).toBe(1);
+  });
+
+  it('출발선만 같고 길이·선이 다른 코스가 있으면 새로 담는다 (검토 지적)', async () => {
+    const { rec, shared } = await fresh();
+    await rec.getDriveRepo().putCourse(myCourse({ id: 'short', startGate: gate(37.5), finishGate: gate(37.5099), centerline: line(20), lengthM: 200 }));
+    routes['GET /api/shared/p4'] = () => json(200, detail('p4'));
+    routes['POST /api/shared/p4/add'] = () => json(200, { adds: 1 });
+    const c = await shared.addSharedToPhone('p4');
+    expect(c.id).not.toBe('short');
+    expect(c.shared).toEqual({ id: 'p4', by: '바람' });
+  });
+
+  it('내가 올린 코스는 "이미 폰에 있음" (publishedId)', async () => {
+    const { rec, shared } = await fresh();
+    await rec.getDriveRepo().putCourse(myCourse({ id: 'orig', publishedId: 'p5' }));
+    expect((await shared.sharedOnPhone('p5'))?.id).toBe('orig');
+  });
+
+  it('공개 번호로 내리면 그 내 코스의 공개 표시도 지운다', async () => {
+    const { rec, shared } = await fresh();
+    await rec.getDriveRepo().putCourse(myCourse({ id: 'orig', publishedId: 'p6', publishedVersion: 3, publishedName: 'x' }));
+    routes['DELETE /api/shared/p6'] = () => json(200, { ok: true });
+    await shared.unpublishById('p6');
+    expect((await rec.getDriveRepo().getCourse('orig'))!.publishedId).toBeUndefined();
   });
 
   it('코스 200개면 한도 문구', async () => {
@@ -100,6 +124,17 @@ describe('공개·고치기·내리기', () => {
     expect(sent).toMatchObject({ name: '내 업힐', region: '강원', startGate: gate(36), finishGate: gate(36.01) });
     expect((sent.line as unknown[]).length).toBeLessThan(100);
     expect(await rec.getDriveRepo().getCourse('c1')).toMatchObject({ publishedId: 'pub-9', publishedVersion: 3, publishedName: '내 업힐' });
+  });
+
+  it('아주 긴 코스도 5000점 안으로 줄여 보낸다', async () => {
+    const { rec, shared } = await fresh();
+    // 1 m 간격 30 km, 12 m 주기로 5 m씩 흔들리는 선 (2 m 로 줄여도 5000점을 넘는다)
+    const wig = Array.from({ length: 30_000 }, (_, i) => [36 + i * 0.000009, 128 + Math.sin((i / 12) * Math.PI * 2) * 0.000056] as [number, number]);
+    await rec.getDriveRepo().putCourse(myCourse({ centerline: wig, lengthM: 30_000 }));
+    routes['POST /api/shared'] = () => json(201, { id: 'pub-long' });
+    await shared.publishCourse('c1', '');
+    const sent = calls.find((x) => x.method === 'POST' && x.path === '/api/shared')!.body as { line: unknown[] };
+    expect(sent.line.length).toBeLessThanOrEqual(5000);
   });
 
   it('기본 코스·받은 코스는 공개하지 않는다', async () => {

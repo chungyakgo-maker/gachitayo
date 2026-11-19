@@ -1,7 +1,7 @@
 // 모두의 코스 (설계 docs/superpowers/specs/2026-11-18-local-records-course-share-design.md 2부, 시안 ⑥⑦⑧):
 // 받기(폰에 코스로 담기, 한 번만·같은 모양이면 있는 코스로), 내 코스 공개·고치기·내리기, 신고·이 사람 코스 안 보기, 관리자 동작.
 // 목록 정렬(가까운 순)은 폰에서 한다 — 내 위치를 서버에 보내지 않는다. 받은 코스는 기본 코스처럼 오프라인에서도 달린다
-import { sameCourse } from '../engine/course/edit';
+import { sameCourseShape } from '../engine/course/edit';
 import { courseFromShared, sharedBody } from '../engine/course/share';
 import { ApiError, apiFetch } from '../server/api';
 import type { Course } from '../types/course';
@@ -67,9 +67,20 @@ export function sortShared(list: SharedSummary[], by: SharedSort, here: { lat: n
 
 export const fetchSharedDetail = (id: string): Promise<SharedDetail> => call('GET', `/api/shared/${encodeURIComponent(id)}`);
 
-/** 이 공개 코스가 이미 폰에 있으면 그 코스 */
+/** 이 공개 코스가 이미 폰에 있으면 그 코스 (받은 코스, 또는 내가 올린 원래 코스) */
 export async function sharedOnPhone(id: string): Promise<Course | null> {
-  return (await getDriveRepo().listCourses()).find((c) => c.shared?.id === id) ?? null;
+  return (await getDriveRepo().listCourses()).find((c) => c.shared?.id === id || c.publishedId === id) ?? null;
+}
+
+/** 폰의 내 코스에서 공개 표시를 지운다 (서버에서 내려졌을 때) */
+export async function forgetPublished(publishedId: string): Promise<void> {
+  const drive = getDriveRepo();
+  for (const c of await drive.listCourses()) {
+    if (c.publishedId !== publishedId) continue;
+    const { publishedId: _p, publishedVersion: _v, publishedName: _n, ...rest } = c;
+    await drive.putCourse(rest);
+  }
+  await loadCourses();
 }
 
 /** 받기: 이미 받은 코스면 그 코스, 같은 모양 코스가 있으면 그 코스, 아니면 한도를 보고 새로 담는다 */
@@ -79,7 +90,7 @@ export async function addSharedToPhone(id: string, known?: SharedDetail): Promis
   if (have) return have;
   const d = known ?? (await fetchSharedDetail(id));
   const fresh = courseFromShared(d, crypto.randomUUID());
-  const same = (await drive.listCourses()).find((c) => sameCourse(c, fresh));
+  const same = (await drive.listCourses()).find((c) => sameCourseShape(c, fresh));
   if (!same) {
     await assertCourseRoom(drive);
     await drive.putCourse(fresh);
@@ -143,6 +154,8 @@ export async function unpublishById(id: string): Promise<void> {
   } catch (e) {
     if (!(e instanceof ApiError && e.status === 404)) throw e;
   }
+  // 내가 올린 원래 코스면 "공개 중" 표시도 지운다 (검토 지적: 상세에서 내리면 내 코스엔 남았다)
+  await forgetPublished(id);
   forget();
 }
 
