@@ -180,6 +180,51 @@ describe('백업 불러오기', () => {
   }, 30_000);
 });
 
+describe('불러오기가 중간에 실패해도 (검토 지적 3)', () => {
+  it('원본 하나가 깨져 있으면 그 기록은 원본 없이(원본 정리됨) 들이고 나머지는 그대로', async () => {
+    const { buildBackup } = await import('../../src/backup/backupFile');
+    const b = await fresh();
+    async function* items() {
+      for (const id of ['ok', 'broken']) yield { session: session(id, null), result: null, refLaps: [], raw: id === 'broken' ? new Uint8Array([1, 2, 3]) : null };
+    }
+    const blob = await buildBackup({ createdAt: 1, courses: [], prefs: { favorites: [], tags: {} }, sessionCount: 2, sessions: items() });
+    expect(await b.backup.importBackup(blob)).toMatchObject({ sessions: 2 });
+    expect((await b.rec.getRepo().get('broken'))!.rawPruned).toBe(true);
+    expect((await b.rec.getRepo().chunks('broken')).length).toBe(0);
+  });
+
+  it('폰에 쓰다가 실패하면 알기 쉬운 문구, 다시 불러오면 빠진 기록까지 들어온다 (기록 행은 맨 마지막에 쓴다)', async () => {
+    const a = await fresh();
+    for (const id of ['s1', 's2']) await addSession(a.rec, session(id, null), true);
+    const file = await a.backup.createBackupFile();
+    const b = await fresh();
+    const repo = b.rec.getRepo();
+    const orig = repo.putChunk.bind(repo);
+    let once = true;
+    repo.putChunk = async (c) => {
+      if (once) {
+        once = false;
+        throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+      }
+      return orig(c);
+    };
+    await expect(b.backup.importBackup(file)).rejects.toThrow('백업 파일을 다 불러오지 못했어요. 폰 저장 공간을 확인하고 다시 불러와 주세요');
+    repo.putChunk = orig;
+    await b.backup.importBackup(file);
+    expect((await repo.list()).map((s) => s.id).sort()).toEqual(['s1', 's2']);
+    for (const id of ['s1', 's2']) expect((await repo.chunks(id)).length).toBe(1);
+  });
+
+  it('주행 중 끊긴(이어서 하기) 기록은 계산 전(finished)으로 들인다', async () => {
+    const a = await fresh();
+    await a.rec.getRepo().create({ ...session('cut', null), status: 'interrupted' });
+    const file = await a.backup.createBackupFile();
+    const b = await fresh();
+    await b.backup.importBackup(file);
+    expect((await b.rec.getRepo().get('cut'))!.status).toBe('finished');
+  });
+});
+
 describe('마지막 백업·알림', () => {
   const DAY = 86_400_000;
   it('만든 때·크기를 기억한다', async () => {

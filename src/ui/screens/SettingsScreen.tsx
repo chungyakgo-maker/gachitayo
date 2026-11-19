@@ -49,6 +49,7 @@ function LoginAccount() {
   const [error, setError] = useState<string | null>(null);
   const [ask, setAsk] = useState(false);
   const [wipe, setWipe] = useState(false);
+  const [backing, setBacking] = useState(false);
   useEffect(() => {
     let alive = true;
     void getProviders().then((p) => {
@@ -138,9 +139,9 @@ function LoginAccount() {
             <div className="modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
               <h2 id="logout-title">로그아웃할까요?</h2>
               <p>로그아웃해도 이 폰의 기록과 내 코스는 그대로 남아요. 친구·팀은 다시 로그인하면 돌아와요.</p>
-              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} />
+              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} onBacking={setBacking} />
               <div className="modal-actions">
-                <button type="button" className="btn danger" disabled={busy} onClick={() => void doLogout()}>
+                <button type="button" className="btn danger" disabled={busy || backing} onClick={() => void doLogout()}>
                   로그아웃
                 </button>
                 <button type="button" className="btn" disabled={busy} onClick={() => setAsk(false)}>
@@ -201,27 +202,40 @@ function AccountSection() {
 }
 
 /** 로그아웃·계정 지우기 창 (기록은 폰에만 6단계, 시안 ④): 기록은 기본으로 남기고, 체크하면 이 폰에서도 지운다. 지우기 전에 백업 */
-function WipeChoice({ wipe, onWipe, disabled }: { wipe: boolean; onWipe: (v: boolean) => void; disabled: boolean }) {
+// 백업하는 동안은 지우기·로그아웃 단추와 체크를 막는다 (검토 지적: 백업이 끝나기 전에 지우면 백업 없이 지워졌다)
+function WipeChoice({ wipe, onWipe, disabled, onBacking }: { wipe: boolean; onWipe: (v: boolean) => void; disabled: boolean; onBacking: (on: boolean) => void }) {
   const [note, setNote] = useState<string | null>(null);
+  const [backing, setBacking] = useState(false);
+  const busy = (on: boolean) => {
+    setBacking(on);
+    onBacking(on);
+  };
   return (
     <>
       <label className="check-row">
-        <input type="checkbox" checked={wipe} disabled={disabled} onChange={(e) => onWipe(e.target.checked)} />
+        <input type="checkbox" checked={wipe} disabled={disabled || backing} onChange={(e) => onWipe(e.target.checked)} />
         기록과 내 코스도 이 폰에서 지우기
       </label>
       <button
         type="button"
         className="link-btn"
-        disabled={disabled}
+        disabled={disabled || backing}
         onClick={() => {
           setNote(null);
+          busy(true);
           void shareBackup()
             .then((r) => setNote(r === 'cancelled' ? null : '백업 파일을 만들었어요'))
-            .catch((e: Error) => setNote(e.message));
+            .catch((e: Error) => setNote(e.message))
+            .finally(() => busy(false));
         }}
       >
         지우기 전에 백업 파일 만들기 ›
       </button>
+      {backing && (
+        <span className="sub" role="status">
+          백업 파일 만드는 중…
+        </span>
+      )}
       {note && <span className="sub">{note}</span>}
     </>
   );
@@ -231,6 +245,7 @@ function WipeChoice({ wipe, onWipe, disabled }: { wipe: boolean; onWipe: (v: boo
 export function DeleteAccountSection() {
   const [ask, setAsk] = useState(false);
   const [wipe, setWipe] = useState(false);
+  const [backing, setBacking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -253,13 +268,13 @@ export function DeleteAccountSection() {
             <div className="modal" role="dialog" aria-modal="true" aria-labelledby="account-delete-title">
               <h2 id="account-delete-title">계정을 지울까요?</h2>
               <p>닉네임·친구·팀·프로필 사진·공개한 코스가 서버에서 지워지고 되돌릴 수 없어요.</p>
-              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} />
+              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} onBacking={setBacking} />
               {error && <div className="notice warn">{error}</div>}
               <div className="modal-actions">
                 <button
                   type="button"
                   className="btn danger"
-                  disabled={busy}
+                  disabled={busy || backing}
                   onClick={() => {
                     setBusy(true);
                     setError(null);

@@ -12,7 +12,7 @@ import { getCoursePrefs, mergeCoursePrefs } from './coursePrefs';
 import { loadCourses } from './drive';
 import { BACKUP_REMIND_DAYS, BACKUP_REMIND_MIN } from './limits';
 import { getDriveRepo, getRepo, refreshSessions } from './recording';
-import { assertCourseRoom, pruneOldRaw } from './storageLimits';
+import { assertCourseRoom, COURSE_LIMIT_TEXT, pruneOldRaw } from './storageLimits';
 
 const LAST_KEY = 'gachitayo.lastBackup.v1';
 const SNOOZE_KEY = 'gachitayo.backupSnooze.v1';
@@ -51,8 +51,21 @@ export async function peekBackup(file: Blob): Promise<BackupManifest> {
   return (await readBackup(file)).manifest;
 }
 
+export const IMPORT_FAILED = '백업 파일을 다 불러오지 못했어요. 폰 저장 공간을 확인하고 다시 불러와 주세요';
+
+/** 불러오기: 파일이 아니면 "디고 백업 파일이 아니에요", 코스 한도면 한도 문구, 폰에 쓰다가 실패하면(저장 공간 부족 등) IMPORT_FAILED.
+ *  기록은 결과·비교 랩·원본을 먼저 쓰고 기록 행을 맨 마지막에 써서, 중간에 실패해도 다시 불러오면 그 기록부터 다시 들어온다 */
 export async function importBackup(file: Blob): Promise<{ sessions: number; courses: number; skipped: number }> {
   const c = await readBackup(file);
+  try {
+    return await importContents(c);
+  } catch (e) {
+    if (e instanceof Error && e.message === COURSE_LIMIT_TEXT) throw e;
+    throw new Error(IMPORT_FAILED);
+  }
+}
+
+async function importContents(c: Awaited<ReturnType<typeof readBackup>>): Promise<{ sessions: number; courses: number; skipped: number }> {
   const repo = getRepo();
   const drive = getDriveRepo();
   const local = await drive.listCourses();
@@ -84,14 +97,28 @@ export async function importBackup(file: Blob): Promise<{ sessions: number; cour
       continue;
     }
     const id = bs.session.id;
-    await repo.create({ ...fix(bs.session), restoring: false });
     if (bs.result) await drive.putResult(fix(bs.result));
     if (bs.refLaps.length) await drive.putRefLaps(bs.refLaps.map((l) => ({ ...fix(l), sessionId: id })));
+    // 원본이 깨져 있으면 그 기록은 원본 없이 들인다 (랩·요약은 남고 "원본 정리됨")
+    let rawOk = false;
     const raw = c.raw.get(id);
     if (raw) {
-      const r = readRawFile(await gunzipJson(raw as Uint8Array<ArrayBuffer>));
-      await repo.putChunk({ sessionId: id, seq: 0, gps: r.gps, rawMotion: r.motion, events: r.events, channels: r.channels });
+      let r: ReturnType<typeof readRawFile> | null = null;
+      try {
+        r = readRawFile(await gunzipJson(raw as Uint8Array<ArrayBuffer>));
+      } catch {
+        r = null;
+      }
+      if (r) {
+        // 지난번에 원본까지 쓰고 기록 행에서 실패했으면 원본이 남아 있다 (덮어쓴다)
+        await repo.deleteChunks(id);
+        await repo.putChunk({ sessionId: id, seq: 0, gps: r.gps, rawMotion: r.motion, events: r.events, channels: r.channels });
+        rawOk = true;
+      }
     }
+    // 주행 중 끊긴 기록은 계산 전으로 (새 폰에서 "이어서 하기"가 뜨지 않게, 검토 지적)
+    const status = bs.session.status === 'interrupted' || bs.session.status === 'recording' ? 'finished' : bs.session.status;
+    await repo.create({ ...fix(bs.session), status, restoring: false, ...(raw && !rawOk ? { rawPruned: true } : {}) });
     have.add(id);
     added++;
   }
