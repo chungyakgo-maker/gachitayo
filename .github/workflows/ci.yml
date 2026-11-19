@@ -189,11 +189,13 @@ jobs:
           APPLE_SIGNIN_KEY_P8: ${{ secrets.APPLE_SIGNIN_KEY_P8 }}
           APPLE_SIGNIN_KEY_ID: ${{ secrets.APPLE_SIGNIN_KEY_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # 모두의 코스 관리자 계정 번호 (쉼표로 여러 개, 설정 › 계정 번호 복사)
+          ADMIN_USER_IDS: ${{ secrets.ADMIN_USER_IDS }}
         run: |
           secrets="$RUNNER_TEMP/worker-secrets.json"
           (umask 077; node -e '
             const e = process.env;
-            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET", "APPLE_SIGNIN_KEY_P8", "APPLE_SIGNIN_KEY_ID", "APPLE_TEAM_ID"];
+            const names = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "NCP_MAP_CLIENT_ID", "NCP_MAP_CLIENT_SECRET", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET", "APPLE_SIGNIN_KEY_P8", "APPLE_SIGNIN_KEY_ID", "APPLE_TEAM_ID", "ADMIN_USER_IDS"];
             const o = {};
             for (const n of names) if ((e[n] || "").trim()) o[n] = e[n].trim();
             require("fs").writeFileSync(process.argv[1], JSON.stringify(o));

@@ -141,3 +141,153 @@ describe('모두의 코스: 공개 · 목록 · 상세', () => {
     expect(new Set(all.map((x) => x.id)).size).toBe(all.length);
   }, 60_000);
 });
+
+const report = (u: { token: string }, id: string, reason = 'danger') => call('POST', `/api/shared/${id}/report`, { token: u.token, body: { reason } });
+function asAdmin(u: { userId: string }) {
+  (env as { ADMIN_USER_IDS?: string }).ADMIN_USER_IDS = u.userId;
+}
+
+describe('모두의 코스: 신고 · 자동 숨김 (애플 심사 1.2)', () => {
+  it('신고는 로그인 계정만, 한 사람 한 번, 자기 코스는 400', async () => {
+    const a = await signedIn();
+    const id = await publish(a);
+    const anon = await newUser();
+    const r = await report(anon, id);
+    expect(r.status).toBe(403);
+    expect(((await r.json()) as { error: string }).error).toBe('신고하려면 카카오나 Apple로 로그인해 주세요');
+    expect((await report(a, id)).status).toBe(400);
+    const b = await signedIn();
+    expect((await report(b, id)).status).toBe(200);
+    expect((await report(b, id, 'name')).status).toBe(200);
+    const row = await env.DB.prepare('SELECT reports, status FROM public_courses WHERE id = ?').bind(id).first<{ reports: number; status: string }>();
+    expect(row).toEqual({ reports: 1, status: 'open' });
+    expect((await call('POST', `/api/shared/${id}/report`, { token: b.token, body: { reason: 'spam' } })).status).toBe(400);
+  });
+
+  it('서로 다른 3명이 신고하면 숨김: 남에겐 목록·상세 404, 올린 사람·관리자는 상세에서 hidden', async () => {
+    const a = await signedIn();
+    const id = await publish(a);
+    for (let i = 0; i < 3; i++) expect((await report(await signedIn(), id)).status).toBe(200);
+    const viewer = await newUser();
+    expect((await list(viewer)).some((x) => x.id === id)).toBe(false);
+    expect((await call('GET', `/api/shared/${id}`, { token: viewer.token })).status).toBe(404);
+    expect(((await (await call('GET', `/api/shared/${id}`, { token: a.token })).json()) as { status: string }).status).toBe('hidden');
+    const admin = await newUser();
+    asAdmin(admin);
+    expect(((await (await call('GET', `/api/shared/${id}`, { token: admin.token })).json()) as { status: string }).status).toBe('hidden');
+  });
+});
+
+describe('모두의 코스: 이 사람 코스 안 보기', () => {
+  it('차단하면 그 사람 코스가 목록에서 빠지고, 풀면 돌아온다. 목록에 닉네임', async () => {
+    const a = await signedIn('나쁜사람');
+    const id = await publish(a);
+    const me = await newUser();
+    expect((await call('POST', '/api/blocks', { token: me.token, body: { userId: a.userId } })).status).toBe(200);
+    expect((await list(me)).some((x) => x.id === id)).toBe(false);
+    expect(await (await call('GET', '/api/blocks', { token: me.token })).json()).toEqual([{ userId: a.userId, nickname: '나쁜사람' }]);
+    expect((await call('DELETE', `/api/blocks/${a.userId}`, { token: me.token })).status).toBe(200);
+    expect((await list(me)).some((x) => x.id === id)).toBe(true);
+    expect((await call('POST', '/api/blocks', { token: me.token, body: { userId: me.userId } })).status).toBe(400);
+  });
+});
+
+describe('모두의 코스: 관리자', () => {
+  it('관리자 아니면 /api/admin/* 403, /api/me 의 admin', async () => {
+    const u = await newUser();
+    (env as { ADMIN_USER_IDS?: string }).ADMIN_USER_IDS = '';
+    expect((await call('GET', '/api/admin/shared', { token: u.token })).status).toBe(403);
+    expect(((await (await call('GET', '/api/me', { token: u.token })).json()) as { admin: boolean }).admin).toBe(false);
+    asAdmin(u);
+    expect(((await (await call('GET', '/api/me', { token: u.token })).json()) as { admin: boolean }).admin).toBe(true);
+  });
+
+  it('관리자 목록은 숨김·신고 있는 것 먼저, 이유 수; 숨기기·풀기·지우기', async () => {
+    const a = await signedIn();
+    const quiet = await publish(a, { name: '조용한 코스' });
+    const reported = await publish(a, { name: '신고된 코스' });
+    await report(await signedIn(), reported, 'name');
+    const admin = await newUser();
+    asAdmin(admin);
+    const rows = (await (await call('GET', '/api/admin/shared', { token: admin.token })).json()) as Array<{ id: string; status: string; reports: number; reasons: Record<string, number> }>;
+    const iR = rows.findIndex((r) => r.id === reported);
+    const iQ = rows.findIndex((r) => r.id === quiet);
+    expect(iR).toBeGreaterThanOrEqual(0);
+    expect(iR).toBeLessThan(iQ);
+    expect(rows[iR]).toMatchObject({ reports: 1, reasons: { name: 1 } });
+    expect((await call('POST', `/api/admin/shared/${quiet}`, { token: admin.token, body: { action: 'hide' } })).status).toBe(200);
+    expect((await call('GET', `/api/shared/${quiet}`, { token: (await newUser()).token })).status).toBe(404);
+    expect((await call('POST', `/api/admin/shared/${quiet}`, { token: admin.token, body: { action: 'show' } })).status).toBe(200);
+    expect((await call('GET', `/api/shared/${quiet}`, { token: (await newUser()).token })).status).toBe(200);
+    expect((await call('DELETE', `/api/shared/${quiet}`, { token: admin.token })).status).toBe(200);
+    expect((await call('GET', `/api/shared/${quiet}`, { token: a.token })).status).toBe(404);
+  });
+
+  it('공개 막기: 그 계정 코스 모두 숨김 + 새 공개 403, 풀면 공개할 수 있다', async () => {
+    const a = await signedIn();
+    const id = await publish(a);
+    const admin = await newUser();
+    asAdmin(admin);
+    expect((await call('POST', '/api/admin/bans', { token: admin.token, body: { userId: a.userId } })).status).toBe(200);
+    expect((await call('GET', `/api/shared/${id}`, { token: (await newUser()).token })).status).toBe(404);
+    const r = await call('POST', '/api/shared', { token: a.token, body: body() });
+    expect(r.status).toBe(403);
+    expect(((await r.json()) as { error: string }).error).toBe('이 계정은 코스를 공개할 수 없어요');
+    expect((await call('DELETE', `/api/admin/bans/${a.userId}`, { token: admin.token })).status).toBe(200);
+    expect((await call('POST', '/api/shared', { token: a.token, body: body() })).status).toBe(201);
+  });
+});
+
+describe('계정 지우기 정리 (모두의 코스 + 인기 신호)', () => {
+  it('공개 코스·받기·신고·차단(양쪽)·공개 막기·주행 신호 줄이 모두 지워진다', async () => {
+    const a = await signedIn();
+    const b = await signedIn();
+    const mine = await publish(a);
+    const theirs = await publish(b);
+    await call('POST', `/api/shared/${theirs}/add`, { token: a.token });
+    await report(a, theirs);
+    await call('POST', '/api/blocks', { token: a.token, body: { userId: b.userId } });
+    await call('POST', '/api/blocks', { token: b.token, body: { userId: a.userId } });
+    await call('POST', '/api/drove', { token: a.token, body: { course: `s:${theirs}` } });
+    await env.DB.prepare('INSERT INTO publish_bans (user_id, at) VALUES (?, 1)').bind(a.userId).run();
+    expect((await call('DELETE', '/api/me', { token: a.token })).status).toBe(200);
+    const count = async (sql: string, ...args: string[]) => Number((await env.DB.prepare(sql).bind(...args).first<{ n: number }>())!.n);
+    expect(await count('SELECT COUNT(*) AS n FROM public_courses WHERE owner_id = ?', a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM course_adds WHERE user_id = ? OR course_id = ?', a.userId, mine)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM course_reports WHERE user_id = ? OR course_id = ?', a.userId, mine)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM user_blocks WHERE user_id = ? OR blocked_id = ?', a.userId, a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM publish_bans WHERE user_id = ?', a.userId)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM course_drives WHERE user_id = ?', a.userId)).toBe(0);
+    // b 의 코스는 그대로 (a 가 받은 수·신고 수는 남는다)
+    expect((await call('GET', `/api/shared/${theirs}`, { token: b.token })).status).toBe(200);
+  });
+
+  it('익명 계정을 로그인 계정에 합치면 주행 신호·받기·안 보기도 옮긴다', async () => {
+    const { mergeUsers } = await import('../src/login');
+    const anon = await newUser();
+    const into = await signedIn();
+    const owner = await signedIn();
+    const id = await publish(owner);
+    await call('POST', `/api/shared/${id}/add`, { token: anon.token });
+    await call('POST', '/api/blocks', { token: anon.token, body: { userId: owner.userId } });
+    await call('POST', '/api/drove', { token: anon.token, body: { course: 'b:haogogae' } });
+    await env.DB.batch(mergeUsers(env, anon.userId, into.userId));
+    const one = async (sql: string, ...args: string[]) => (await env.DB.prepare(sql).bind(...args).first()) !== null;
+    expect(await one('SELECT 1 FROM course_drives WHERE user_id = ?', into.userId)).toBe(true);
+    expect(await one('SELECT 1 FROM course_adds WHERE user_id = ? AND course_id = ?', into.userId, id)).toBe(true);
+    expect(await one('SELECT 1 FROM user_blocks WHERE user_id = ? AND blocked_id = ?', into.userId, owner.userId)).toBe(true);
+    expect(await one('SELECT 1 FROM course_drives WHERE user_id = ?', anon.userId)).toBe(false);
+  });
+});
+
+describe('인기 도로: 모두의 코스 신호', () => {
+  it('s: 신호도 셈 ({builtin: "s:{id}", drivers})', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const key = `s:${crypto.randomUUID()}`;
+    await call('POST', '/api/drove', { token: a.token, body: { course: key } });
+    await call('POST', '/api/drove', { token: b.token, body: { course: key } });
+    const rows = (await (await call('GET', '/api/popular?period=7d', { token: a.token })).json()) as Array<{ builtin: string; drivers: number }>;
+    expect(rows.find((r) => r.builtin === key)).toEqual({ builtin: key, drivers: 2 });
+  });
+});

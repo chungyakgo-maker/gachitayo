@@ -24,6 +24,13 @@ export function mergeUsers(env: Cloudflare.Env, from: string, into: string): D1P
     db.prepare('INSERT OR IGNORE INTO team_members (team_id, user_id, added_at) SELECT team_id, ?, added_at FROM team_members WHERE user_id = ?').bind(into, from),
     db.prepare('DELETE FROM team_members WHERE user_id = ?').bind(from),
     // 프로필 사진: A에 없으면 B 사진을 쓴다 (A에 있으면 B 사진 파일은 합친 뒤 지운다, signInWithIdentity)
+    // 인기 도로 신호·모두의 코스 받기·안 보기 (익명 계정은 공개·신고를 못 해서 그것은 없다)
+    db.prepare('INSERT OR IGNORE INTO course_drives (user_id, course_key, day) SELECT ?, course_key, day FROM course_drives WHERE user_id = ?').bind(into, from),
+    db.prepare('DELETE FROM course_drives WHERE user_id = ?').bind(from),
+    db.prepare('INSERT OR IGNORE INTO course_adds (course_id, user_id, at) SELECT course_id, ?, at FROM course_adds WHERE user_id = ?').bind(into, from),
+    db.prepare('DELETE FROM course_adds WHERE user_id = ?').bind(from),
+    db.prepare('INSERT OR IGNORE INTO user_blocks (user_id, blocked_id, at) SELECT ?, blocked_id, at FROM user_blocks WHERE user_id = ? AND blocked_id != ?').bind(into, from, into),
+    db.prepare('DELETE FROM user_blocks WHERE user_id = ? OR blocked_id = ?').bind(from, from),
     db.prepare('UPDATE users SET avatar = (SELECT avatar FROM users WHERE id = ?) WHERE id = ? AND avatar IS NULL').bind(from, into),
     db.prepare('DELETE FROM users WHERE id = ?').bind(from),
   ];

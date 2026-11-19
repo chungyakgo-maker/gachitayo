@@ -1,4 +1,5 @@
 // 기록 표 API (사양서 6.5): 코스·세션·랩·닉네임. 같은 id면 덮어쓰고(upsert), 다른 사람 행은 403.
+import { deleteSharedOfUser, isAdmin } from './shared';
 import { ROOM_TTL_MS } from './group';
 import { revokeApple } from './apple';
 import { HttpError, UUID_RE } from './http';
@@ -36,7 +37,7 @@ export async function getMe(env: Cloudflare.Env, userId: string) {
   )
     .bind(userId)
     .first<{ id: string; nickname: string; avatar: string | null; kakao: number; apple: number }>();
-  return { userId: row!.id, nickname: row!.nickname, avatar: row!.avatar ?? null, kakao: row!.kakao === 1, apple: row!.apple === 1 };
+  return { userId: row!.id, nickname: row!.nickname, avatar: row!.avatar ?? null, kakao: row!.kakao === 1, apple: row!.apple === 1, admin: isAdmin(env, row!.id) };
 }
 
 export async function putMe(env: Cloudflare.Env, userId: string, nickname: string) {
@@ -105,6 +106,9 @@ export async function deleteAccount(env: Cloudflare.Env, userId: string, now = D
     del('DELETE FROM search_usage WHERE user_id = ?', userId),
     del('DELETE FROM user_prefs WHERE user_id = ?', userId),
     del('DELETE FROM driving_now WHERE user_id = ?', userId),
+    // 인기 도로 신호 (기록은 폰에만) · 모두의 코스 (공개 코스·받기·신고·차단·공개 막기)
+    del('DELETE FROM course_drives WHERE user_id = ?', userId),
+    ...deleteSharedOfUser(env, userId),
     del('DELETE FROM rooms WHERE host_id = ?', userId),
     // 팀: 내가 팀장인 팀은 지우고, 다른 팀에서는 빠진다
     del('DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE owner_id = ?)', userId),

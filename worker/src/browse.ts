@@ -1,6 +1,7 @@
 // 코스 둘러보기 (설계 docs/superpowers/specs/2026-11-16-course-browse-design.md, 사용자 요청 "즐겨찾기", "인기 도로 최근30일·7일·전체·계절·실시간"):
 //   GET/PUT /api/prefs        즐겨찾기·분류 (계정마다 JSON 하나, 16 KB 이하)
-//   GET /api/popular?period=  기본 코스별 달린 사람 수 (많은 순 20개). 기간: live 7d 30d all spring summer autumn winter
+//   GET /api/popular?period=  기본 코스별 달린 사람 수 (많은 순 20개). 기간: live 7d 30d all spring summer autumn winter.
+//                             모두의 코스는 builtin 칸에 's:{id}' (예전 앱은 모르는 열쇠라 그냥 지나친다)
 //   POST /api/driving {builtin} 기본 코스로 주행 중 신호 (위치 없음). 실시간 = 최근 10분 안에 신호 온 계정 수
 //   POST /api/drove {course}    코스를 달렸다는 신호 (기록은 폰에만 2026-11-18: 기록 대신 이것으로 센다. 코스 열쇠·한국 날짜만)
 import { HttpError } from './http';
@@ -84,9 +85,11 @@ export async function popular(env: Cloudflare.Env, period: string | null, now = 
        SELECT c.builtin AS builtin, s.owner_id AS uid FROM sessions s JOIN courses c ON c.id = s.course_id WHERE c.builtin IS NOT NULL ${whereS}
        UNION
        SELECT substr(d.course_key, 3) AS builtin, d.user_id AS uid FROM course_drives d WHERE d.course_key LIKE 'b:%' ${whereD}
+       UNION
+       SELECT d.course_key AS builtin, d.user_id AS uid FROM course_drives d WHERE d.course_key LIKE 's:%' ${whereD}
      ) GROUP BY builtin ORDER BY drivers DESC, builtin LIMIT 20`,
   )
-    .bind(...bindsS, ...bindsD)
+    .bind(...bindsS, ...bindsD, ...bindsD)
     .all<{ builtin: string; drivers: number }>();
   return r.results.map((x) => ({ builtin: x.builtin, drivers: Number(x.drivers) }));
 }

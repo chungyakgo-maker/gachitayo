@@ -204,3 +204,96 @@ export async function addShared(env: Cloudflare.Env, userId: string, id: string,
   const r = await env.DB.prepare('SELECT adds FROM public_courses WHERE id = ?').bind(id).first<{ adds: number }>();
   return { adds: Number(r?.adds ?? 0) };
 }
+
+// ── 신고·차단·관리자 (애플 심사 1.2: 거르기·신고·차단·운영자 조치) ──
+
+export const REPORT_HIDE = 3;
+const REASONS = ['danger', 'illegal', 'name', 'other'] as const;
+
+/** 신고: 카카오·애플 로그인 계정만(익명 계정을 여러 개 만들어 숨기지 못하게), 한 사람 한 번, 서로 다른 REPORT_HIDE 명이면 바로 숨김 */
+export async function reportShared(env: Cloudflare.Env, userId: string, id: string, body: unknown, now = Date.now()): Promise<{ ok: true }> {
+  if (!(await isSignedIn(env, userId))) throw new HttpError(403, '신고하려면 카카오나 Apple로 로그인해 주세요');
+  const b = body as { reason?: unknown; note?: unknown } | null;
+  if (typeof b?.reason !== 'string' || !(REASONS as readonly string[]).includes(b.reason)) throw new HttpError(400, '신고 이유를 골라 주세요');
+  const note = typeof b.note === 'string' ? b.note.trim().slice(0, 100) : null;
+  const row = await env.DB.prepare('SELECT owner_id FROM public_courses WHERE id = ?').bind(id).first<{ owner_id: string }>();
+  if (!row) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  if (row.owner_id === userId) throw new HttpError(400, '내 코스는 신고할 수 없어요');
+  const ins = await env.DB.prepare('INSERT OR IGNORE INTO course_reports (course_id, user_id, reason, note, at) VALUES (?, ?, ?, ?, ?)').bind(id, userId, b.reason, note, now).run();
+  if (ins.meta.changes > 0) {
+    await env.DB.prepare(`UPDATE public_courses SET reports = reports + 1, status = CASE WHEN reports + 1 >= ${REPORT_HIDE} THEN 'hidden' ELSE status END WHERE id = ?`).bind(id).run();
+  }
+  return { ok: true };
+}
+
+export async function listBlocks(env: Cloudflare.Env, userId: string): Promise<Array<{ userId: string; nickname: string }>> {
+  const r = await env.DB.prepare('SELECT b.blocked_id AS userId, COALESCE(u.nickname, \'(없는 계정)\') AS nickname FROM user_blocks b LEFT JOIN users u ON u.id = b.blocked_id WHERE b.user_id = ? ORDER BY b.at')
+    .bind(userId)
+    .all<{ userId: string; nickname: string }>();
+  return r.results;
+}
+
+export async function addBlock(env: Cloudflare.Env, userId: string, body: unknown, now = Date.now()): Promise<{ ok: true }> {
+  const other = (body as { userId?: unknown } | null)?.userId;
+  if (typeof other !== 'string' || !/^[0-9a-f-]{36}$/.test(other) || other === userId) throw new HttpError(400, '잘못된 계정');
+  await env.DB.prepare('INSERT OR IGNORE INTO user_blocks (user_id, blocked_id, at) VALUES (?, ?, ?)').bind(userId, other, now).run();
+  return { ok: true };
+}
+
+export async function removeBlock(env: Cloudflare.Env, userId: string, other: string): Promise<{ ok: true }> {
+  await env.DB.prepare('DELETE FROM user_blocks WHERE user_id = ? AND blocked_id = ?').bind(userId, other).run();
+  return { ok: true };
+}
+
+function adminOnly(env: Cloudflare.Env, userId: string): void {
+  if (!isAdmin(env, userId)) throw new HttpError(403, '관리자만 할 수 있어요');
+}
+
+/** 관리자 목록: 숨김·신고 있는 것 먼저, 그다음 새것부터 (이유별 수 포함) */
+export async function adminListShared(env: Cloudflare.Env, userId: string) {
+  adminOnly(env, userId);
+  const r = await env.DB.prepare(`${SELECT} ORDER BY (p.status = 'hidden') DESC, (p.reports > 0) DESC, p.created_at DESC LIMIT 1000`).all<Row>();
+  const reasons = await env.DB.prepare('SELECT course_id, reason, COUNT(*) AS n FROM course_reports GROUP BY course_id, reason').all<{ course_id: string; reason: string; n: number }>();
+  const by = new Map<string, Record<string, number>>();
+  for (const x of reasons.results) by.set(x.course_id, { ...(by.get(x.course_id) ?? {}), [x.reason]: Number(x.n) });
+  return r.results.map((x) => ({ ...summary(x, userId), status: x.status, reports: Number(x.reports), reasons: by.get(x.id) ?? {} }));
+}
+
+export async function adminSetShared(env: Cloudflare.Env, userId: string, id: string, body: unknown): Promise<{ ok: true }> {
+  adminOnly(env, userId);
+  const action = (body as { action?: unknown } | null)?.action;
+  if (action !== 'hide' && action !== 'show') throw new HttpError(400, '잘못된 동작');
+  const r = await env.DB.prepare('UPDATE public_courses SET status = ? WHERE id = ?').bind(action === 'hide' ? 'hidden' : 'open', id).run();
+  if (r.meta.changes === 0) throw new HttpError(404, '공개 코스를 찾지 못했어요');
+  return { ok: true };
+}
+
+/** 이 계정 공개 막기: 그 계정의 공개 코스를 모두 숨기고 새로 공개하지 못하게. 풀어도 숨긴 코스는 관리자가 하나씩 다시 보인다 */
+export async function adminBan(env: Cloudflare.Env, userId: string, body: unknown, now = Date.now()): Promise<{ ok: true }> {
+  adminOnly(env, userId);
+  const target = (body as { userId?: unknown } | null)?.userId;
+  if (typeof target !== 'string' || !/^[0-9a-f-]{36}$/.test(target)) throw new HttpError(400, '잘못된 계정');
+  await env.DB.batch([
+    env.DB.prepare('INSERT OR IGNORE INTO publish_bans (user_id, at) VALUES (?, ?)').bind(target, now),
+    env.DB.prepare("UPDATE public_courses SET status = 'hidden' WHERE owner_id = ?").bind(target),
+  ]);
+  return { ok: true };
+}
+
+export async function adminUnban(env: Cloudflare.Env, userId: string, target: string): Promise<{ ok: true }> {
+  adminOnly(env, userId);
+  await env.DB.prepare('DELETE FROM publish_bans WHERE user_id = ?').bind(target).run();
+  return { ok: true };
+}
+
+/** 계정 지우기: 내 공개 코스(그 받기·신고 줄까지)·내가 한 받기·신고·차단(양쪽)·공개 막기 */
+export function deleteSharedOfUser(env: Cloudflare.Env, userId: string): D1PreparedStatement[] {
+  const db = env.DB;
+  return [
+    db.prepare('DELETE FROM course_adds WHERE course_id IN (SELECT id FROM public_courses WHERE owner_id = ?) OR user_id = ?').bind(userId, userId),
+    db.prepare('DELETE FROM course_reports WHERE course_id IN (SELECT id FROM public_courses WHERE owner_id = ?) OR user_id = ?').bind(userId, userId),
+    db.prepare('DELETE FROM public_courses WHERE owner_id = ?').bind(userId),
+    db.prepare('DELETE FROM user_blocks WHERE user_id = ? OR blocked_id = ?').bind(userId, userId),
+    db.prepare('DELETE FROM publish_bans WHERE user_id = ?').bind(userId),
+  ];
+}
