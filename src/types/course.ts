@@ -10,7 +10,8 @@ export interface Gate {
 }
 
 export type CourseKind = 'loop' | 'point_to_point';
-export type CourseSource = 'auto' | 'map' | 'gpx';
+/** shared: 모두의 코스에서 받은 코스 */
+export type CourseSource = 'auto' | 'map' | 'gpx' | 'shared';
 
 export interface Course {
   id: string;
@@ -30,4 +31,12 @@ export interface Course {
   version: number;
   /** 기본 코스 키 (앱에 들어 있는 코스, courses/builtin). 폰에만 두고 서버 행에는 없다 */
   builtin?: string;
+  /** 모두의 코스에서 받은 코스: 공개 번호와 올린 사람 닉네임 (설계 2부) */
+  shared?: { id: string; by: string };
+  /** 내가 모두의 코스로 공개한 코스: 공개 번호 */
+  publishedId?: string;
+  /** 공개할 때의 버전 (선을 고치면 "공개 코스도 바꾸기"를 켠다) */
+  publishedVersion?: number;
+  /** 공개할 때의 이름 */
+  publishedName?: string;
 }
