@@ -46,9 +46,9 @@ describe('buildBackup / readBackup', () => {
 
   it('디고 백업 파일이 아니에요: 아무 ZIP, 깨진 바이트, 모르는 판', async () => {
     const msg = '디고 백업 파일이 아니에요';
-    await expect(readBackup(new Blob([zipSync({ 'a.txt': strToU8('hi') })]))).rejects.toThrow(msg);
+    await expect(readBackup(new Blob([zipSync({ 'a.txt': strToU8('hi') }) as BlobPart]))).rejects.toThrow(msg);
     await expect(readBackup(new Blob([new Uint8Array([1, 2, 3, 4])]))).rejects.toThrow(msg);
     const v99 = zipSync({ 'manifest.json': strToU8(JSON.stringify({ format: 'dgo-backup', version: 99, createdAt: 1, sessions: 0, courses: 0 })), 'courses.json': strToU8('[]'), 'prefs.json': strToU8('{"favorites":[],"tags":{}}') });
-    await expect(readBackup(new Blob([v99]))).rejects.toThrow(msg);
+    await expect(readBackup(new Blob([v99 as BlobPart]))).rejects.toThrow(msg);
   });
 });
