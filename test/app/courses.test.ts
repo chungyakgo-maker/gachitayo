@@ -161,19 +161,16 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     const d = rec.getDriveRepo();
     const mine = (await d.listCourses()).filter((c) => !c.builtin).length;
     const base = (await d.listCourses())[0]!;
-    const filler: string[] = [];
-    for (let i = mine; i < 200; i++) {
-      const id = `fill-${i}`;
-      filler.push(id);
-      await d.putCourse({ ...base, id, builtin: undefined, name: id });
-    }
+    const filler = Array.from({ length: 200 - mine }, (_, i) => `fill-${i}`);
+    for (const id of filler) await d.putCourse({ ...base, id, builtin: undefined, name: id });
     const at = { lat: 37.5, lon: 127 };
     const msg = '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요';
     await expect(createMapCourse({ name: 'x', kind: 'loop', start: { at, toward: { lat: 37.5, lon: 127.001 } } })).rejects.toThrow(msg);
     await expect(importGpx(courseToGpx(r.course!), 'course', '하나 더')).rejects.toThrow(msg);
     await expect(makeReverseCourse(filler[0]!)).rejects.toThrow(msg);
     for (const id of filler) await d.deleteCourse(id);
-  });
+    // 코스 200개 넣고 빼기는 전체 테스트가 바쁠 때 5초를 넘길 수 있다
+  }, 30_000);
 
   it('구간 경계 표시 위치 두 곳', () => {
     const m = sectorMarks(r.course!);

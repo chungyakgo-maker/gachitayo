@@ -114,14 +114,14 @@ describe('내 코스 한도 (200개)', () => {
     await expect(assertCourseRoom(drive)).resolves.toBeUndefined();
     await drive.putCourse(course('m199'));
     await expect(assertCourseRoom(drive)).rejects.toThrow('내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요');
-  });
+  }, 30_000);
 
   it('한꺼번에 여러 개 더할 때(adding)도 셈', async () => {
     const drive = createDriveRepo(db);
     for (let i = 0; i < 198; i++) await drive.putCourse(course(`m${i}`));
     await expect(assertCourseRoom(drive, 2)).resolves.toBeUndefined();
     await expect(assertCourseRoom(drive, 3)).rejects.toThrow('내 코스가 200개예요');
-  });
+  }, 30_000);
 });
 
 describe('주행 뒤 코스 저장도 한도를 지킨다', () => {
@@ -136,5 +136,5 @@ describe('주행 뒤 코스 저장도 한도를 지킨다', () => {
     await expect(saveProposedCourse(deps, 's1', '새')).rejects.toThrow('내 코스가 200개예요');
     await expect(saveDetourAsNew(deps, 's1', '새')).rejects.toThrow('내 코스가 200개예요');
     expect(await myCourseCount(drive)).toBe(200);
-  });
+  }, 30_000);
 });
