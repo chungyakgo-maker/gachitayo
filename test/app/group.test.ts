@@ -7,10 +7,14 @@ const h = vi.hoisted(() => ({
   driveCb: null as null | (() => void),
   sampleCb: null as null | ((e: unknown) => void),
   navRoutes: [] as Array<{ route: unknown; dest: unknown }>,
+  chosen: [] as unknown[],
+  courseChosen: false,
+  local: null as unknown,
+  linkFails: '' as string,
 }));
 vi.mock('../../src/app/account', () => ({ getAuth: () => ({ userId: 'me', token: 'tok' }) }));
 vi.mock('../../src/app/drive', () => ({
-  getDriveState: () => ({ phase: h.phase }),
+  getDriveState: () => ({ phase: h.phase, courseChosen: h.courseChosen }),
   subscribeDrive: (cb: () => void) => {
     h.driveCb = cb;
     return () => {
@@ -18,8 +22,15 @@ vi.mock('../../src/app/drive', () => ({
     };
   },
   beginPrepare: vi.fn(),
-  chooseCourse: vi.fn(),
+  chooseCourse: (c: unknown) => void h.chosen.push(c),
   chooseFreeDrive: vi.fn(),
+}));
+vi.mock('../../src/app/teamCourse', async (orig) => ({
+  ...(await orig<typeof import('../../src/app/teamCourse')>()),
+  courseForRoom: async () => {
+    if (h.linkFails) throw new Error(h.linkFails);
+    return h.local;
+  },
 }));
 vi.mock('../../src/app/recording', () => ({
   subscribeSamples: (cb: (e: unknown) => void) => {
@@ -70,6 +81,10 @@ const ROOM = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const ROUTE = { points: [[37.5, 127], [37.51, 127.01]], distanceM: 1500, durationS: 120 };
+const G = (lat: number) => ({ lat, lon: 127.5, bearingDeg: 0, widthM: 30 });
+const COURSE = { name: '유명산 업힐', kind: 'point_to_point', lengthM: 7800, key: 's:p1', startGate: G(37.5), finishGate: G(37.57), sectorBoundsM: null, line: [[37.5, 127.5], [37.57, 127.5]] };
+const COURSE_META = { name: '유명산 업힐', kind: 'point_to_point', lengthM: 7800, key: 's:p1' };
+const COURSE_DEST = { name: '유명산 업힐 · 출발점', lat: 37.5, lon: 127.5 };
 let routeStatus = 200;
 let roomStatus = 200;
 let routeVersion = 1;
@@ -85,6 +100,10 @@ beforeEach(() => {
   h.phase = 'idle';
   h.nav = null;
   h.navRoutes.length = 0;
+  h.chosen.length = 0;
+  h.courseChosen = false;
+  h.local = { id: 'local-1', name: '유명산 업힐' };
+  h.linkFails = '';
   routeVersion = 1;
   fetchRoom = null;
   routeStatus = 200;
@@ -103,6 +122,7 @@ beforeEach(() => {
       if (url.endsWith('/api/rooms') && init.method === 'POST') return json(200, { roomId: ROOM().roomId, code: '482917' });
       if (url.endsWith('/api/rooms/join')) return json(200, { roomId: ROOM().roomId });
       if (url.endsWith('/route')) return json(routeStatus, { ...ROUTE, version: routeVersion });
+      if (url.endsWith('/course') && (init.method ?? 'GET') === 'GET') return json(200, { ...COURSE, version: routeVersion });
       if (/\/api\/rooms\/[0-9a-f-]+$/.test(url)) {
         if (roomStatus === 0) throw new TypeError('Failed to fetch');
         return roomStatus === 200 ? json(200, fetchRoom ?? ROOM()) : json(roomStatus, { error: '방을 찾지 못했어요' });
@@ -349,5 +369,158 @@ describe('그룹 주행 상태 (검토 지적)', () => {
     socks.at(-1)!.onopen?.();
     old.onclose?.();
     expect(group.getGroup().connected).not.toBe(false);
+  });
+});
+
+describe('팀 방 코스 (설계 3부)', () => {
+  const courseState = (v = 1) => ({ type: 'state', ...ROOM({ dest: COURSE_DEST, course: COURSE_META, routeVersion: v }) });
+  const gets = (end: string) => calls.filter((c) => c.method === 'GET' && c.url.endsWith(end)).length;
+  const tick = () => new Promise((r) => setTimeout(r, 10));
+
+  it('코스 판이면 /course 를 받아 묻는다 — 경로는 출발점까지 목적지만', async () => {
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    expect(group.getGroup().room!.course).toEqual(COURSE_META);
+    const o = group.getGroup().offer!;
+    expect(o.course).toMatchObject({ name: '유명산 업힐', key: 's:p1', startGate: G(37.5) });
+    expect(o.dest).toEqual(COURSE_DEST);
+    expect(o.route.distanceM).toBe(0);
+    expect(gets('/course')).toBe(1);
+    expect(gets('/route')).toBe(0);
+  });
+
+  it('받으면 폰에 잇고, 출발하면 그 코스를 고르고 출발점까지 안내한다', async () => {
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    expect(group.getGroup()).toMatchObject({ offer: null, acceptedVersion: 1 });
+    expect(group.hasPendingRoute()).toBe(true);
+    expect(group.acceptedCourse()).toBe(h.local);
+    expect(h.chosen).toEqual([]);
+    h.phase = 'preparing';
+    h.driveCb!();
+    await tick();
+    expect(h.chosen).toEqual([h.local]);
+    expect(h.navRoutes).toHaveLength(1);
+    expect(h.navRoutes[0]).toMatchObject({ route: { distanceM: 0, durationS: 0 }, dest: COURSE_DEST });
+  });
+
+  it('출발할 때 내가 코스를 직접 골랐으면(코스 상세의 "이 코스로 주행") 그 코스를 둔다', async () => {
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    h.phase = 'preparing';
+    h.driveCb!();
+    h.courseChosen = true;
+    await tick();
+    expect(h.chosen).toEqual([]);
+    // 다른 코스의 출발점으로 안내하지도 않는다
+    expect(h.navRoutes).toHaveLength(0);
+  });
+
+  it('코스를 담지 못하면(한도) 창에 문구를 보이고 방은 그대로', async () => {
+    h.linkFails = '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요';
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    expect(group.getGroup().offer).toMatchObject({ version: 1, error: '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요' });
+    expect(group.getGroup().acceptedVersion).toBe(0);
+    expect(group.getGroup().room).not.toBeNull();
+    // 지운 뒤 다시 누르면 된다
+    h.linkFails = '';
+    await group.acceptRouteOffer();
+    expect(group.getGroup()).toMatchObject({ offer: null, acceptedVersion: 1 });
+  });
+
+  it('주행 중에 받은 코스는 지금 주행에 넣지 않고 다음 출발부터', async () => {
+    await group.joinGroupRoom('482917');
+    h.phase = 'driving';
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    expect(h.chosen).toEqual([]);
+    expect(h.navRoutes).toHaveLength(0);
+    h.phase = 'idle';
+    h.driveCb!();
+    h.phase = 'preparing';
+    h.driveCb!();
+    await tick();
+    expect(h.chosen).toEqual([h.local]);
+  });
+
+  it('주행 준비 중에 받으면 바로 그 코스를 고른다', async () => {
+    await group.joinGroupRoom('482917');
+    h.phase = 'preparing';
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    expect(h.chosen).toEqual([h.local]);
+    expect(h.navRoutes).toHaveLength(1);
+  });
+
+  it('방장이 코스 → 목적지로 바꾸면 목적지로 다시 묻고, 출발 때 코스는 고르지 않는다', async () => {
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    routeVersion = 2;
+    msg({ type: 'state', ...ROOM({ dest: { name: '만항재', lat: 37.51, lon: 127.01 }, course: null, routeVersion: 2 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer?.version).toBe(2));
+    expect(group.getGroup().offer!.course).toBeUndefined();
+    expect(group.getGroup().room!.course).toBeNull();
+    // 새 판을 아직 안 받았으면 예전 코스도 쓰지 않는다
+    expect(group.acceptedCourse()).toBeNull();
+    await group.acceptRouteOffer();
+    expect(group.acceptedCourse()).toBeNull();
+    h.phase = 'preparing';
+    h.driveCb!();
+    await tick();
+    expect(h.chosen).toEqual([]);
+    expect(h.navRoutes[0]).toMatchObject({ dest: { name: '만항재' }, route: { distanceM: 1500 } });
+  });
+
+  it('앱을 다시 열면 받았던 코스 판은 묻지 않고 다시 잇는다', async () => {
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    const saved = storage.getItem('gachitayo.groupRoom.v1');
+    group.leaveGroupLocal();
+    storage.setItem('gachitayo.groupRoom.v1', saved!);
+    fetchRoom = ROOM({ dest: COURSE_DEST, course: COURSE_META, routeVersion: 1 });
+    await group.resumeGroupRoom();
+    await vi.waitFor(() => expect(group.hasPendingRoute()).toBe(true));
+    expect(group.getGroup().offer).toBeNull();
+  });
+
+  it('방장: shareGroupCourse 가 줄인 선·열쇠를 보내고, 자기 판은 묻지 않고 받는다', async () => {
+    await group.createGroupRoom();
+    msg({ type: 'state', ...ROOM({ members: [{ userId: 'me', nickname: '나', color: 0, order: 1, host: true }] }) });
+    const mine = {
+      id: 'c1',
+      name: '유명산 업힐',
+      kind: 'point_to_point' as const,
+      source: 'shared' as const,
+      shared: { id: 'p1', by: '바람' },
+      origin: { lat: 37.5, lon: 127.5 },
+      startGate: G(37.5),
+      finishGate: G(37.57),
+      centerline: Array.from({ length: 500 }, (_, i) => [37.5 + i * 0.00014, 127.5] as [number, number]),
+      lengthM: 7800,
+      sectorBoundsM: null,
+      version: 1,
+    };
+    calls.length = 0;
+    await group.shareGroupCourse(mine);
+    const post = calls.find((c) => c.method === 'POST' && c.url.endsWith('/course'))!;
+    expect(post.body).toMatchObject({ name: '유명산 업힐', kind: 'point_to_point', lengthM: 7800, key: 's:p1', startGate: G(37.5), finishGate: G(37.57), sectorBoundsM: null });
+    expect((post.body as { line: unknown[] }).line.length).toBeLessThan(10);
+    msg({ type: 'state', ...ROOM({ members: [{ userId: 'me', nickname: '나', color: 0, order: 1, host: true }], dest: COURSE_DEST, course: COURSE_META, routeVersion: 1 }) });
+    await vi.waitFor(() => expect(group.getGroup().acceptedVersion).toBe(1));
+    expect(group.getGroup().offer).toBeNull();
   });
 });

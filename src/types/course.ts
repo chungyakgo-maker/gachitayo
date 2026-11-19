@@ -10,8 +10,8 @@ export interface Gate {
 }
 
 export type CourseKind = 'loop' | 'point_to_point';
-/** shared: 모두의 코스에서 받은 코스 */
-export type CourseSource = 'auto' | 'map' | 'gpx' | 'shared';
+/** shared: 모두의 코스에서 받은 코스 · team: 팀 방에서 방장이 정해 받은 코스 (설계 3부) */
+export type CourseSource = 'auto' | 'map' | 'gpx' | 'shared' | 'team';
 
 export interface Course {
   id: string;

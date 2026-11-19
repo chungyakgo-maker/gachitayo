@@ -68,7 +68,7 @@ export function NavOpen({ course }: { course: Course }) {
   );
 }
 
-const SOURCE: Record<Course['source'], string> = { auto: '첫 주행으로 자동', map: '지도에서', gpx: 'GPX', shared: '모두의 코스' };
+const SOURCE: Record<Course['source'], string> = { auto: '첫 주행으로 자동', map: '지도에서', gpx: 'GPX', shared: '모두의 코스', team: '팀 방에서 받음' };
 
 export function courseShapes(c: Course, pending: LatLon | null): { shapes: MapShape[]; fit: Array<[number, number]> } {
   const shapes: MapShape[] = [];
