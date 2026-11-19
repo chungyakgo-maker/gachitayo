@@ -19,6 +19,7 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
 import { AnalysisScreen } from './screens/AnalysisScreen';
 import { SharedCourseScreen } from './screens/SharedCourseScreen';
+import { AdminSharedScreen } from './screens/AdminSharedScreen';
 import { CourseDetailScreen } from './screens/CourseDetailScreen';
 import { NewCourseScreen } from './screens/NewCourseScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
@@ -50,6 +51,7 @@ function route(path: string): ReactElement {
   const course = /^\/course\/([^/]+)$/.exec(path);
   if (course) return <CourseDetailScreen courseId={decodeURIComponent(course[1]!)} />;
   if (path === '/course-new') return <NewCourseScreen />;
+  if (path === '/admin/shared') return <AdminSharedScreen />;
   // 모두의 코스 상세 (설계 2부)
   const shared = /^\/shared\/([^/]+)$/.exec(path);
   if (shared) return <SharedCourseScreen id={decodeURIComponent(shared[1]!)} />;

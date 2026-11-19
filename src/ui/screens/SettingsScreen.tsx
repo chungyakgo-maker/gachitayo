@@ -24,6 +24,7 @@ import { buildInfo } from '../buildInfo';
 import { FriendsSection } from '../components/FriendsSection';
 import { ProfilePhoto } from '../components/ProfilePhoto';
 import { TeamsSection } from '../components/TeamsSection';
+import { AccountIdCopy, BlocksSection } from '../components/BlocksSection';
 import { StorageSection } from '../components/StorageSection';
 import { BackupSection } from '../components/BackupSection';
 import { Tabbed } from '../components/TabBar';
@@ -190,6 +191,7 @@ function AccountSection() {
       )}
       {acc.error && <div className="notice warn">{acc.error}</div>}
       <LoginAccount />
+      {acc.userId && <AccountIdCopy userId={acc.userId} />}
       <span className="sub" style={{ lineHeight: 1.6 }}>
         {acc.status === 'disabled'
           ? '서버 연결 전이라 기록은 이 폰에만 있어요.'
@@ -299,6 +301,7 @@ export function DeleteAccountSection() {
 
 export function SettingsScreen() {
   const s = useSettings();
+  const acc = useAccount();
   return (
     <Tabbed path="/settings">
       <main className="page">
@@ -448,8 +451,17 @@ export function SettingsScreen() {
           <summary>거치 팁</summary>
           <MountTips />
         </details>
+        <BlocksSection />
         <DeleteAccountSection />
         {/* 도움말 (설계 2026-11-18 help): 그림으로 보는 디고 사용법 */}
+        {acc.admin && (
+          <section className="card-col" style={{ gap: 8 }} aria-label="관리자">
+            <a className="list-link" href="#/admin/shared">
+              <strong style={{ fontSize: 15 }}>관리자 · 모두의 코스 관리</strong>
+              <IconChevron size={20} color="#9AA1A9" />
+            </a>
+          </section>
+        )}
         <section className="card-col" style={{ gap: 8 }} aria-label="도움말">
           <span className="label">도움말</span>
           <a className="list-link" href="#/help">
