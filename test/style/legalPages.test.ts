@@ -35,8 +35,8 @@ describe('약관 페이지 (사양서 13.3)', () => {
       expect(html).not.toContain('웹·TestFlight');
       expect(html).toMatch(/웹[^<]*정식 앱과 같/);
     }
-    // 팀 목적지: 정식 앱 방장은 목적지만 보낸다 (경로는 각자 위치에서)
-    expect(pv).toMatch(/목적지만/);
+    // 팀 목적지: 정식 앱 방장은 목적지(또는 코스 모양, 3부)만 보낸다 (경로는 각자 위치에서)
+    expect(pv).toMatch(/목적지나 코스 모양만/);
     expect(lt).toMatch(/목적지만/);
     // 길찾기 때 지금 위치를 네이버 클라우드로 (위치정보 약관에도)
     expect(lt).toContain('네이버 클라우드');
