@@ -138,3 +138,19 @@ describe('주행 뒤 코스 저장도 한도를 지킨다', () => {
     expect(await myCourseCount(drive)).toBe(200);
   }, 30_000);
 });
+
+describe('저장 공간 요약 (설정 시안 ①)', () => {
+  it('기록 수·원본 남은 기록 수·대략 크기·내 코스 수·지금 정리할 수 있는 수', async () => {
+    const { storageSummary } = await import('../../src/app/storageLimits');
+    const repo = createSessionRepo(db);
+    const drive = createDriveRepo(db);
+    await seed(Array.from({ length: 33 }, (_, i) => session(`s${i}`, 1_800_000_000_000 + i)));
+    await repo.create(session('nochunk', 1_900_000_000_000));
+    await repo.create(session('rec', 1_900_000_000_001, 'recording'));
+    await drive.putCourse(course('b1', 'key'));
+    await drive.putCourse(course('m1'));
+    const s = await storageSummary(repo, drive);
+    expect(s).toMatchObject({ sessions: 34, rawSessions: 33, myCourses: 1, prunable: 4 });
+    expect(s.rawBytes).toBeGreaterThan(0);
+  });
+});

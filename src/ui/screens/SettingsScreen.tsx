@@ -1,4 +1,4 @@
-// 설정 탭 (사양서 8.8): 닉네임, 친구, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
+// 설정 탭 (사양서 8.8): 닉네임, 친구, 저장 공간·백업(기록은 폰에만), 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { buildChannel, locationSharing } from '../../features';
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useEffect, useState } from 'react';
@@ -24,6 +24,8 @@ import { buildInfo } from '../buildInfo';
 import { FriendsSection } from '../components/FriendsSection';
 import { ProfilePhoto } from '../components/ProfilePhoto';
 import { TeamsSection } from '../components/TeamsSection';
+import { StorageSection } from '../components/StorageSection';
+import { BackupSection } from '../components/BackupSection';
 import { Tabbed } from '../components/TabBar';
 import { formatKst } from '../format';
 import { IconChevron } from '../icons';
@@ -291,6 +293,8 @@ export function SettingsScreen() {
         <AccountSection />
         <FriendsSection />
         <TeamsSection />
+        <StorageSection />
+        <BackupSection />
         <section className="card-col" style={{ gap: 8 }} aria-label="기본 화면 모드">
           <span className="label">기본 화면 모드</span>
           <div className="segmented" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>

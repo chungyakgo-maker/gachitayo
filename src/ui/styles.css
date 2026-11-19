@@ -376,6 +376,29 @@ html.app-h .modal-backdrop {
   text-underline-offset: 3px;
 }
 
+/* 설정 › 저장 공간 (기록은 폰에만, 시안 ①): 이름 · 값 한 줄, 디고가 쓰는 저장 공간 막대 */
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15px;
+}
+.usage-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--card-line);
+  overflow: hidden;
+}
+.usage-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.backup-nudge {
+  align-items: center;
+  gap: 8px;
+}
+
 /* 로그아웃·계정 지우기 창의 "기록도 지우기" (기록은 폰에만 6단계, 시안 ④): 손가락으로 누르기 쉽게 44px */
 .check-row {
   display: flex;

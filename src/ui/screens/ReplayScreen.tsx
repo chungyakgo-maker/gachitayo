@@ -76,12 +76,14 @@ export function ReplayScreen() {
           <div className="empty">저장된 기록이 없어요.</div>
         ) : (
           list.map((s) => (
-            <button key={s.id} type="button" className="sheet-item" disabled={busy} onClick={() => run({ kind: 'session', id: s.id })}>
+            // 원본을 정리한 기록(최근 30개 밖, 기록은 폰에만)은 다시 재생할 원본이 없다
+            <button key={s.id} type="button" className="sheet-item" disabled={busy || !!s.rawPruned} onClick={() => run({ kind: 'session', id: s.id })}>
               <span className="card-col">
                 <strong className="mono">{formatKst(s.startedAt)}</strong>
                 <span className="sub">
                   {s.summary?.courseName ?? '코스 없음'}
                   {s.summary ? ` · ${s.summary.lapCount}랩` : ''}
+                  {s.rawPruned ? ' · 원본 정리됨 · 재생 안 돼요' : ''}
                 </span>
               </span>
             </button>

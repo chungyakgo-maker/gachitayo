@@ -22,6 +22,46 @@ export async function pruneOldRaw(repo: SessionRepo, keep = RAW_KEEP): Promise<n
   return n;
 }
 
+/** 원본 덩어리(5초) 하나의 대략 크기: GPS 5개 + 모션 약 300개 (실제 크기를 읽지 않고 어림한다) */
+const CHUNK_BYTES = 20_000;
+
+export interface StorageSummary {
+  /** 기록 수 (처리 끝난 것) */
+  sessions: number;
+  /** 원본이 남아 있는 기록 수 */
+  rawSessions: number;
+  /** 원본 대략 크기 */
+  rawBytes: number;
+  /** 내 코스 수 (기본 코스 빼고) */
+  myCourses: number;
+  /** 지금 정리할 수 있는 원본 (최근 RAW_KEEP 개 밖인데 원본이 남은 기록) */
+  prunable: number;
+  /** 디고가 쓰는 폰 저장 공간 (모르면 null) */
+  usage: { used: number; quota: number } | null;
+}
+
+export async function storageSummary(repo: SessionRepo, drive: DriveRepo, keep = RAW_KEEP): Promise<StorageSummary> {
+  const list = (await repo.list()).filter(counted).sort((a, b) => b.startedAt - a.startedAt);
+  let rawSessions = 0;
+  let chunks = 0;
+  let prunable = 0;
+  for (const [i, s] of list.entries()) {
+    const n = await repo.chunkCount(s.id);
+    if (n === 0) continue;
+    rawSessions++;
+    chunks += n;
+    if (i >= keep) prunable++;
+  }
+  let usage: StorageSummary['usage'] = null;
+  try {
+    const e = await navigator.storage?.estimate?.();
+    if (e?.usage !== undefined && e.quota) usage = { used: e.usage, quota: e.quota };
+  } catch {
+    // 모르면 막대 없이 숫자만
+  }
+  return { sessions: list.length, rawSessions, rawBytes: chunks * CHUNK_BYTES, myCourses: await myCourseCount(drive), prunable, usage };
+}
+
 /** 기본 코스를 뺀 코스 수 */
 export async function myCourseCount(drive: DriveRepo): Promise<number> {
   return (await drive.listCourses()).filter((c) => !c.builtin).length;

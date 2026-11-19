@@ -1,11 +1,13 @@
 // 기록 탭: 최근 주행 목록 → 분석 (사양서 8.6). 계산 전 기록은 종료 요약에서 계산한다.
-// 기록 지우기 (M10, 사용자 요청): 휴지통 → 확인 창 → 폰과 서버에서 지운다.
+// 기록 지우기 (M10, 사용자 요청): 휴지통 → 확인 창 → 폰에서 지운다 (예전에 서버에 올라간 사본도, 기록은 폰에만 2026-11-18).
+// 원본이 정리된 기록(최근 30개 밖)은 "원본 정리됨", 맨 위에 백업 알림 (시안 ⑤)
 import { useRef, useState } from 'react';
 import { useRecording } from '../../app/recording';
 import { deleteSessionRecord } from '../../app/records';
 import { importRawFile } from '../../app/rawTransfer';
 import { Overlay } from '../components/Overlay';
 import { RestoreBanner } from '../components/RestoreBanner';
+import { BackupNudge } from '../components/BackupNudge';
 import type { SessionStatus } from '../../types/session';
 import { Tabbed } from '../components/TabBar';
 import { formatDuration, formatKst, formatLapTime } from '../format';
@@ -79,6 +81,7 @@ export function HistoryScreen() {
           <IconChevron size={20} color="#9AA1A9" />
         </a>
         <RestoreBanner />
+        <BackupNudge sessions={list} />
         {importMsg && <div className={`notice${importMsg.warn ? ' warn' : ''}`}>{importMsg.text}</div>}
         {list.length === 0 ? (
           <div className="empty">아직 주행 기록이 없어요.</div>
@@ -99,6 +102,7 @@ export function HistoryScreen() {
                         {s.endedAt ? ` · ${formatDuration(s.endedAt - s.startedAt)}` : ''}
                         {STATUS[s.status] ? ` · ${STATUS[s.status]}` : ''}
                         {s.imported ? ' · 가져온 기록' : ''}
+                        {s.rawPruned ? ' · 원본 정리됨' : ''}
                       </span>
                     </span>
                     <span className="right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

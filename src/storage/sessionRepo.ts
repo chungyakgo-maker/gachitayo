@@ -13,7 +13,9 @@ export interface SessionRepo {
   /** seq 순서 */
   chunks(sessionId: string): Promise<ChunkRecord[]>;
   nextSeq(sessionId: string): Promise<number>;
-  /** 원본 덩어리만 지운다 (업로드 뒤 정리) */
+  /** 원본 덩어리 수 (저장 공간 표시, 원본을 읽지 않고 센다) */
+  chunkCount(sessionId: string): Promise<number>;
+  /** 원본 덩어리만 지운다 (한도 밖 정리) */
   deleteChunks(sessionId: string): Promise<number>;
 }
 
@@ -40,6 +42,7 @@ export function createSessionRepo(db: GachitayoDb): SessionRepo {
         .last();
       return last ? last.seq + 1 : 0;
     },
+    chunkCount: (sessionId) => db.chunks.where('sessionId').equals(sessionId).count(),
     deleteChunks: (sessionId) => db.chunks.where('sessionId').equals(sessionId).delete(),
   };
 }
