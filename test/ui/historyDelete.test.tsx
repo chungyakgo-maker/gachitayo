@@ -20,7 +20,7 @@ vi.mock('../../src/app/recording', async (orig) => ({
   ...(await orig<typeof import('../../src/app/recording')>()),
   useRecording: () => ({ sessions, sessionId: null }),
 }));
-vi.mock('../../src/app/sync', async (orig) => ({ ...(await orig<typeof import('../../src/app/sync')>()), deleteSessionRecord: (id: string) => del(id) }));
+vi.mock('../../src/app/records', async (orig) => ({ ...(await orig<typeof import('../../src/app/records')>()), deleteSessionRecord: (id: string) => del(id) }));
 
 const { HistoryScreen } = await import('../../src/ui/screens/HistoryScreen');
 

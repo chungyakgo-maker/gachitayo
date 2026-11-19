@@ -20,7 +20,8 @@ describe('계정 안내 (사양서 9장)', () => {
     expect(screen.queryByText(/계정 연결이 끊겨/)).not.toBeInTheDocument();
     unmount();
     render(<SettingsScreen />);
-    expect(screen.getByText(/자동으로 만들고 기록을 올려요/)).toBeInTheDocument();
+    expect(screen.getByText(/통신이 연결되면 자동으로 만들어요/)).toBeInTheDocument();
+    expect(screen.queryByText(/기록을 올려요/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '지금 계정 만들기' })).toBeInTheDocument();
     expect(screen.queryByText(/계정 연결이 끊겼어요/)).not.toBeInTheDocument();
   });
@@ -28,7 +29,8 @@ describe('계정 안내 (사양서 9장)', () => {
   it('있던 계정이 끊기면 첫 화면에 경고, 설정에서 새 계정 만들기', () => {
     acc = { ...base, userId: 'u1', lost: true };
     const { unmount } = render(<MainScreen />);
-    expect(screen.getByText(/계정 연결이 끊겨 업로드할 수 없어요/)).toBeInTheDocument();
+    expect(screen.getByText(/계정 연결이 끊겼어요 · 친구·팀은 설정에서 확인/)).toBeInTheDocument();
+    expect(screen.queryByText(/업로드/)).not.toBeInTheDocument();
     unmount();
     render(<SettingsScreen />);
     expect(screen.getByText(/계정 연결이 끊겼어요/)).toBeInTheDocument();

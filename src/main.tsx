@@ -5,7 +5,7 @@ import { getAccountState, initAccount, signedIn } from './app/account';
 import { finishFromHash, setAfterKakaoLogin } from './app/kakaoLogin';
 import { setAfterAppleLogin } from './app/appleLogin';
 import { startRestore } from './app/restore';
-import { initSync } from './app/sync';
+import { initRecords } from './app/records';
 import { initFriends } from './app/friends';
 import { seedBuiltinCourses } from './app/courses';
 import { syncCoursePrefs } from './app/coursePrefs';
@@ -29,14 +29,14 @@ installAppHeight();
 lockPageZoom();
 // 이전 실행에서 끝나지 않은 기록을 찾는다 (사양서 9장 앱 중단)
 void initRecording();
-// 계정 확인 뒤 업로드 대기열을 돌린다 (서버 설정 전이면 폰에만 저장).
+// 계정 확인 뒤 예전 앱이 남긴 서버 지우기를 보낸다 (기록은 폰에만, 올리기는 없다).
 // 카카오에서 이 창으로 돌아왔으면 계정 확인보다 먼저 로그인을 마친다 (예전 열쇠로 "계정 끊김"이 뜨지 않게)
 // 카카오 계정이면 서버에 있고 이 폰에 없는 기록·코스를 되살린다 (로그인 직후와 앱을 열 때마다)
 setAfterKakaoLogin(() => void startRestore());
 setAfterAppleLogin(() => void startRestore());
 void finishFromHash(window.location.hash)
   .then(initAccount)
-  .then(initSync)
+  .then(initRecords)
   .then(() => {
     if (signedIn(getAccountState())) void startRestore();
     // 들어가 있던 그룹 주행 방으로 다시 (24시간이 지났거나 나갔으면 잊는다)

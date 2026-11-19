@@ -1,4 +1,4 @@
-// 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
+// 설정 탭 (사양서 8.8): 닉네임, 친구, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { buildChannel, locationSharing } from '../../features';
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useEffect, useState } from 'react';
@@ -19,14 +19,12 @@ import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, BIKE_MARKER_LABEL, C
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { drawMeIcon } from '../overlay/minimap';
 import { MountTips } from '../components/MountTips';
-import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
 import { FriendsSection } from '../components/FriendsSection';
 import { ProfilePhoto } from '../components/ProfilePhoto';
 import { TeamsSection } from '../components/TeamsSection';
 import { Tabbed } from '../components/TabBar';
 import { formatKst } from '../format';
-import { IconCloud, IconWarn } from '../icons';
 import { IconChevron } from '../icons';
 
 const MODES: Array<[DriveMode, string]> = [
@@ -169,7 +167,7 @@ function AccountSection() {
       </div>
       {acc.status === 'none' && acc.onboarded && !acc.lost && (
         <div className="notice" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-          <span>아직 서버 계정을 만들지 못했어요. 통신이 연결되면 자동으로 만들고 기록을 올려요.</span>
+          <span>아직 서버 계정을 만들지 못했어요. 통신이 연결되면 자동으로 만들어요.</span>
           <button type="button" className="btn" disabled={acc.busy} onClick={() => void recreateAccount()}>
             지금 계정 만들기
           </button>
@@ -177,7 +175,7 @@ function AccountSection() {
       )}
       {acc.status === 'none' && acc.lost && (
         <div className="notice warn" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-          <span>계정 연결이 끊겼어요. 새 계정으로 다시 시작하면 이 폰의 기록은 다시 올라가지만, 예전 계정의 서버 기록은 볼 수 없어요.</span>
+          <span>계정 연결이 끊겼어요. 새 계정으로 다시 시작하면 친구·팀을 다시 쓸 수 있어요. 이 폰의 기록은 그대로예요.</span>
           <button type="button" className="btn" disabled={acc.busy} onClick={() => void recreateAccount()}>
             새 계정 만들기
           </button>
@@ -192,36 +190,6 @@ function AccountSection() {
             ? `${acc.kakao ? '카카오' : 'Apple'} 계정에 연결돼 있어요. 폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요.`
             : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요(서버 기록은 남아요). 홈 화면 앱으로 쓰고 자주 올려 주세요.'}
       </span>
-    </section>
-  );
-}
-
-function SyncSection() {
-  const sync = useSync();
-  const acc = useAccount();
-  const status = !sync.enabled
-    ? '서버 연결 전 · 폰에만 저장'
-    : acc.status !== 'ready'
-      ? '계정이 없어 올리지 않음'
-      : sync.running
-        ? '올리는 중…'
-        : sync.pending > 0
-          ? `업로드 대기 ${sync.pending}건`
-          : '모두 올라감';
-  return (
-    <section className="card card-col" style={{ gap: 8 }} aria-label="동기화 상태">
-      <div className="status-head">
-        {sync.lastError ? <IconWarn color="#FF5B4F" /> : <IconCloud color="#FFB224" />}
-        <strong>동기화</strong>
-        <span>{status}</span>
-      </div>
-      {sync.lastSyncAt && <span className="sub">마지막 업로드 {formatKst(sync.lastSyncAt)}</span>}
-      {sync.lastError && <span style={{ fontSize: 13, color: 'var(--bad)' }}>마지막 오류: {sync.lastError}</span>}
-      {sync.enabled && sync.pending > 0 && (
-        <button type="button" className="btn" disabled={sync.running || acc.status !== 'ready'} onClick={() => void retryNow()}>
-          지금 다시 시도
-        </button>
-      )}
     </section>
   );
 }
@@ -289,7 +257,6 @@ export function SettingsScreen() {
         <AccountSection />
         <FriendsSection />
         <TeamsSection />
-        <SyncSection />
         <section className="card-col" style={{ gap: 8 }} aria-label="기본 화면 모드">
           <span className="label">기본 화면 모드</span>
           <div className="segmented" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>

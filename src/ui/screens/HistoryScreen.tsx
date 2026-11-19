@@ -2,7 +2,7 @@
 // 기록 지우기 (M10, 사용자 요청): 휴지통 → 확인 창 → 폰과 서버에서 지운다.
 import { useRef, useState } from 'react';
 import { useRecording } from '../../app/recording';
-import { deleteSessionRecord } from '../../app/sync';
+import { deleteSessionRecord } from '../../app/records';
 import { importRawFile } from '../../app/rawTransfer';
 import { Overlay } from '../components/Overlay';
 import { RestoreBanner } from '../components/RestoreBanner';

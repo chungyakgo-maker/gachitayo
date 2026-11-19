@@ -242,7 +242,7 @@ describe('되살리기', () => {
     expect((await rec.getRepo().get(a))!.restoring).toBeFalsy();
   });
 
-  it('한 번도 올리지 않은 계산된 기록만 올린다: 다른 계정에 올렸던 기록·가져온 기록·중단된 주행·계산 전 기록은 그대로', async () => {
+  it('기록은 폰에만: 이 폰의 기록은 올리지 않는다 (올렸던 기록·가져온 기록·중단된 주행·계산 전 기록 모두 그대로)', async () => {
     const { rec, restore } = await load();
     const fresh = crypto.randomUUID();
     const elsewhere = crypto.randomUUID();
@@ -262,7 +262,8 @@ describe('되살리기', () => {
       if (withResult) await rec.getDriveRepo().putResult({ sessionId: id, courseId: null, courseVersion: null, processedAt: 1, laps: [] } as never);
     }
     await restore.startRestore();
-    expect((await rec.getQueueRepo().all()).map((q) => q.targetId)).toEqual([fresh]);
+    expect(await rec.getQueueRepo().count()).toBe(0);
+    expect(fetchMock.mock.calls.some((c) => (c[1] as RequestInit | undefined)?.method === 'PUT')).toBe(false);
     expect((await rec.getRepo().get(interrupted))!.status).toBe('interrupted');
     expect((await rec.getRepo().get(unprocessed))!.status).toBe('finished');
     expect((await rec.getRepo().get(elsewhere))!).toMatchObject({ status: 'uploaded', uploadedAt: 99 });

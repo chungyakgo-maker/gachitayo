@@ -1,6 +1,6 @@
 // 되살리기 (설계 docs/superpowers/specs/2026-11-13-kakao-login-design.md 5.7·5.7-1·5.7-2):
 // 카카오 계정의 서버 기록 중 이 폰에 없는 것은 원본을 받아 같은 id로 다시 계산한다(예전 폰과 같은 랩).
-// 서버 코스 중 기본 코스는 폰의 같은 기본 코스로 이어 붙이고, 이 폰에만 있는 기록은 원본이 있으면 올린다.
+// 서버 코스 중 기본 코스는 폰의 같은 기본 코스로 이어 붙인다. (기록은 폰에만: 이 폰의 기록은 올리지 않는다)
 import { useSyncExternalStore } from 'react';
 import { toLocal } from '../engine/geo';
 import { ApiError, apiFetch } from '../server/api';
@@ -12,8 +12,7 @@ import type { Course, CourseKind, CourseSource, Gate } from '../types/course';
 import type { DeviceInfo, SessionRecord } from '../types/session';
 import { getAuth } from './account';
 import { loadCourses, processRestoredSession } from './drive';
-import { getDriveRepo, getQueueRepo, getRecordingState, getRepo, refreshSessions, subscribeRecording } from './recording';
-import { enqueueSessionUpload } from './sync';
+import { getDriveRepo, getRecordingState, getRepo, refreshSessions, subscribeRecording } from './recording';
 
 export interface RestoreState {
   running: boolean;
@@ -200,17 +199,6 @@ async function run(): Promise<void> {
     }
   }
   if (todo.length) await refreshSessions();
-
-  // 3. 이 폰에서 계산했지만 한 번도 올리지 않은 기록은 이 계정으로 올린다 (대기열에 없을 때).
-  //    다른 계정(끊긴 계정 등)에 올렸던 기록은 서버에서 그 계정 것이라 올릴 수 없고, 지운 기록이 되살아나면 안 되므로
-  //    올리지 않는다(로그아웃 때 "이 폰에만 있는 기록"으로 알린다). 중단된 주행·계산 전 기록·가져온 기록도 건드리지 않는다
-  const onServer = new Set(sessions.map((s) => s.id));
-  const queued = new Set((await getQueueRepo().all()).map((q) => q.targetId));
-  for (const s of await repo.list()) {
-    if (s.status !== 'processed' || s.uploadedAt || s.imported || onServer.has(s.id) || queued.has(s.id)) continue;
-    if (!(await drive.getResult(s.id))) continue;
-    await enqueueSessionUpload(s.id);
-  }
 }
 
 let running: Promise<void> | null = null;

@@ -26,7 +26,6 @@ import {
   subscribeSamples,
 } from './recording';
 import { getSettings, type DriveMode } from './settings';
-import { enqueueSessionUpload } from './sync';
 import { pruneOldRaw } from './storageLimits';
 import { changeProposedKind, dismissDetour, loadRaw, overwriteWithDetour, processStoredSession, saveDetourAsNew, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
@@ -346,10 +345,9 @@ async function track<T>(sessionId: string, work: () => Promise<T>): Promise<T | 
   }
 }
 
-/** 처리·코스 저장이 끝나면: 원본 한도(최근 30개)를 지킨다 (기록은 폰에만 1부) + 서버에 올릴 차례에 넣는다 (2단계에서 뺌) */
-async function andUpload<T>(sessionId: string, r: T | null): Promise<T | null> {
+/** 처리·코스 저장이 끝나면 원본 한도(최근 30개)를 지킨다 (기록은 폰에만: 서버에 올리지 않는다) */
+async function afterProcess<T>(r: T | null): Promise<T | null> {
   if (r) {
-    void enqueueSessionUpload(sessionId);
     void pruneOldRaw(getRepo())
       .then((n) => (n > 0 ? refreshSessions() : undefined))
       .catch(() => {});
@@ -358,19 +356,19 @@ async function andUpload<T>(sessionId: string, r: T | null): Promise<T | null> {
 }
 
 export async function processSession(sessionId: string, kind?: CourseKind): Promise<DriveResultRecord | null> {
-  return andUpload(sessionId, await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
+  return afterProcess(await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
 }
 
 /** 벗어난 길을 새 코스로 저장하고 이 주행을 그 코스로 옮긴다 (코스 이탈) */
 export async function saveDetour(sessionId: string, name: string): Promise<boolean> {
-  const r = await andUpload(sessionId, await track(sessionId, () => saveDetourAsNew(deps(), sessionId, name)));
+  const r = await afterProcess(await track(sessionId, () => saveDetourAsNew(deps(), sessionId, name)));
   if (r) await loadCourses();
   return r !== null;
 }
 
 /** 지금 코스(내 코스)를 벗어난 길로 덮어쓴다 */
 export async function overwriteDetour(sessionId: string): Promise<boolean> {
-  const r = await andUpload(sessionId, await track(sessionId, () => overwriteWithDetour(deps(), sessionId)));
+  const r = await afterProcess(await track(sessionId, () => overwriteWithDetour(deps(), sessionId)));
   if (r) await loadCourses();
   return r !== null;
 }
@@ -386,11 +384,11 @@ export async function processRestoredSession(sessionId: string): Promise<DriveRe
 }
 
 export async function changeKind(sessionId: string, kind: CourseKind): Promise<DriveResultRecord | null> {
-  return andUpload(sessionId, await track(sessionId, () => changeProposedKind(deps(), sessionId, kind)));
+  return afterProcess(await track(sessionId, () => changeProposedKind(deps(), sessionId, kind)));
 }
 
 export async function saveCourse(sessionId: string, name: string): Promise<boolean> {
-  const r = await andUpload(sessionId, await track(sessionId, () => saveProposedCourse(deps(), sessionId, name)));
+  const r = await afterProcess(await track(sessionId, () => saveProposedCourse(deps(), sessionId, name)));
   if (r) await loadCourses();
   return r !== null;
 }

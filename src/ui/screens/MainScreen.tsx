@@ -8,14 +8,13 @@ import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { updateSettings, useSettings } from '../../app/settings';
 import { useRecording } from '../../app/recording';
 import { useAccount } from '../../app/account';
-import { useSync } from '../../app/sync';
 import { nearestCourse } from '../../engine/course/nearest';
 import { MainMap } from '../components/MainMap';
 import { ShareToggle } from '../components/ShareToggle';
 import { Tabbed } from '../components/TabBar';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { useLocationPreview } from '../hooks/useLocationPreview';
-import { IconArrowRight, IconCloud, IconWarn } from '../icons';
+import { IconArrowRight, IconWarn } from '../icons';
 import type { GpsState } from '../components/GpsIcon';
 import { useOverlayInsets } from '../hooks/useOverlayInsets';
 import { usePwaUpdate } from '../pwa/usePwaUpdate';
@@ -37,7 +36,6 @@ export function MainScreen() {
   const rec = useRecording();
   const drive = useDrive();
   const settings = useSettings();
-  const sync = useSync();
   const acc = useAccount();
   const busy = drive.phase !== 'idle' || rec.phase !== 'idle';
   // 주행·기록 중이 아니면 새 버전을 바로 적용한다 (사용자 불편: 업데이트를 눌러야만 새 버전이 들어왔다).
@@ -119,13 +117,7 @@ export function MainScreen() {
         {acc.status === 'none' && acc.lost && (
           <a className="notice warn" href="#/settings" style={{ textDecoration: 'none' }}>
             <IconWarn size={20} />
-            계정 연결이 끊겨 업로드할 수 없어요 · 설정에서 확인
-          </a>
-        )}
-        {sync.enabled && sync.pending > 0 && (
-          <a className="notice" href="#/settings" style={{ textDecoration: 'none' }}>
-            <IconCloud size={20} color="#FFB224" />
-            업로드 대기 {sync.pending}건 · 통신이 연결되면 자동으로 올라갑니다
+            계정 연결이 끊겼어요 · 친구·팀은 설정에서 확인
           </a>
         )}
         {!searching && (

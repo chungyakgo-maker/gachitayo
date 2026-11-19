@@ -98,11 +98,12 @@ describe('상단 표시 값 (시안 Widgets): 칸 1 델타, 칸 2 왼쪽, 칸 3 
   });
 });
 
-describe('설정: 닉네임·동기화 (사양서 8.8)', () => {
-  it('서버 연결 전이면 "폰에만 저장"을 알리고 닉네임은 폰에 저장한다', async () => {
+describe('설정: 닉네임 (사양서 8.8) · 동기화 없음 (기록은 폰에만)', () => {
+  it('동기화·업로드 칸이 없고, 닉네임은 폰에 저장한다', async () => {
     const { waitFor } = await import('@testing-library/react');
     render(<SettingsScreen />);
-    expect(screen.getByText('서버 연결 전 · 폰에만 저장')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '동기화 상태' })).toBeNull();
+    expect(screen.queryByText(/업로드|동기화/)).toBeNull();
     fireEvent.change(screen.getByLabelText('닉네임'), { target: { value: '지훈' } });
     fireEvent.click(screen.getAllByRole('button', { name: '저장' })[0]!);
     await waitFor(() => expect(localStorage.getItem('gachitayo.nickname')).toBe('지훈'));

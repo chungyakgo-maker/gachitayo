@@ -62,6 +62,9 @@ describe('주행 종료 요약 (사양서 8.5, 시안 Summary)', () => {
     expect(screen.getByText('+4.903')).toBeInTheDocument();
     expect(screen.getByText('무효 · GPS 끊김')).toBeInTheDocument();
     expect(screen.getByText('베스트')).toBeInTheDocument();
+    // 기록은 폰에만: 업로드 표시 대신 "이 폰에 저장됨"
+    expect(screen.getByText('이 폰에 저장됨')).toBeInTheDocument();
+    expect(screen.queryByText(/업로드/)).toBeNull();
   });
 
   it('첫 주행: 새 코스 저장 폼 (종류 바꾸기, 이름 넣고 저장)', () => {

@@ -17,7 +17,6 @@ describe('PC에서 내 기록 보기 (질문 6 결정 가): 원본 파일(+코�
     const rec = await import('../../src/app/recording');
     const { prepareRawExport, importRawFile } = await import('../../src/app/rawTransfer');
     const drive = await import('../../src/app/drive');
-    const sync = await import('../../src/app/sync');
     const course = { ...r.course!, name: '연습 오벌' };
     const id = crypto.randomUUID();
     await rec.getDriveRepo().putCourse(course);
@@ -35,8 +34,7 @@ describe('PC에서 내 기록 보기 (질문 6 결정 가): 원본 파일(+코�
     expect(chunks[0]!.gps.length).toBe(s.gps.length);
     expect(chunks[0]!.rawMotion.length).toBe(s.motion.length);
     expect(drive.processSession).toHaveBeenCalledWith(newId);
-    // 올리기 대기열에 넣지 않는다
-    await sync.enqueueSessionUpload(newId);
+    // 기록은 폰에만: 올리기 대기열은 쓰지 않는다
     expect((await rec.getQueueRepo().all()).some((q) => q.targetId === newId)).toBe(false);
   });
 
