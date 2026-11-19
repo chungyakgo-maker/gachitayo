@@ -50,6 +50,7 @@
 ■ 팀 주행
 · 친구로 팀을 만들어 두고(최대 15명), 팀으로 바로 함께 달려요
 · 주행 순서와 권장 차 간격을 정하고, 방장이 정한 목적지를 모두가 함께 받아요
+· (1.0.1) 방장이 코스를 정하면 모두 같은 출발선·도착선으로 달리고, 각자 출발점까지 안내받아요
 · 카카오톡으로 "주행 열었어요"를 알려 팀원을 불러요
 · 친구·팀원에게만 보이는 작은 프로필 사진
 
@@ -99,6 +100,8 @@
 - 사용자 콘텐츠 · 기타 사용자 콘텐츠: "모두의 코스로 공개한 코스(이름·코스 선·출발선·도착선), 신고 이유"를 더한다 (공개한 경우만, 모두에게 보임).
 
 1.0.1 심사 메모에 더할 줄 (사용자 콘텐츠, 심사 1.2): `Shared courses (user-generated content): Courses (코스) → "모두의 코스" (Everyone's courses) lists courses other users published. Publishing requires Kakao or Apple sign-in and a checkbox; course names are filtered for objectionable words. Each shared course has "신고" (Report — 3 reports hide it immediately) and "이 사람 코스 안 보기" (Block this user — removes all their courses from the list; undo in Settings → 안 보는 사람). The operator reviews reports in an admin screen and can hide or delete courses and block an account from publishing. Only the course line and nickname are shared — never drive records or locations.`
+
+1.0.1 심사 메모의 팀 주행 줄 끝에 더할 문장 (3부 팀 방 코스): `The host can choose a course instead of a destination (lobby: "이번 주행" → "코스"); members get "방장이 코스를 정했어요" and, after "이 코스로 진행", the course is copied to their phone. Only the course shape (start/finish lines and a simplified line) is shared — never the host's location; each member is guided from their own position to the start line.`
 
 1.0.1 심사 메모의 계정 삭제 줄: `Account deletion: Settings (설정) → "계정 지우기" (Delete account) deletes the account on the server (nickname, friends, teams, photo). Driving records are stored only on the phone; the dialog offers "기록과 내 코스도 이 폰에서 지우기" (also delete records on this phone). If the account used Sign in with Apple, the Apple token is revoked.`
 
