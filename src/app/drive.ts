@@ -27,6 +27,7 @@ import {
 } from './recording';
 import { getSettings, type DriveMode } from './settings';
 import { enqueueSessionUpload } from './sync';
+import { pruneOldRaw } from './storageLimits';
 import { changeProposedKind, dismissDetour, loadRaw, overwriteWithDetour, processStoredSession, saveDetourAsNew, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
@@ -345,9 +346,14 @@ async function track<T>(sessionId: string, work: () => Promise<T>): Promise<T | 
   }
 }
 
-/** 처리·코스 저장이 끝나면 서버에 올릴 차례에 넣는다 (사양서 5.4-4) */
+/** 처리·코스 저장이 끝나면: 원본 한도(최근 30개)를 지킨다 (기록은 폰에만 1부) + 서버에 올릴 차례에 넣는다 (2단계에서 뺌) */
 async function andUpload<T>(sessionId: string, r: T | null): Promise<T | null> {
-  if (r) void enqueueSessionUpload(sessionId);
+  if (r) {
+    void enqueueSessionUpload(sessionId);
+    void pruneOldRaw(getRepo())
+      .then((n) => (n > 0 ? refreshSessions() : undefined))
+      .catch(() => {});
+  }
   return r;
 }
 

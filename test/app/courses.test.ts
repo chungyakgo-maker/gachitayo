@@ -157,6 +157,24 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     expect(drive.processSession).toHaveBeenCalledWith(id);
   });
 
+  it('내 코스가 200개면 지도 새 코스·GPX 코스·역방향을 막는다 (기록은 폰에만 1부)', async () => {
+    const d = rec.getDriveRepo();
+    const mine = (await d.listCourses()).filter((c) => !c.builtin).length;
+    const base = (await d.listCourses())[0]!;
+    const filler: string[] = [];
+    for (let i = mine; i < 200; i++) {
+      const id = `fill-${i}`;
+      filler.push(id);
+      await d.putCourse({ ...base, id, builtin: undefined, name: id });
+    }
+    const at = { lat: 37.5, lon: 127 };
+    const msg = '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요';
+    await expect(createMapCourse({ name: 'x', kind: 'loop', start: { at, toward: { lat: 37.5, lon: 127.001 } } })).rejects.toThrow(msg);
+    await expect(importGpx(courseToGpx(r.course!), 'course', '하나 더')).rejects.toThrow(msg);
+    await expect(makeReverseCourse(filler[0]!)).rejects.toThrow(msg);
+    for (const id of filler) await d.deleteCourse(id);
+  });
+
   it('구간 경계 표시 위치 두 곳', () => {
     const m = sectorMarks(r.course!);
     expect(m.map((x) => x.label)).toEqual(['1|2', '2|3']);

@@ -37,6 +37,8 @@ export interface SessionRecord {
   restoring?: boolean;
   /** 일반 주행 (기록 안 남김, 사용자 요청): 끝나면 지운다. 앱이 꺼져 남았으면 다음에 묻지 않고 지운다 */
   noRecord?: boolean;
+  /** 원본 센서 자료를 한도(최근 30개)로 정리함 (기록은 폰에만 1부): 분석·내보내기는 되고 다시 재생·다시 계산은 안 된다 */
+  rawPruned?: boolean;
   /** 바이크로 달린 주행 (바이크 모드, 주행 시작 때 설정의 탈것). 요약에 최대 기울기를 보인다 */
   vehicle?: 'bike';
 }

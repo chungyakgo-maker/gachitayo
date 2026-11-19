@@ -18,6 +18,7 @@ import { loadCourses, processSession } from './drive';
 import { getDriveRepo, getQueueRepo, getRecordingState, getRepo, refreshSessions } from './recording';
 import { getSettings } from './settings';
 import { deleteSessionRecord, enqueueCourseDelete, kickSync } from './sync';
+import { assertCourseRoom } from './storageLimits';
 
 /** 코스를 서버에 올리도록 대기열에 (이름·선이 바뀌었을 때) */
 async function queueCourse(id: string): Promise<void> {
@@ -163,6 +164,7 @@ export async function makeReverseCourse(courseId: string): Promise<{ course: Cou
   const rev = reverseCourse(c, { id: crypto.randomUUID(), name: reverseName(c.name) });
   const same = (await drive.listCourses()).find((x) => x.id !== c.id && sameCourse(x, rev));
   if (same) return { course: same, created: false };
+  await assertCourseRoom(drive);
   await saveCourseRecord(rev);
   return { course: rev, created: true };
 }
@@ -263,6 +265,7 @@ export interface GatePick {
 
 /** 지도에서 새 코스: 출발선(편도면 도착선도)의 위치와 진행 방향. 중심선은 첫 주행 뒤에 생긴다 (사양서 7.5) */
 export async function createMapCourse(opts: { name: string; kind: CourseKind; start: GatePick; finish?: GatePick | null }): Promise<Course> {
+  await assertCourseRoom(getDriveRepo());
   const name = opts.name.trim() || '새 코스';
   const origin = opts.start.at;
   const width = getSettings().gateWidthM;
@@ -298,6 +301,7 @@ export type GpxImport = { kind: 'course'; course: Course } | { kind: 'session'; 
 export async function importGpx(text: string, mode: 'course' | 'session', name: string): Promise<GpxImport> {
   const gpx = parseGpx(text);
   if (mode === 'course') {
+    await assertCourseRoom(getDriveRepo());
     const c = courseFromGpx(gpx, { id: crypto.randomUUID(), name: name.trim() || gpx.name || 'GPX 코스' });
     const w = getSettings().gateWidthM;
     const course = { ...c, startGate: { ...c.startGate, widthM: w }, finishGate: { ...c.finishGate, widthM: w } };
