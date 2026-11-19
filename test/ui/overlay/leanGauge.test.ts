@@ -49,3 +49,14 @@ describe('기울기 칸', () => {
     expect(leanLabel({ hasState: false, leanDeg: null })).toBe('기울기 — (최대 왼쪽 0도, 오른쪽 0도)');
   });
 });
+
+describe('기울기 칸 이름 빼기 (기울기 시험 화면: 위에 따로 제목이 있다)', () => {
+  it('title: false 면 "기울기" 글자를 그리지 않는다 (기본은 그린다)', () => {
+    const on = fakeCtx();
+    drawLeanTile(on.ctx, 176, 100, { hasState: true, leanDeg: 10, maxLeanLeftDeg: 0, maxLeanRightDeg: 0 }, th);
+    expect(on.texts().map((t) => t.text)).toContain('기울기');
+    const off = fakeCtx();
+    drawLeanTile(off.ctx, 176, 100, { hasState: true, leanDeg: 10, maxLeanLeftDeg: 0, maxLeanRightDeg: 0 }, th, { title: false });
+    expect(off.texts().map((t) => t.text)).not.toContain('기울기');
+  });
+});

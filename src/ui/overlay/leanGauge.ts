@@ -25,8 +25,8 @@ export function leanLabel(f: LeanFrame): string {
   return `기울기 ${now} (최대 왼쪽 ${Math.round(f.maxLeanLeftDeg ?? 0)}도, 오른쪽 ${Math.round(f.maxLeanRightDeg ?? 0)}도)`;
 }
 
-/** 기울기 칸 하나. panel이면 바탕도 그린다 (영상 입히기·대시보드) */
-export function drawLeanTile(ctx: Ctx, w: number, h: number, f: LeanFrame, th: OverlayTheme, opts: { panel?: boolean } = {}): void {
+/** 기울기 칸 하나. panel이면 바탕도 그린다 (영상 입히기·대시보드). title: false 면 "기울기" 이름을 빼고 그린다 (기울기 시험 화면: 위에 제목이 따로 있다) */
+export function drawLeanTile(ctx: Ctx, w: number, h: number, f: LeanFrame, th: OverlayTheme, opts: { panel?: boolean; title?: boolean } = {}): void {
   if (opts.panel) drawPanel(ctx, w, h, th, 'none', 16);
   const deg = f.hasState && f.leanDeg != null ? Math.max(-LEAN.maxDeg, Math.min(LEAN.maxDeg, f.leanDeg)) : null;
   const side = deg === null ? null : leanSide(deg);
@@ -53,7 +53,7 @@ export function drawLeanTile(ctx: Ctx, w: number, h: number, f: LeanFrame, th: O
   ctx.font = `400 11px ${th.sans}`;
   ctx.fillStyle = th.fgDim;
   ctx.textAlign = 'left';
-  ctx.fillText('기울기', 10, 17);
+  if (opts.title !== false) ctx.fillText('기울기', 10, 17);
   // 바탕 호 + 지금 각도까지 색 호
   arc(-LEAN.maxDeg, LEAN.maxDeg);
   ctx.strokeStyle = '#2c3137';

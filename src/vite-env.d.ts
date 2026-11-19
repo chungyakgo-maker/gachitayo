@@ -13,4 +13,6 @@ interface ImportMetaEnv {
   readonly VITE_LOCATION_SHARING?: string;
   /** 'off'면 앞 친구·앞 차 간격 끔 (안 적으면 위와 같은 값) */
   readonly VITE_LIVE_GAP?: string;
+  /** 'off' 면 바이크 기울기를 예전 계산(속도 × 도는 빠르기)만으로 (features.ts leanFused) */
+  readonly VITE_LEAN_FUSED?: string;
 }

@@ -57,18 +57,26 @@ describe('기울기 시험 화면 (#/dev/lean)', () => {
     expect(window.location.hash).toBe('#/dev/lean');
   });
 
-  it('센서 기울기·계산 기울기·최종·속도·0점 기준을 나란히, 0점 맞추기·시험 끝내기', () => {
+  it('센서 기울기·최종은 바늘 그림(최대 왼쪽·오른쪽), 계산 기울기·속도·0점은 글자, 0점 맞추기·시험 끝내기', () => {
     h.phase = 'preparing';
     h.snap = snapWith({ deg: 9.2, tiltDeg: 12.1, physicsDeg: -2.9, ref: 'user' });
-    render(<LeanTestScreen />);
+    const { rerender } = render(<LeanTestScreen />);
+    expect(screen.getByRole('img', { name: '센서 기울기 오른쪽 12도 (최대 왼쪽 0도, 오른쪽 12도)' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '최종 기울기 오른쪽 9도 (최대 왼쪽 0도, 오른쪽 9도)' })).toBeInTheDocument();
+    // 왼쪽으로 기울이면 최대 왼쪽이 남는다
+    h.snap = snapWith({ deg: -20, tiltDeg: -21, physicsDeg: 0, ref: 'user' });
+    rerender(<LeanTestScreen />);
+    expect(screen.getByRole('img', { name: '센서 기울기 왼쪽 21도 (최대 왼쪽 21도, 오른쪽 12도)' })).toBeInTheDocument();
+    h.snap = snapWith({ deg: 9.2, tiltDeg: 12.1, physicsDeg: -2.9, ref: 'user' });
+    rerender(<LeanTestScreen />);
     const rows = screen.getByRole('list', { name: '기울기 값' });
-    expect(within(rows).getByText('센서 기울기').parentElement).toHaveTextContent('오른쪽 12°');
     expect(within(rows).getByText('계산 기울기').parentElement).toHaveTextContent('왼쪽 3°');
-    expect(within(rows).getByText('최종').parentElement).toHaveTextContent('오른쪽 9°');
     expect(within(rows).getByText('속도').parentElement).toHaveTextContent('23 km/h');
-    expect(screen.getByText('0점: 직접 맞춤')).toBeInTheDocument();
+    expect(within(rows).getByText('0점').parentElement).toHaveTextContent('직접 맞춤');
     fireEvent.click(screen.getByRole('button', { name: '0점 맞추기' }));
     expect(screen.getByText('0점을 맞췄어요')).toBeInTheDocument();
+    // 0점을 새로 맞추면 최대값도 처음부터
+    expect(screen.getByRole('img', { name: '센서 기울기 오른쪽 12도 (최대 왼쪽 0도, 오른쪽 12도)' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '시험 끝내기' }));
     expect(h.calls).toEqual(['zero', 'cancel']);
   });
