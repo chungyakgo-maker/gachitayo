@@ -67,7 +67,8 @@ beforeEach(() => {
 
 describe('모두에게 공개 (시안 ⑥)', () => {
   it('선 없는 코스·기본 코스·받은 코스엔 단추가 없다', () => {
-    for (const c of [{ ...base, centerline: null }, { ...base, builtin: 'key' }, { ...base, shared: { id: 'p', by: 'x' } }]) {
+    // 팀 방에서 받은 코스도 (남이 만든 코스를 내 것으로 공개하지 않게, 검토 지적)
+    for (const c of [{ ...base, centerline: null }, { ...base, builtin: 'key' }, { ...base, shared: { id: 'p', by: 'x' } }, { ...base, source: 'team' }]) {
       h.courses = [c as Course];
       const { unmount } = render(<CourseDetailScreen courseId="c1" />);
       expect(screen.queryByRole('button', { name: '모두에게 공개' })).toBeNull();

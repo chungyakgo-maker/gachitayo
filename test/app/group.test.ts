@@ -6,15 +6,18 @@ const h = vi.hoisted(() => ({
   nav: null as unknown,
   driveCb: null as null | (() => void),
   sampleCb: null as null | ((e: unknown) => void),
-  navRoutes: [] as Array<{ route: unknown; dest: unknown }>,
+  navRoutes: [] as Array<{ route: unknown; dest: unknown; toCourse?: string | null }>,
   chosen: [] as unknown[],
   courseChosen: false,
+  curCourse: null as unknown,
+  refreshed: null as unknown,
+  prepErrors: [] as string[],
   local: null as unknown,
   linkFails: '' as string,
 }));
 vi.mock('../../src/app/account', () => ({ getAuth: () => ({ userId: 'me', token: 'tok' }) }));
 vi.mock('../../src/app/drive', () => ({
-  getDriveState: () => ({ phase: h.phase, courseChosen: h.courseChosen }),
+  getDriveState: () => ({ phase: h.phase, courseChosen: h.courseChosen, course: h.curCourse }),
   subscribeDrive: (cb: () => void) => {
     h.driveCb = cb;
     return () => {
@@ -22,14 +25,23 @@ vi.mock('../../src/app/drive', () => ({
     };
   },
   beginPrepare: vi.fn(),
-  chooseCourse: (c: unknown) => void h.chosen.push(c),
+  chooseCourse: (c: unknown) => {
+    h.chosen.push(c);
+    h.curCourse = c;
+  },
   chooseFreeDrive: vi.fn(),
+  notePrepareError: (t: string) => void h.prepErrors.push(t),
 }));
 vi.mock('../../src/app/teamCourse', async (orig) => ({
   ...(await orig<typeof import('../../src/app/teamCourse')>()),
   courseForRoom: async () => {
     if (h.linkFails) throw new Error(h.linkFails);
     return h.local;
+  },
+  // 출발 때 폰에서 다시 찾은 코스 (지웠거나 고쳤을 수 있다)
+  refreshTeamCourse: async (local: unknown) => {
+    if (h.linkFails) throw new Error(h.linkFails);
+    return h.refreshed ?? local;
   },
 }));
 vi.mock('../../src/app/recording', () => ({
@@ -41,8 +53,8 @@ vi.mock('../../src/app/recording', () => ({
   },
 }));
 vi.mock('../../src/app/routeNav', () => ({
-  startNavWithRoute: (route: unknown, dest: unknown) => h.navRoutes.push({ route, dest }),
-  replaceNavRoute: (route: unknown, dest: unknown) => h.navRoutes.push({ route, dest }),
+  startNavWithRoute: (route: unknown, dest: unknown, _own?: boolean, toCourse?: string | null) => h.navRoutes.push({ route, dest, toCourse: toCourse ?? null }),
+  replaceNavRoute: (route: unknown, dest: unknown, toCourse?: string | null) => h.navRoutes.push({ route, dest, toCourse: toCourse ?? null }),
   getNavLive: () => h.nav,
 }));
 vi.mock('../../src/server/config', () => ({ serverConfig: { apiUrl: 'https://api.test' } }));
@@ -102,6 +114,9 @@ beforeEach(() => {
   h.navRoutes.length = 0;
   h.chosen.length = 0;
   h.courseChosen = false;
+  h.curCourse = null;
+  h.refreshed = null;
+  h.prepErrors.length = 0;
   h.local = { id: 'local-1', name: '유명산 업힐' };
   h.linkFails = '';
   routeVersion = 1;
@@ -404,7 +419,72 @@ describe('팀 방 코스 (설계 3부)', () => {
     await tick();
     expect(h.chosen).toEqual([h.local]);
     expect(h.navRoutes).toHaveLength(1);
-    expect(h.navRoutes[0]).toMatchObject({ route: { distanceM: 0, durationS: 0 }, dest: COURSE_DEST });
+    // 그 코스의 출발점 안내 (코스를 골라도 안내가 꺼지지 않게 코스 번호를 같이 준다, 검토 지적)
+    expect(h.navRoutes[0]).toMatchObject({ route: { distanceM: 0, durationS: 0 }, dest: COURSE_DEST, toCourse: 'local-1' });
+  });
+
+  it('출발 때는 폰에서 그 코스를 다시 찾는다 (고쳤으면 고친 코스), 못 찾고 담지도 못하면 준비 화면에 알린다', async () => {
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    h.refreshed = { id: 'local-1', name: '유명산 업힐', version: 2 };
+    h.phase = 'preparing';
+    h.driveCb!();
+    await tick();
+    expect(h.chosen).toEqual([h.refreshed]);
+    h.phase = 'idle';
+    h.driveCb!();
+    h.chosen.length = 0;
+    h.navRoutes.length = 0;
+    h.curCourse = null;
+    h.linkFails = '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요';
+    h.phase = 'preparing';
+    h.driveCb!();
+    await tick();
+    expect(h.chosen).toEqual([]);
+    expect(h.prepErrors).toEqual(['내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요']);
+  });
+
+  it('준비 중에 방장이 코스 → 목적지로 바꾸면, 저절로 골랐던 팀 코스를 풀고 목적지로 안내한다 (검토 지적)', async () => {
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    h.phase = 'preparing';
+    h.driveCb!();
+    await tick();
+    expect(h.curCourse).toBe(h.local);
+    routeVersion = 2;
+    msg({ type: 'state', ...ROOM({ dest: { name: '만항재', lat: 37.51, lon: 127.01 }, course: null, routeVersion: 2 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer?.version).toBe(2));
+    await group.acceptRouteOffer();
+    expect(h.chosen.at(-1)).toBeNull();
+    expect(h.navRoutes.at(-1)).toMatchObject({ dest: { name: '만항재' }, toCourse: null });
+  });
+
+  it('준비 중에 내가 직접 고른 코스는 목적지로 바뀌어도 그대로 둔다', async () => {
+    await group.joinGroupRoom('482917');
+    h.phase = 'preparing';
+    h.curCourse = { id: 'mine' };
+    h.courseChosen = true;
+    msg({ type: 'state', ...ROOM({ dest: { name: '만항재', lat: 37.51, lon: 127.01 }, routeVersion: 1 }) });
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    expect(h.chosen).toEqual([]);
+  });
+
+  it('"나중에" 했다가 다시 열면 예전 오류 문구는 지운다', async () => {
+    h.linkFails = '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요';
+    await group.joinGroupRoom('482917');
+    msg(courseState());
+    await vi.waitFor(() => expect(group.getGroup().offer).not.toBeNull());
+    await group.acceptRouteOffer();
+    expect(group.getGroup().offer?.error).toBeTruthy();
+    group.dismissRouteOffer();
+    group.reopenRouteOffer();
+    expect(group.getGroup().offer).not.toBeNull();
+    expect(group.getGroup().offer!.error).toBeUndefined();
   });
 
   it('출발할 때 내가 코스를 직접 골랐으면(코스 상세의 "이 코스로 주행") 그 코스를 둔다', async () => {
@@ -460,6 +540,7 @@ describe('팀 방 코스 (설계 3부)', () => {
     await group.acceptRouteOffer();
     expect(h.chosen).toEqual([h.local]);
     expect(h.navRoutes).toHaveLength(1);
+    expect(h.navRoutes[0]!.toCourse).toBe('local-1');
   });
 
   it('방장이 코스 → 목적지로 바꾸면 목적지로 다시 묻고, 출발 때 코스는 고르지 않는다', async () => {
@@ -519,8 +600,11 @@ describe('팀 방 코스 (설계 3부)', () => {
     const post = calls.find((c) => c.method === 'POST' && c.url.endsWith('/course'))!;
     expect(post.body).toMatchObject({ name: '유명산 업힐', kind: 'point_to_point', lengthM: 7800, key: 's:p1', startGate: G(37.5), finishGate: G(37.57), sectorBoundsM: null });
     expect((post.body as { line: unknown[] }).line.length).toBeLessThan(10);
+    // 방장 자기 판은 고른 코스 그대로 (다시 찾다 못 찾거나 한도에 걸려 팀원 창이 뜨지 않게, 검토 지적)
+    h.linkFails = '내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요';
     msg({ type: 'state', ...ROOM({ members: [{ userId: 'me', nickname: '나', color: 0, order: 1, host: true }], dest: COURSE_DEST, course: COURSE_META, routeVersion: 1 }) });
     await vi.waitFor(() => expect(group.getGroup().acceptedVersion).toBe(1));
     expect(group.getGroup().offer).toBeNull();
+    expect(group.acceptedCourse()).toBe(mine);
   });
 });

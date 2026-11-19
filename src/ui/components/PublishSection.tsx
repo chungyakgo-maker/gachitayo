@@ -38,7 +38,8 @@ export function PublishSection({ course }: { course: Course }) {
       alive = false;
     };
   }, [course.publishedId]);
-  if (course.builtin || course.shared || !course.centerline) return null;
+  // 팀 방에서 받은 코스도 공개하지 않는다 (남이 만든 코스를 내 것으로 올리지 않게, 검토 지적)
+  if (course.builtin || course.shared || course.source === 'team' || !course.centerline) return null;
   const run = (work: () => Promise<unknown>, done: string) => {
     setBusy(true);
     setMsg(null);

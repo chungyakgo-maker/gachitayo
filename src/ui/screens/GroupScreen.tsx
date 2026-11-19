@@ -156,7 +156,7 @@ export function GroupScreen() {
         {course ? (
           <>
             <strong style={{ fontSize: 20 }}>{course.name}</strong>
-            <span className="sub">{`${course.kind === 'loop' ? '랩' : '편도'} · ${formatLength(course.lengthM)} · 출발하면 각자 출발점까지 안내, 출발선부터 기록`}</span>
+            <span className="sub">{`${course.kind === 'loop' ? '랩' : '편도'} · ${formatLength(course.lengthM || null)} · 출발하면 각자 출발점까지 안내, 출발선부터 기록`}</span>
             {!host && destWaiting && <span className="sub">아직 이 코스를 받지 않았어요</span>}
             {host ? (
               <a className="btn small" href="#/group/course" style={{ textDecoration: 'none', alignSelf: 'flex-start' }}>

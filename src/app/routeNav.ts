@@ -256,11 +256,16 @@ subscribeSettings(() => {
   if (v === 'bike' && nav && nav.route.vehicle !== 'bike') rerouteNow = true;
 });
 
-/** 이 경로로 안내를 켠다 (목적지 화면의 출발, 그룹 주행의 방장 경로). 주행 준비는 부른 쪽이 연다. own: 이 폰에서 찾은 경로 */
-export function startNavWithRoute(route: RouteData, dest: LatLon, own = false): void {
+/** 팀 방 코스의 출발점까지 안내할 때 그 코스 번호 (3부). 이 코스를 고른 동안은 안내를 끝내지 않는다 */
+let navCourseId: string | null = null;
+
+/** 이 경로로 안내를 켠다 (목적지 화면의 출발, 그룹 주행의 방장 경로). 주행 준비는 부른 쪽이 연다. own: 이 폰에서 찾은 경로.
+ *  toCourse: 팀 방 코스의 출발점까지 안내 — 그 코스를 골라도 안내를 이어 간다 (검토 지적: 코스를 고르면 안내가 바로 꺼졌다) */
+export function startNavWithRoute(route: RouteData, dest: LatLon, own = false, toCourse: string | null = null): void {
   stopNav();
   const first = route.points[0]!;
   navDest = { lat: dest.lat, lon: dest.lon };
+  navCourseId = toCourse;
   // 목적지만 받은 경로(정식 빌드 팀 주행)면 내 위치가 잡히는 대로 내 위치에서 찾는다.
   // 바이크인데 바이크 경로가 아니면(방장이 자동차) 고속도로가 섞일 수 있어 내 위치에서 바이크 경로로 다시 찾는다
   rerouteNow = needOwnRoute(route, own);
@@ -276,11 +281,12 @@ export function startNavWithRoute(route: RouteData, dest: LatLon, own = false): 
 }
 
 /** 주행 중 경로를 바꾼다 (그룹 주행: 방장이 목적지를 새로 정함). 안내가 꺼져 있으면 켠다 */
-export function replaceNavRoute(route: RouteData, dest: LatLon): void {
+export function replaceNavRoute(route: RouteData, dest: LatLon, toCourse: string | null = null): void {
   if (!nav) {
-    startNavWithRoute(route, dest);
+    startNavWithRoute(route, dest, false, toCourse);
     return;
   }
+  navCourseId = toCourse;
   navSeq++;
   inflight = false;
   lastReqAt = -Infinity;
@@ -291,6 +297,7 @@ export function replaceNavRoute(route: RouteData, dest: LatLon): void {
 
 export function stopNav(): void {
   rerouteNow = false;
+  navCourseId = null;
   navSeq++;
   inflight = false;
   lastReqAt = -Infinity;
@@ -307,8 +314,10 @@ const statusOf = (step: RouteStep): NavLive['status'] => (step.arrived ? 'arrive
 export function navTick(snap: LiveSnapshot, now = Date.now()): void {
   const n = nav;
   if (!n) return;
-  // 준비 화면에서 코스를 고르면 코스 주행 (경로 안내를 끝낸다: 뒤에서 다시 찾기를 계속 보내지 않게)
-  if (getDriveState().course) {
+  // 준비 화면에서 코스를 고르면 코스 주행 (경로 안내를 끝낸다: 뒤에서 다시 찾기를 계속 보내지 않게).
+  // 팀 방 코스의 출발점 안내는 그 코스를 고른 동안 이어 간다
+  const chosen = getDriveState().course;
+  if (chosen && chosen.id !== navCourseId) {
     stopNav();
     return;
   }

@@ -450,6 +450,41 @@ describe('주행 중 안내', () => {
     expect(pending).toHaveLength(1);
   });
 
+  it('팀 방 코스: 그 코스의 출발점까지 안내는 그 코스를 골라도 이어지고, 내 위치에서 길을 찾는다 (검토 지적)', async () => {
+    h.phase = 'preparing';
+    h.course = { id: 'team-1' };
+    const start = { lat: ll(300, 300)[0], lon: ll(300, 300)[1] };
+    nav.startNavWithRoute(nav.destOnlyRoute(start), start, false, 'team-1');
+    nav.navTick(snap(0, 0, 0), 1000);
+    expect(nav.getNavLive()).not.toBeNull();
+    // 목적지만 받은 경로: 내 위치에서 출발점까지 한 번 찾는다
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.body.to).toEqual({ lat: start.lat, lon: start.lon });
+  });
+
+  it('팀 방 코스 안내 중에 다른 코스를 고르면 안내를 끝낸다', () => {
+    h.phase = 'preparing';
+    h.course = { id: 'team-1' };
+    const start = { lat: ll(300, 300)[0], lon: ll(300, 300)[1] };
+    nav.startNavWithRoute(nav.destOnlyRoute(start), start, false, 'team-1');
+    h.course = { id: 'other' };
+    nav.navTick(snap(0, 0, 0), 1000);
+    expect(nav.getNavLive()).toBeNull();
+  });
+
+  it('replaceNavRoute 도 코스 출발점 안내로 바꿀 수 있고, 목적지로 바꾸면 코스 표시를 지운다', () => {
+    h.phase = 'preparing';
+    const start = { lat: ll(300, 300)[0], lon: ll(300, 300)[1] };
+    nav.startNavWithRoute(ROUTE_B, start);
+    nav.replaceNavRoute(nav.destOnlyRoute(start), start, 'team-1');
+    h.course = { id: 'team-1' };
+    nav.navTick(snap(0, 0, 0), 1000);
+    expect(nav.getNavLive()).not.toBeNull();
+    nav.replaceNavRoute(ROUTE_B, start);
+    nav.navTick(snap(100, 0, 0), 1000);
+    expect(nav.getNavLive()).toBeNull();
+  });
+
   it('route requests have a timeout', async () => {
     const p = nav.planTo(mapDest(340, 340), FROM);
     expect(pending[0]!.signal).toBeInstanceOf(AbortSignal);

@@ -189,9 +189,30 @@ describe('팀원 › 코스 받기 창 (시안 ⑩)', () => {
     expect(dlg).toHaveTextContent('유명산 업힐');
     expect(dlg).toHaveTextContent('편도 · 7.8km · 모두 같은 출발선·도착선');
     expect(dlg).toHaveTextContent('받으면 내 폰에 담기고, 출발하면 지금 위치에서 출발점까지 안내해요');
-    fireEvent.click(within(dlg).getByRole('button', { name: '이 코스로 진행' }));
     fireEvent.click(within(dlg).getByRole('button', { name: '나중에' }));
-    expect(h.calls).toEqual(['accept', 'later']);
+    fireEvent.click(within(dlg).getByRole('button', { name: '이 코스로 진행' }));
+    expect(h.calls).toEqual(['later', 'accept']);
+  });
+
+  it('담는 동안은 "나중에"·바깥 누르기로 닫히지 않는다 (검토 지적)', async () => {
+    let done: () => void = () => {};
+    const g = await import('../../src/app/group');
+    const spy = vi.spyOn(g, 'acceptRouteOffer').mockImplementation(() => new Promise<void>((r) => (done = r)));
+    gs = base({ me: 'u2', offer: offer() });
+    render(<RouteOfferSheet />);
+    const dlg = screen.getByRole('dialog');
+    fireEvent.click(within(dlg).getByRole('button', { name: '이 코스로 진행' }));
+    expect(within(dlg).getByRole('button', { name: '나중에' })).toBeDisabled();
+    fireEvent.click(dlg.parentElement!);
+    expect(h.calls).toEqual([]);
+    done();
+    spy.mockRestore();
+  });
+
+  it('길이를 모르는 코스는 "길이 미정" (대기실도 같게)', () => {
+    gs = base({ room: ROOM({ course: { name: '지도 코스', kind: 'loop', lengthM: 0, key: null } }) });
+    render(<GroupScreen />);
+    expect(screen.getByRole('region', { name: '이번 주행 · 방장이 정해요' })).toHaveTextContent('랩 · 길이 미정 · 출발하면');
   });
 
   it('담지 못했으면 까닭을 보인다', () => {

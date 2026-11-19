@@ -31,7 +31,7 @@ export function RouteOfferSheet() {
     };
     return (
       <Overlay>
-        <div className="sheet-backdrop" onClick={dismissRouteOffer}>
+        <div className="sheet-backdrop" onClick={busy ? undefined : dismissRouteOffer}>
           <div className="sheet" role="dialog" aria-modal="true" aria-label="방장이 코스를 정했어요" onClick={(e) => e.stopPropagation()}>
             <h2>방장이 코스를 정했어요</h2>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -48,7 +48,8 @@ export function RouteOfferSheet() {
             <button type="button" className="primary-btn" disabled={busy} onClick={accept}>
               이 코스로 진행
             </button>
-            <button type="button" className="ghost-btn" onClick={dismissRouteOffer}>
+            {/* 담는 동안 닫으면 "나중에" 했는데도 받은 것이 된다 (검토 지적) */}
+            <button type="button" className="ghost-btn" disabled={busy} onClick={dismissRouteOffer}>
               나중에
             </button>
           </div>

@@ -64,6 +64,11 @@ function newTeamCourse(r: RoomCourse, id: string): Course {
   };
 }
 
+/** 출발 때: 받아 둔 코스를 폰에서 다시 찾는다 (고쳤으면 고친 판). 그사이 지웠으면 다시 잇는다 (검토 지적: 지운 코스로 주행했다) */
+export async function refreshTeamCourse(local: Course, r: RoomCourse): Promise<Course> {
+  return (await getDriveRepo().getCourse(local.id)) ?? (await courseForRoom(r));
+}
+
 /** 팀원: 받은 코스를 폰의 코스로 잇는다 — 같은 기본 코스·같은 공개 코스·같은 모양이 있으면 그 코스, 없으면 한도를 보고 새로 담는다 */
 export async function courseForRoom(r: RoomCourse): Promise<Course> {
   const drive = getDriveRepo();

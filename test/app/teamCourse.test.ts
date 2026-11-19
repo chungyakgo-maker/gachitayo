@@ -88,6 +88,19 @@ describe('courseForRoom (팀원 폰에 잇기)', () => {
     expect(m.centerline).toBeNull();
   });
 
+  it('refreshTeamCourse: 출발 때 폰에서 다시 찾는다 — 고쳤으면 고친 판, 지웠으면 다시 담는다', async () => {
+    const { rec, team } = await fresh();
+    const repo = rec.getDriveRepo();
+    const body = team.roomCourseBody(course());
+    const got = await team.courseForRoom(body);
+    await repo.putCourse({ ...got, name: '고친 이름', version: 2 });
+    expect(await team.refreshTeamCourse(got, body)).toMatchObject({ id: got.id, name: '고친 이름', version: 2 });
+    await repo.deleteCourse(got.id);
+    const again = await team.refreshTeamCourse(got, body);
+    expect(again.id).not.toBe(got.id);
+    expect((await repo.listCourses()).map((c) => c.id)).toEqual([again.id]);
+  });
+
   it('코스가 200개면 담지 않고 알린다', async () => {
     const { rec, team } = await fresh();
     const repo = rec.getDriveRepo();
