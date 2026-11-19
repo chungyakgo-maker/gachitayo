@@ -3,12 +3,13 @@ import { useSyncExternalStore } from 'react';
 import { liveGap } from '../features';
 import { FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from './courseFilter';
 import { G_MAX_DEFAULT, G_MAX_OPTIONS } from '../ui/overlay/gmeter';
+import type { BikeMarker } from '../ui/overlay/bikeMarks';
 
 export { G_MAX_DEFAULT, G_MAX_OPTIONS };
 
 export type DriveMode = 'map' | 'minimal' | 'dashboard';
 /** 상단 칸 2·3에 고를 값. pace 커브 표지판, none 표시 안 함 (사용자 요청) */
-export type WidgetId = 'g' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'dist' | 'avg' | 'none';
+export type WidgetId = 'g' | 'lean' | 'pace' | 'speed' | 'lap' | 'sector' | 'vmax' | 'lapno' | 'gap' | 'dist' | 'avg' | 'none';
 export type DeltaPalette = 'green-red' | 'blue-orange';
 /** 커브 방향 화면 색 (사용자 요청 "abcd 다 넣어 선택할 수 있게"): 끄기, A 화면 전체, B 전체·가까울수록 진하게, C 네 가장자리, D 커브 쪽 가장자리(가까울수록 진하게) */
 export type CurveTint = 'off' | 'A' | 'B' | 'C' | 'D';
@@ -18,6 +19,16 @@ const CURVE_TINTS = Object.keys(CURVE_TINT_LABEL) as CurveTint[];
 export type CarMarker = 'arrow' | 'white' | 'blue' | 'red';
 export const CAR_MARKER_LABEL: Record<CarMarker, string> = { arrow: '화살표', white: '흰 차', blue: '파란 점', red: '빨간 차' };
 const CAR_MARKERS = Object.keys(CAR_MARKER_LABEL) as CarMarker[];
+/** 탈것 (2026-11-18 세영 "바이크 모드"): 바이크면 내 위치를 바이크 그림으로, 길찾기는 고속도로·자동차전용도로를 피한다 */
+export type Vehicle = 'car' | 'bike';
+export const VEHICLE_LABEL: Record<Vehicle, string> = { car: '자동차', bike: '바이크' };
+export type { BikeMarker };
+/** 내 바이크 표시 5종 (시안 docs/mock/2026-11-18-bike-mode.jpg, "할리"는 상표라 크루저) */
+export const BIKE_MARKER_LABEL: Record<BikeMarker, string> = { scooter: '스쿠터', sport: 'R차', cruiser: '크루저', naked: '네이키드', motard: '모타드' };
+const BIKE_MARKERS = Object.keys(BIKE_MARKER_LABEL) as BikeMarker[];
+/** 주행 지도에 그릴 내 위치 모양 */
+export type MeMarker = CarMarker | BikeMarker;
+export const meMarker = (s: Pick<Settings, 'vehicle' | 'carMarker' | 'bikeMarker'>): MeMarker => (s.vehicle === 'bike' ? s.bikeMarker : s.carMarker);
 /** 주행 지도 모드의 보기 (사용자 요청): 전체 코스 / 나를 가운데(북쪽 위) / 진행 방향 위(내비처럼) */
 export type MapViewMode = 'fit' | 'follow' | 'heading';
 export const MAP_VIEW_LABEL: Record<MapViewMode, string> = { fit: '전체 코스', follow: '나를 가운데', heading: '진행 방향 위' };
@@ -51,11 +62,23 @@ export interface Settings {
   courseFilter: CourseFilter;
   /** 인기 도로 기간 */
   popularPeriod: PopularPeriod;
+  /** 모두의 코스 정렬 (가까운 순은 폰에서 정렬, 위치를 서버로 보내지 않는다) */
+  sharedSort: 'near' | 'adds' | 'new';
   /** 주행 지도 확대 단계 (−4 ~ +2, 사용자 요청 "주행 모드중 지도 축소나 확대"). 한 단계 = 두 배, 두 손가락으로 고르면 소수 */
   driveZoom: number;
   /** 주행 지도의 내 차 표시 (기본 화살표) */
   carMarker: CarMarker;
+  /** 탈것 (기본 자동차) */
+  vehicle: Vehicle;
+  /** 탈것이 바이크일 때 내 위치 모양 (기본 R차) */
+  bikeMarker: BikeMarker;
 }
+
+/** 주행 지도 기본 확대 단계 (따라가기 기준, 한 단계 = 두 배) */
+export const DRIVE_ZOOM_DEFAULT = -1;
+/** 저장된 주행 지도 확대를 한 번 기본값으로 되돌렸다는 표시 (예전 빌드에서 두 손가락으로 줄여 저장된 값이 남아 "기본이 너무 멀다") */
+const ZOOM_RESET_KEY = 'gachitayo.driveZoom.v';
+const ZOOM_RESET_V = '2';
 
 export const GATE_WIDTH_MIN_M = 10;
 export const GATE_WIDTH_MAX_M = 60;
@@ -79,8 +102,12 @@ export const DEFAULT_SETTINGS: Settings = {
   curveTint: 'D',
   courseFilter: 'all',
   popularPeriod: '30d',
-  driveZoom: 0,
+  sharedSort: 'near',
+  // 2026-11-18 세영 "기본 축척이 너무 멀어 … 확대한 정도가 기본이어야해": 보여 준 사진의 확대 정도 ≈ 따라가기 기준 한 단계 축소
+  driveZoom: DRIVE_ZOOM_DEFAULT,
   carMarker: 'arrow',
+  vehicle: 'car',
+  bikeMarker: 'sport',
 };
 
 export const DRIVE_ZOOM_MIN = -4;
@@ -90,6 +117,8 @@ export const driveZoomOf = (z: number): number => Math.round(Math.min(DRIVE_ZOOM
 
 export const WIDGET_LABEL: Record<WidgetId, string> = {
   g: 'G미터',
+  // 바이크 기울기 (2026-11-18 바이크 모드): 탈것을 바이크로 바꾸면 G미터 칸이 이걸로 (setVehicle)
+  lean: '기울기',
   pace: '표지판',
   speed: '속도',
   lap: '현재 랩타임',
@@ -126,7 +155,8 @@ function load(): Settings {
       Array.isArray(w) && w.length === 2 && w.every((x) => WIDGETS.includes(x)) && (w[0] !== w[1] || w[0] === 'none') ? [w[0]!, w[1]!] : DEFAULT_SETTINGS.widgets;
     // 칸 1 설정이 생기기 전에 저장한 값: 속도는 지도 오른쪽 아래로 옮겼으니 속도 칸을 표지판으로 (사용자 요청)
     if (typeof raw.topDelta !== 'boolean' && !widgets.includes('pace')) widgets = widgets.map((x) => (x === 'speed' ? 'pace' : x)) as [WidgetId, WidgetId];
-    return {
+    const zoomReset = localStorage.getItem(ZOOM_RESET_KEY) !== ZOOM_RESET_V;
+    const loaded: Settings = {
       defaultMode: MODES.includes(raw.defaultMode as DriveMode) ? raw.defaultMode! : DEFAULT_SETTINGS.defaultMode,
       topDelta: raw.topDelta !== false,
       deltaSource: raw.deltaSource === 'best' ? 'best' : 'friend',
@@ -146,10 +176,21 @@ function load(): Settings {
       curveTint: (raw.curveTint as unknown) === false ? 'off' : CURVE_TINTS.includes(raw.curveTint as CurveTint) ? raw.curveTint! : 'D',
       courseFilter: FILTERS.some((f) => f.id === raw.courseFilter) ? raw.courseFilter! : 'all',
       popularPeriod: PERIODS.some((p) => p.id === raw.popularPeriod) ? raw.popularPeriod! : '30d',
+      sharedSort: raw.sharedSort === 'adds' || raw.sharedSort === 'new' ? raw.sharedSort : 'near',
       driveZoom:
-        typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom) ? driveZoomOf(raw.driveZoom) : 0,
+        localStorage.getItem(ZOOM_RESET_KEY) === ZOOM_RESET_V && typeof raw.driveZoom === 'number' && Number.isFinite(raw.driveZoom)
+          ? driveZoomOf(raw.driveZoom)
+          : DRIVE_ZOOM_DEFAULT,
       carMarker: CAR_MARKERS.includes(raw.carMarker as CarMarker) ? raw.carMarker! : 'arrow',
+      vehicle: raw.vehicle === 'bike' ? 'bike' : 'car',
+      bikeMarker: BIKE_MARKERS.includes(raw.bikeMarker as BikeMarker) ? raw.bikeMarker! : 'sport',
     };
+    if (zoomReset) {
+      // 되돌린 값을 바로 저장한다 (안 그러면 다음에 켤 때 예전 값을 다시 읽는다)
+      localStorage.setItem(KEY, JSON.stringify(loaded));
+      localStorage.setItem(ZOOM_RESET_KEY, ZOOM_RESET_V);
+    }
+    return loaded;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -170,10 +211,21 @@ export function updateSettings(patch: Partial<Settings>): void {
   current = { ...current, ...patch };
   try {
     localStorage.setItem(KEY, JSON.stringify(current));
+    // 지금 빌드에서 저장한 값이니 다음에 켤 때 확대를 되돌리지 않는다
+    localStorage.setItem(ZOOM_RESET_KEY, ZOOM_RESET_V);
   } catch {
     // 저장할 수 없어도(사생활 보호 모드 등) 이번 실행 동안은 쓴다
   }
   listeners.forEach((l) => l());
+}
+
+/** 탈것 바꾸기: 바이크면 G미터 칸을 기울기로, 자동차면 기울기 칸을 G미터로 (시안 "탈것을 바이크로 바꾸면 G미터 칸이 기울기로") */
+export function setVehicle(v: Vehicle): void {
+  if (current.vehicle === v) return;
+  const [from, to]: [WidgetId, WidgetId] = v === 'bike' ? ['g', 'lean'] : ['lean', 'g'];
+  // 다른 칸에 이미 바꿀 값이 있으면 그 칸은 그대로 두고 이 칸만 바꾸지 않는다 (같은 값 두 칸이 되지 않게)
+  const widgets = (current.widgets.includes(to) ? current.widgets : current.widgets.map((w) => (w === from ? to : w))) as [WidgetId, WidgetId];
+  updateSettings({ vehicle: v, widgets });
 }
 
 /** 칸 slot(0 = 칸 2 왼쪽, 1 = 칸 3 오른쪽)에 값 id. 다른 칸과 같으면 두 칸이 서로 바뀐다 (표시 안 함은 두 칸 다 가능) */
@@ -192,11 +244,12 @@ export function nextTop(s: Pick<Settings, 'topDelta' | 'deltaSource'>, hasFriend
   return { topDelta: false, deltaSource: s.deltaSource };
 }
 
-/** 주행 중 칸 2·3을 누르면 (사용자 요청): 목록 순서대로 다음 값. 다른 칸의 값, 지금 쓸 수 없는 값(코스 없으면 표지판, 앞 친구 없으면 간격), 표시 안 함은 건너뛴다 */
-export function nextWidget(widgets: readonly [WidgetId, WidgetId], slot: 0 | 1, ctx: { hasCourse: boolean; hasFriend: boolean }): [WidgetId, WidgetId] {
+/** 주행 중 칸 2·3을 누르면 (사용자 요청): 목록 순서대로 다음 값. 다른 칸의 값, 지금 쓸 수 없는 값(코스 없으면 표지판, 앞 친구 없으면 간격, 자동차면 기울기), 표시 안 함은 건너뛴다 */
+export function nextWidget(widgets: readonly [WidgetId, WidgetId], slot: 0 | 1, ctx: { hasCourse: boolean; hasFriend: boolean; bike?: boolean }): [WidgetId, WidgetId] {
   const order: WidgetId[] = WIDGETS.filter((id) => id !== 'none');
   const other = widgets[slot === 0 ? 1 : 0];
-  const ok = (id: WidgetId) => id !== other && (id !== 'pace' || ctx.hasCourse) && (id !== 'gap' || ctx.hasFriend);
+  // 기울기는 바이크일 때만 돌아가며 고른다 (자동차는 거의 0이라 칸을 누를 때 건너뛴다. 상단 표시 값 화면에서는 고를 수 있다)
+  const ok = (id: WidgetId) => id !== other && (id !== 'pace' || ctx.hasCourse) && (id !== 'gap' || ctx.hasFriend) && (id !== 'lean' || !!ctx.bike);
   const from = order.indexOf(widgets[slot]);
   for (let i = 1; i <= order.length; i++) {
     const id = order[(from + i + order.length) % order.length]!;
@@ -207,6 +260,12 @@ export function nextWidget(widgets: readonly [WidgetId, WidgetId], slot: 0 | 1, 
     }
   }
   return [widgets[0], widgets[1]];
+}
+
+/** 설정이 바뀔 때마다 (React 밖에서: 경로 안내가 탈것 바뀜을 알아야 한다). 그만 들으려면 돌려준 함수를 부른다 */
+export function subscribeSettings(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
 }
 
 export function useSettings(): Settings {

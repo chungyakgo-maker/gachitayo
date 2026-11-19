@@ -1,9 +1,9 @@
 // 주행 종료 요약 (사양서 8.5, 디자인 시안 Summary)
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { changeKind, dismissDetourOf, overwriteDetour, processSession, saveCourse, saveDetour, useProcessing } from '../../app/drive';
 import { getDriveRepo, getRepo } from '../../app/recording';
-import { useSync } from '../../app/sync';
 import type { InvalidReason } from '../../engine/course/laps';
+import { maxLeanOf } from '../../engine/derive/lean';
 import type { Course, CourseKind } from '../../types/course';
 import type { DriveResultRecord } from '../../types/drive';
 import type { SessionRecord } from '../../types/session';
@@ -35,7 +35,6 @@ export function SummaryView({
   onDetourNew,
   onDetourOverwrite,
   onDetourDismiss,
-  upload = '폰에 저장됨',
 }: {
   data: Loaded;
   busy: boolean;
@@ -48,8 +47,6 @@ export function SummaryView({
   /** 지금 코스(내 코스)를 벗어난 길로 덮어쓰기 */
   onDetourOverwrite?: () => void;
   onDetourDismiss?: () => void;
-  /** 업로드 상태 한 줄 */
-  upload?: string;
 }) {
   const { session, result, course } = data;
   const [name, setName] = useState('');
@@ -58,6 +55,9 @@ export function SummaryView({
   const valid = laps.filter((l) => l.valid);
   const best = laps.find((l) => l.lapNo === result?.bestLapNo) ?? null;
   const proposed = result?.proposedCourse ?? null;
+  // 바이크로 달린 주행: 최대 기울기 (저장된 처리 궤적에서 다시 계산, 바이크 모드 시안)
+  const processed = result?.processed ?? null;
+  const lean = useMemo(() => (session.vehicle === 'bike' && processed ? maxLeanOf(processed) : null), [session.vehicle, processed]);
   const unsaved = result !== null && !result.courseId;
   const shownCourse = course ?? proposed;
   // 코스를 벗어난 길 (설계 2026-11-13-off-course): 기본 코스는 새 코스로만, 내 코스는 덮어쓰기도
@@ -226,6 +226,16 @@ export function SummaryView({
               </span>
             </div>
           </div>
+          {lean && (
+            <div className="stat lean-stat" aria-label="최대 기울기">
+              <span className="label">최대 기울기 (추정)</span>
+              <span className="v">
+                <small>왼쪽</small>
+                {lean.leftDeg}° <small className="gap-left">오른쪽</small>
+                {lean.rightDeg}°
+              </span>
+            </div>
+          )}
           {laps.length > 0 && (
             <section aria-label="랩 기록" className="lap-table">
               <div className="lap-row head">
@@ -253,8 +263,8 @@ export function SummaryView({
           )}
           {result.fusion.gpsOnly && <div className="notice">모션 센서 없이 GPS만으로 계산했어요 (정확도 낮음).</div>}
           <div className="notice">
-            <IconCloud size={20} color={session.status === 'uploaded' ? '#3EE08F' : '#FFB224'} />
-            {upload}
+            <IconCloud size={20} color="#3EE08F" />
+            이 폰에 저장됨
           </div>
         </>
       )}
@@ -274,7 +284,6 @@ export function SummaryView({
 
 export function SummaryScreen({ sessionId }: { sessionId: string }) {
   const proc = useProcessing(sessionId);
-  const sync = useSync();
   const [data, setData] = useState<Loaded | 'missing' | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   // 벗어난 길 제안을 닫으면 다시 읽는다
@@ -300,8 +309,7 @@ export function SummaryScreen({ sessionId }: { sessionId: string }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // 업로드가 끝나면 세션 상태(업로드됨)를 다시 읽는다
-  }, [sessionId, proc?.state, sync.pending, sync.lastSyncAt, reload]);
+  }, [sessionId, proc?.state, reload]);
 
   if (data === 'missing') {
     return (
@@ -314,15 +322,9 @@ export function SummaryScreen({ sessionId }: { sessionId: string }) {
     );
   }
   if (!data) return <main className="page page-full" aria-busy="true" />;
-  const upload = !sync.enabled
-    ? '폰에 저장됨 · 서버 연결 전'
-    : data.session.status === 'uploaded'
-      ? '업로드됨'
-      : '업로드 대기 · 통신이 연결되면 자동으로 올라갑니다';
   return (
     <SummaryView
       data={data}
-      upload={upload}
       busy={proc?.state === 'running'}
       error={saveError ?? (proc?.state === 'error' ? proc.error : null)}
       onRetry={() => {

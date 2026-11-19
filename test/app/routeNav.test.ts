@@ -337,6 +337,81 @@ describe('주행 중 안내', () => {
     expect(pending).toHaveLength(1);
   });
 
+  it('바이크면 길찾기에 vehicle: bike를 싣고, 바이크 경로가 아닌 경로(방장 자동차 경로)를 받으면 내 위치에서 다시 찾는다', async () => {
+    const { updateSettings, DEFAULT_SETTINGS } = await import('../../src/app/settings');
+    updateSettings({ vehicle: 'bike' });
+    try {
+      const p = nav.planTo(mapDest(340, 340), FROM);
+      expect(pending[0]!.body).toEqual({ from: FROM, to: expect.anything(), vehicle: 'bike' });
+      pending[0]!.resolve(json(200, { ...ROUTE_A, vehicle: 'bike', warnRoads: ['내부순환로'], alt: 0, alts: 2 }));
+      await p;
+      // 다른 길로 다시 찾기: 다음 후보
+      const q = nav.planOtherRoute(FROM);
+      expect(pending[1]!.body).toMatchObject({ vehicle: 'bike', alt: 1 });
+      pending[1]!.resolve(json(200, { ...ROUTE_B, vehicle: 'bike', warnRoads: [], alt: 1, alts: 2 }));
+      await q;
+      expect(nav.getPlan().route).toMatchObject({ alt: 1, warnRoads: [] });
+      // 자동차 경로를 받으면 (테스트 빌드 팀 주행) 바이크는 내 위치에서 다시 찾는다
+      h.phase = 'preparing';
+      const [lat, lon] = ll(340, 340);
+      nav.startNavWithRoute(ROUTE_A, { lat, lon });
+      nav.navTick(snap(0, 10, 20), 100_000);
+      expect(pending).toHaveLength(3);
+      expect(pending[2]!.body).toMatchObject({ vehicle: 'bike' });
+      // 바이크 경로면 그대로
+      nav.startNavWithRoute({ ...ROUTE_A, vehicle: 'bike' }, { lat, lon });
+      nav.navTick(snap(0, 10, 20), 200_000);
+      expect(pending).toHaveLength(3);
+    } finally {
+      updateSettings(DEFAULT_SETTINGS);
+    }
+  });
+
+  it('검토 지적: 내가 찾은 경로로 출발하면 (예전 서버라 바이크 표시가 없어도) 다시 묻지 않는다', async () => {
+    const { updateSettings, DEFAULT_SETTINGS } = await import('../../src/app/settings');
+    updateSettings({ vehicle: 'bike' });
+    try {
+      await readyPlan(); // 예전 서버: vehicle 없는 응답
+      h.phase = 'preparing';
+      nav.startRouteDrive();
+      nav.navTick(snap(0, 0, 50), 100_000);
+      expect(pending).toHaveLength(1);
+    } finally {
+      updateSettings(DEFAULT_SETTINGS);
+    }
+  });
+
+  it('검토 지적: 안내 중에 탈것을 바이크로 바꾸면 자동차 경로 대신 내 위치에서 바이크 경로로 다시 찾는다', async () => {
+    const { updateSettings, setVehicle, DEFAULT_SETTINGS } = await import('../../src/app/settings');
+    try {
+      await readyPlan();
+      h.phase = 'preparing';
+      nav.startRouteDrive();
+      nav.navTick(snap(0, 0, 50), 100_000);
+      expect(pending).toHaveLength(1);
+      setVehicle('bike');
+      nav.navTick(snap(100, 0, 50), 100_100);
+      expect(pending).toHaveLength(2);
+      expect(pending[1]!.body).toMatchObject({ vehicle: 'bike' });
+      pending[1]!.resolve(json(200, { ...ROUTE_A, vehicle: 'bike', warnRoads: [], alt: 0, alts: 1 }));
+      await flush();
+      // 바이크 경로를 받은 뒤 자동차로 돌렸다 다시 바이크로 와도 이미 바이크 경로라 묻지 않는다
+      setVehicle('car');
+      setVehicle('bike');
+      nav.navTick(snap(200, 0, 50), 100_200);
+      expect(pending).toHaveLength(2);
+    } finally {
+      updateSettings(DEFAULT_SETTINGS);
+    }
+  });
+
+  it('자동차는 vehicle 없이 (예전과 같은 요청), 다른 길 후보가 없으면 다시 묻지 않는다', async () => {
+    await readyPlan();
+    expect(pending[0]!.body).not.toHaveProperty('vehicle');
+    await nav.planOtherRoute(FROM);
+    expect(pending).toHaveLength(1);
+  });
+
   it('only while driving', async () => {
     await readyPlan();
     nav.startRouteDrive();
@@ -373,6 +448,41 @@ describe('주행 중 안내', () => {
     expect(nav.getNavLive()).toBeNull();
     expect(h.live).toBeNull();
     expect(pending).toHaveLength(1);
+  });
+
+  it('팀 방 코스: 그 코스의 출발점까지 안내는 그 코스를 골라도 이어지고, 내 위치에서 길을 찾는다 (검토 지적)', async () => {
+    h.phase = 'preparing';
+    h.course = { id: 'team-1' };
+    const start = { lat: ll(300, 300)[0], lon: ll(300, 300)[1] };
+    nav.startNavWithRoute(nav.destOnlyRoute(start), start, false, 'team-1');
+    nav.navTick(snap(0, 0, 0), 1000);
+    expect(nav.getNavLive()).not.toBeNull();
+    // 목적지만 받은 경로: 내 위치에서 출발점까지 한 번 찾는다
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.body.to).toEqual({ lat: start.lat, lon: start.lon });
+  });
+
+  it('팀 방 코스 안내 중에 다른 코스를 고르면 안내를 끝낸다', () => {
+    h.phase = 'preparing';
+    h.course = { id: 'team-1' };
+    const start = { lat: ll(300, 300)[0], lon: ll(300, 300)[1] };
+    nav.startNavWithRoute(nav.destOnlyRoute(start), start, false, 'team-1');
+    h.course = { id: 'other' };
+    nav.navTick(snap(0, 0, 0), 1000);
+    expect(nav.getNavLive()).toBeNull();
+  });
+
+  it('replaceNavRoute 도 코스 출발점 안내로 바꿀 수 있고, 목적지로 바꾸면 코스 표시를 지운다', () => {
+    h.phase = 'preparing';
+    const start = { lat: ll(300, 300)[0], lon: ll(300, 300)[1] };
+    nav.startNavWithRoute(ROUTE_B, start);
+    nav.replaceNavRoute(nav.destOnlyRoute(start), start, 'team-1');
+    h.course = { id: 'team-1' };
+    nav.navTick(snap(0, 0, 0), 1000);
+    expect(nav.getNavLive()).not.toBeNull();
+    nav.replaceNavRoute(ROUTE_B, start);
+    nav.navTick(snap(100, 0, 0), 1000);
+    expect(nav.getNavLive()).toBeNull();
   });
 
   it('route requests have a timeout', async () => {

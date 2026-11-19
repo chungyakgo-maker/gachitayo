@@ -18,18 +18,22 @@ import { ReplayScreen } from './screens/ReplayScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { SummaryScreen } from './screens/SummaryScreen';
 import { AnalysisScreen } from './screens/AnalysisScreen';
+import { SharedCourseScreen } from './screens/SharedCourseScreen';
+import { AdminSharedScreen } from './screens/AdminSharedScreen';
 import { CourseDetailScreen } from './screens/CourseDetailScreen';
 import { NewCourseScreen } from './screens/NewCourseScreen';
 import { WidgetsScreen } from './screens/WidgetsScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { KakaoAuthScreen } from './screens/KakaoAuthScreen';
 import { GroupScreen } from './screens/GroupScreen';
+import { GroupCourseScreen } from './screens/GroupCourseScreen';
 import { JoinScreen } from './screens/JoinScreen';
 import { RouteOfferSheet } from './components/RouteOfferSheet';
 import { rememberPendingLink, takePendingLink } from '../app/pendingJoin';
 import { TeamEditScreen } from './screens/TeamEditScreen';
 import { TeamDriveLinkScreen } from './screens/TeamDriveLinkScreen';
 import { FriendInviteScreen } from './screens/FriendInviteScreen';
+import { HelpScreen } from './screens/HelpScreen';
 
 const safeDecode = (v: string): string => {
   try {
@@ -48,6 +52,10 @@ function route(path: string): ReactElement {
   const course = /^\/course\/([^/]+)$/.exec(path);
   if (course) return <CourseDetailScreen courseId={decodeURIComponent(course[1]!)} />;
   if (path === '/course-new') return <NewCourseScreen />;
+  if (path === '/admin/shared') return <AdminSharedScreen />;
+  // 모두의 코스 상세 (설계 2부)
+  const shared = /^\/shared\/([^/]+)$/.exec(path);
+  if (shared) return <SharedCourseScreen id={decodeURIComponent(shared[1]!)} />;
   // 팀 (설계 2026-11-18 team-drive): 만들기·편집·보기, 팀 주행 알리기 링크, 카톡 친구 초대 링크
   if (path === '/team/new') return <TeamEditScreen teamId={null} />;
   const teamDrive = /^\/team\/([0-9a-f-]{36})\/drive$/.exec(path);
@@ -67,6 +75,9 @@ function route(path: string): ReactElement {
       return <SettingsScreen />;
     case '/settings/widgets':
       return <WidgetsScreen back="#/settings" />;
+    // 도움말 · 기능 알아보기 (설계 2026-11-18 help)
+    case '/help':
+      return <HelpScreen />;
     case '/prepare':
       return <PrepareScreen />;
     case '/prepare/widgets':
@@ -79,6 +90,8 @@ function route(path: string): ReactElement {
       return <GroupScreen />;
     case '/group/destination':
       return <DestinationScreen forRoom />;
+    case '/group/course':
+      return <GroupCourseScreen />;
     case '/auth/kakao':
       return <KakaoAuthScreen />;
     case '/dev/recorder':

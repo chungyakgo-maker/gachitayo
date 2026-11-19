@@ -30,7 +30,7 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(plist).not.toMatch(/NSBluetooth/);
   });
 
-  it('Codemagic: 테스트 작업(위치 공유 켬, 1.0)과 정식 작업(위치 공유·간격 끔, 1.0.0) 둘 (설계 2026-11-18 official-build)', () => {
+  it('Codemagic: 테스트 작업(위치 공유 켬, 1.1)과 정식 작업(위치 공유·간격 끔, 1.0.1 — 2026-11-19 세영 "이 버전으로 심사") 둘 (설계 2026-11-18 official-build, 세영 "정식·테스트 나눠야")', () => {
     const y = readFileSync(new URL('codemagic.yaml', root), 'utf8');
     const block = (id: string) => {
       const i = y.indexOf(`\n  ${id}:`);
@@ -42,13 +42,20 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     const test = block('ios-testflight');
     const release = block('ios-release');
     expect(test).not.toMatch(/VITE_LOCATION_SHARING/);
-    expect(test).not.toMatch(/MARKETING_VERSION/);
+    // 테스트는 늘 정식보다 높은 번호 (1.1 = 테스트, 1.0.0 = 정식: TestFlight 에서 한눈에 구별, 정식 출시 뒤에도 테스트 빌드가 막히지 않게)
+    expect(test).toMatch(/name: 디고 아이폰 테스트 \(위치 공유 켬\)/);
+    expect(test).toMatch(/MARKETING_VERSION=1\.1"/);
     expect(release).toMatch(/name: 디고 아이폰 정식/);
     expect(release).toMatch(/VITE_LOCATION_SHARING: ['"]?off/);
     expect(release).toMatch(/VITE_LIVE_GAP: ['"]?off/);
-    expect(release).toMatch(/MARKETING_VERSION=1\.0\.0/);
+    expect(release).toMatch(/MARKETING_VERSION=1\.0\.1"/);
     expect(release).toMatch(/VITE_API_URL: https:\/\/gachitayo-api\.chungyakgo\.workers\.dev/);
     expect(release).toMatch(/bundle_identifier: kr\.dgo\.app/);
+  });
+
+  it('흔들어서 실행 취소를 끈다 (2026-11-18 실차: 주행 중 진동에 "Undo 입력" 창이 떴다)', () => {
+    const d = readFileSync(new URL('ios/App/App/AppDelegate.swift', root), 'utf8');
+    expect(d).toMatch(/application\.applicationSupportsShakeToEdit = false/);
   });
 
   it('웹 배포도 위치 공유·간격 끔 (세영 "웹도 끔")', () => {

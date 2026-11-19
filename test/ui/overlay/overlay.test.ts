@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fakeCtx } from './fakeCtx';
+import { BIKE_MARK, type BikeMarker } from '../../../src/ui/overlay/bikeMarks';
 import { drawDeltaPanel, drawGTile, drawValueTile, gMeterLabel } from '../../../src/ui/overlay/draw';
 import { frameFromLive, headline, widgetValue, type OverlayFrame, type XY } from '../../../src/ui/overlay/frame';
 import { anchorPadding, COURSE_DONE, COURSE_LINE, drawMiniMap, fitView, followView, mapModel, drawMeIcon, ME_ANCHOR, ME_MARKER, PATH_STYLE, routeDoneS } from '../../../src/ui/overlay/minimap';
@@ -325,6 +326,44 @@ describe('내 차 표시 (사용자 요청 "내 차 너무 작아서 안 보여"
   it('진행 방향을 모르면 방향 없는 큰 점 (같은 색)', () => {
     const { fill, calls } = fills('red', { x: 0, y: 0 });
     expect(fill.has(ME_MARKER.red.body)).toBe(true);
+    expect(calls.some((c) => c.op === 'rotate')).toBe(false);
+  });
+});
+
+describe('내 바이크 표시 (2026-11-18 바이크 모드 시안)', () => {
+  const view = { P: (x: number, y: number) => [x, y] as [number, number], rot: 0 };
+  const draw = (kind: BikeMarker, me: OverlayFrame['me'] = { x: 0, y: 0, psi: 0.5 }) => {
+    const { ctx, calls } = fakeCtx();
+    drawMiniMap(ctx, 390, 500, { line: [], loop: false, start: null, finish: null }, frame({ ghost: null, me }), th, { marker: kind, view });
+    return { fill: new Set(calls.filter((c) => c.op === 'fill').map((c) => String(c.fillStyle))), calls };
+  };
+
+  it('스쿠터·R차·크루저·네이키드·모타드를 각자의 색으로, 헬멧(흰색)과 함께 진행 방향으로 돌려 그린다', () => {
+    for (const k of ['scooter', 'sport', 'cruiser', 'naked', 'motard'] as const) {
+      const { fill, calls } = draw(k);
+      expect(fill.has(BIKE_MARK[k].body)).toBe(true);
+      expect(fill.has('#f2f4f6')).toBe(true);
+      for (const o of Object.keys(BIKE_MARK) as BikeMarker[]) if (o !== k) expect(fill.has(BIKE_MARK[o].body)).toBe(false);
+      expect(calls.some((c) => c.op === 'rotate')).toBe(true);
+    }
+  });
+
+  it('차 표시와 비슷한 크기 (바탕 원 반지름 30 px 안팎)', () => {
+    const { calls } = draw('sport');
+    const r = calls.filter((c) => c.op === 'arc').map((c) => (c.args as number[])[2]!);
+    expect(Math.max(...r)).toBeGreaterThan(30);
+    expect(Math.max(...r)).toBeLessThan(40);
+  });
+
+  it('설정 화면 미리보기도 그린다', () => {
+    const { ctx, calls } = fakeCtx();
+    drawMeIcon(ctx, 64, 64, 'naked');
+    expect(calls.some((c) => c.op === 'fill' && c.fillStyle === BIKE_MARK.naked.body)).toBe(true);
+  });
+
+  it('진행 방향을 모르면 돌리지 않고 위를 보게', () => {
+    const { fill, calls } = draw('motard', { x: 0, y: 0 });
+    expect(fill.has(BIKE_MARK.motard.body)).toBe(true);
     expect(calls.some((c) => c.op === 'rotate')).toBe(false);
   });
 });

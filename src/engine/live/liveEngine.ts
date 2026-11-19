@@ -33,6 +33,8 @@ export interface LiveInput {
   gCalibrated: boolean;
   /** ax, ay가 보정 전 GPS 추정값 (사용자 요청: 보정 전에도 G를 움직이게) */
   gEstimated?: boolean;
+  /** 바이크 기울기 추정 도 (+ 오른쪽, − 왼쪽, derive/lean). 모르면 없음 */
+  leanDeg?: number | null;
 }
 
 export interface CompletedLap {
@@ -79,6 +81,11 @@ export interface LiveState {
   gy: number | null;
   /** gx, gy가 보정 전 GPS 추정값 */
   gEstimated: boolean;
+  /** 바이크 기울기 추정 도 (+ 오른쪽, − 왼쪽). 모르면 null (2026-11-18 바이크 모드) */
+  leanDeg: number | null;
+  /** 이번 주행 최대 기울기 도 (왼쪽·오른쪽, 0 이상) */
+  maxLeanLeftDeg: number;
+  maxLeanRightDeg: number;
   status: { gpsWeak: boolean; offCourse: boolean; gNotCalibrated: boolean; courseRecording: boolean };
 }
 
@@ -110,6 +117,8 @@ export class LiveEngine {
   private offCourseM: number | null = null;
   private readonly progress: LapProgress;
   private maxV = 0;
+  private maxLeanL = 0;
+  private maxLeanR = 0;
   // 주행 거리·평균 속도: 속도를 시간으로 쌓는다 (GPS 위치가 튀어도 거리가 갑자기 늘지 않게)
   private distM = 0;
   private movingMs = 0;
@@ -129,6 +138,10 @@ export class LiveEngine {
 
   push(p: LiveInput): LiveState {
     this.maxV = Math.max(this.maxV, p.v);
+    if (p.leanDeg != null) {
+      this.maxLeanR = Math.max(this.maxLeanR, p.leanDeg);
+      this.maxLeanL = Math.max(this.maxLeanL, -p.leanDeg);
+    }
     this.addDistance(p);
     const g = p.ax !== null && p.ay !== null && (p.gCalibrated || p.gEstimated) ? this.g.push(p.t, p.ax, p.ay) : null;
     this.gEstimated = g !== null && !p.gCalibrated;
@@ -278,6 +291,9 @@ export class LiveEngine {
       offCourseM: this.offCourseM,
       gx: g ? g.gx : null,
       gy: g ? g.gy : null,
+      leanDeg: p.leanDeg ?? null,
+      maxLeanLeftDeg: this.maxLeanL,
+      maxLeanRightDeg: this.maxLeanR,
       gEstimated: g !== null && this.gEstimated,
       status,
     };

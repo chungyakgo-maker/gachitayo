@@ -38,18 +38,36 @@ export async function prepareRawFile(
   return new File([JSON.stringify(raw)], name, { type: 'application/json' });
 }
 
-/** 파일 → base64 (앱 파일 쓰기용) */
-async function toBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+/** 바이트 → base64 (앱 파일 쓰기용) */
+function bytesToBase64(bytes: Uint8Array): string {
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(bin);
 }
 
+/** 한 번에 앱으로 넘기는 크기: 백업 파일은 100 MB 를 넘을 수 있어 base64 한 덩어리로 넘기면 앱이 멈춘다 (검토 지적) */
+const SLICE_BYTES = 3 * 1024 * 1024;
+
+/** 파일을 조각으로 나눠 쓴다: 첫 조각은 새로 쓰고 나머지는 이어 쓴다. 쓴 파일 주소를 돌려준다 */
+export async function writeInSlices(file: Blob, ops: { write: (base64: string) => Promise<{ uri: string }>; append: (base64: string) => Promise<void> }, slice = SLICE_BYTES): Promise<string> {
+  let uri = '';
+  for (let at = 0; at === 0 || at < file.size; at += slice) {
+    const data = bytesToBase64(new Uint8Array(await file.slice(at, at + slice).arrayBuffer()));
+    if (at === 0) uri = (await ops.write(data)).uri;
+    else await ops.append(data);
+    if (file.size === 0) break;
+  }
+  return uri;
+}
+
 /** 아이폰 앱(사양서 13.3): 앱 안에서는 내려받기 링크가 안 되므로 앱 임시 폴더에 쓰고 아이폰 공유창으로 연다 */
 async function shareInApp(file: File): Promise<'shared' | 'cancelled'> {
   const [{ Filesystem, Directory }, { Share }] = await Promise.all([import('@capacitor/filesystem'), import('@capacitor/share')]);
-  const { uri } = await nativeCall(Filesystem.writeFile({ path: file.name, data: await toBase64(file), directory: Directory.Cache }), 15_000);
+  // 조각마다 기다림 한도 (한 번에 15초가 아니라 조각마다)
+  const uri = await writeInSlices(file, {
+    write: (data) => nativeCall(Filesystem.writeFile({ path: file.name, data, directory: Directory.Cache }), 15_000),
+    append: (data) => nativeCall(Filesystem.appendFile({ path: file.name, data, directory: Directory.Cache }), 15_000),
+  });
   try {
     await Share.share({ title: file.name, files: [uri] });
     return 'shared';

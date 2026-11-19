@@ -4,7 +4,7 @@
 // 경로를 받으면 길이·시간·커브 수를 보여 주고 "이 경로로 출발" (그 탭에서 주행 준비를 연다: 아이폰 모션 권한).
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { loadCourses, useDrive } from '../../app/drive';
-import { clearPlan, courseDestinations, findPlaces, MAP_PICK_NAME, planTo, recentDestinations, setRecord, startRouteDrive, clearHandedDestination, peekHandedDestination, usePlan, type Destination, type Place } from '../../app/routeNav';
+import { clearPlan, courseDestinations, findPlaces, MAP_PICK_NAME, planOtherRoute, planTo, recentDestinations, setRecord, startRouteDrive, clearHandedDestination, peekHandedDestination, usePlan, type Destination, type Place } from '../../app/routeNav';
 import { toLocal } from '../../engine/geo';
 import { RouteGuide } from '../../engine/route/routeGuide';
 import type { GpsState } from '../components/GpsIcon';
@@ -142,6 +142,22 @@ export function DestinationScreen({ forRoom = false }: { forRoom?: boolean } = {
       <div className="card card-col dest-card">
         <strong className="dest-title">{plan.dest.name}</strong>
         <span className="sub mono">{`${formatLength(route.distanceM)} · ${travelTime(route.durationS)} · 커브 ${curves}개`}</span>
+        {/* 바이크 경로 (바이크 모드 시안): 네이버 "자동차 전용 도로 회피"라도 섞일 수 있어 도로 이름으로 확인해 알린다 */}
+        {route.vehicle === 'bike' && <span className="pill bike">바이크 경로 · 고속도로·자동차전용도로 피함</span>}
+        {route.vehicle === 'bike' && (route.warnRoads?.length ?? 0) > 0 && (
+          <span className="notice caution" role="alert">
+            <span>
+              경로에 자동차 전용 도로가 섞였을 수 있어요 ({route.warnRoads!.join(', ')}).{' '}
+              {(route.alts ?? 1) > 1 && from ? (
+                <button type="button" className="link-btn inline" onClick={() => void planOtherRoute(from)}>
+                  다른 길로 다시 찾기
+                </button>
+              ) : (
+                '출발 전에 경로를 확인해 주세요'
+              )}
+            </span>
+          </span>
+        )}
         {forRoom ? (
           <>
             <span className="sub">방 모두에게 이 경로가 가요. 참가자는 "이 경로로 진행"을 누르면 같은 길로 안내받아요</span>

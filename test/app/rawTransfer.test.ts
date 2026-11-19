@@ -17,7 +17,6 @@ describe('PC에서 내 기록 보기 (질문 6 결정 가): 원본 파일(+코�
     const rec = await import('../../src/app/recording');
     const { prepareRawExport, importRawFile } = await import('../../src/app/rawTransfer');
     const drive = await import('../../src/app/drive');
-    const sync = await import('../../src/app/sync');
     const course = { ...r.course!, name: '연습 오벌' };
     const id = crypto.randomUUID();
     await rec.getDriveRepo().putCourse(course);
@@ -35,8 +34,7 @@ describe('PC에서 내 기록 보기 (질문 6 결정 가): 원본 파일(+코�
     expect(chunks[0]!.gps.length).toBe(s.gps.length);
     expect(chunks[0]!.rawMotion.length).toBe(s.motion.length);
     expect(drive.processSession).toHaveBeenCalledWith(newId);
-    // 올리기 대기열에 넣지 않는다
-    await sync.enqueueSessionUpload(newId);
+    // 기록은 폰에만: 올리기 대기열은 쓰지 않는다
     expect((await rec.getQueueRepo().all()).some((q) => q.targetId === newId)).toBe(false);
   });
 
@@ -45,5 +43,21 @@ describe('PC에서 내 기록 보기 (질문 6 결정 가): 원본 파일(+코�
     const { importRawFile } = await import('../../src/app/rawTransfer');
     await expect(importRawFile(new File(['hello'], 'x.json'))).rejects.toThrow('원본 파일을 읽지 못했어요');
     await expect(importRawFile(new File([JSON.stringify({ formatVersion: 9 })], 'x.json'))).rejects.toThrow('지원하지 않는');
+  });
+});
+
+describe('원본이 정리된 기록 (기록은 폰에만, 검토 지적)', () => {
+  it('서버에서 받지 않고 "원본 정리됨" 문구로 알린다', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://api.example.workers.dev');
+    vi.resetModules();
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const rec = await import('../../src/app/recording');
+    const { loadRawOf } = await import('../../src/app/rawTransfer');
+    const id = crypto.randomUUID();
+    await rec.getRepo().create({ id, courseId: null, courseVersion: null, status: 'uploaded', uploadedAt: 1, rawPruned: true, startedAt: 1, endedAt: null, device: { os: 'iOS', browser: 'Safari', userAgent: 'ua', standalone: true }, calibration: null, summary: null });
+    await expect(loadRawOf(id)).rejects.toThrow('이 기록은 원본이 정리됐어요 (최근 30개 주행만 원본을 남겨요)');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

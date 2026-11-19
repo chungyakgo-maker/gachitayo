@@ -75,3 +75,10 @@ export function formatTravelTime(s: number): string {
   const m = min % 60;
   return m ? `${h}시간 ${m}분` : `${h}시간`;
 }
+
+/** 바이트 → "152 MB" / "830 KB" (저장 공간·백업 크기) */
+export function formatBytes(b: number): string {
+  const mb = b / (1024 * 1024);
+  if (mb >= 1) return `${Math.round(mb)} MB`;
+  return `${Math.max(1, Math.round(b / 1024))} KB`;
+}

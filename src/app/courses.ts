@@ -1,6 +1,6 @@
 // 코스 관리 (사양서 8.7, M10): 이름 바꾸기, 출발선·도착선 옮기기, 코스 다듬기, 지도에서 새 코스, GPX 불러오기·내보내기.
 // 선을 옮기거나 다듬으면 version +1이고 이 코스의 내 기록을 모두 원본에서 다시 계산한다 (질문 5 결정).
-// 폰에서 원본을 정리한 기록은 서버에서 원본을 받아 다시 계산한다.
+// 원본을 정리한 기록(최근 30개 밖)은 다시 계산하지 않고 건너뛴다 (기록은 폰에만).
 import { BUILTIN_REV, builtinCourse, builtinInfo, missingBuiltins, renamedBuiltins } from '../courses/builtin';
 import { refineCourse, moveGate, reverseCourse, reverseName, sameCourse } from '../engine/course/edit';
 import { gateFromPoint } from '../engine/course/geometry';
@@ -8,27 +8,16 @@ import { fromLocal, toLocal, type LatLon } from '../engine/geo';
 import { courseFromGpx, gpsSamplesFromGpx } from '../gpx/course';
 import { courseToGpx } from '../gpx/export';
 import { parseGpx } from '../gpx/parse';
-import { serverConfig } from '../server/config';
-import { gunzipJson } from '../storage/gzip';
-import { readRawFile } from '../storage/rawFile';
 import type { Course, CourseKind } from '../types/course';
 import type { SessionRecord } from '../types/session';
-import { getAuth } from './account';
 import { loadCourses, processSession } from './drive';
-import { getDriveRepo, getQueueRepo, getRecordingState, getRepo, refreshSessions } from './recording';
+import { getDriveRepo, getRecordingState, getRepo, refreshSessions } from './recording';
 import { getSettings } from './settings';
-import { deleteSessionRecord, enqueueCourseDelete, kickSync } from './sync';
-
-/** 코스를 서버에 올리도록 대기열에 (이름·선이 바뀌었을 때) */
-async function queueCourse(id: string): Promise<void> {
-  if (!serverConfig.apiUrl) return;
-  await getQueueRepo().enqueue('course', id, Date.now());
-  void kickSync();
-}
+import { deleteSessionRecord, forgetServerCourse } from './records';
+import { assertCourseRoom } from './storageLimits';
 
 async function saveCourseRecord(c: Course): Promise<void> {
   await getDriveRepo().putCourse(c);
-  await queueCourse(c.id);
   await loadCourses();
 }
 
@@ -85,7 +74,6 @@ export async function upgradeBuiltinCourses(): Promise<string[]> {
   await loadCourses();
   for (const id of changed) {
     if ((await sessionsOfCourse(id)).length === 0) continue;
-    await queueCourse(id);
     try {
       await recomputeCourse(id);
     } catch {
@@ -149,7 +137,7 @@ export async function deleteCourse(courseId: string): Promise<number> {
   const list = await sessionsOfCourse(courseId);
   for (const s of list) await deleteSessionRecord(s.id);
   await drive.deleteCourse(courseId);
-  await enqueueCourseDelete(courseId);
+  await forgetServerCourse(courseId);
   await loadCourses();
   return list.length;
 }
@@ -163,6 +151,7 @@ export async function makeReverseCourse(courseId: string): Promise<{ course: Cou
   const rev = reverseCourse(c, { id: crypto.randomUUID(), name: reverseName(c.name) });
   const same = (await drive.listCourses()).find((x) => x.id !== c.id && sameCourse(x, rev));
   if (same) return { course: same, created: false };
+  await assertCourseRoom(drive);
   await saveCourseRecord(rev);
   return { course: rev, created: true };
 }
@@ -172,21 +161,9 @@ export async function sessionsOfCourse(courseId: string): Promise<SessionRecord[
   return (await getRepo().list()).filter((s) => s.courseId === courseId && s.status !== 'recording');
 }
 
-/** 폰에서 원본을 정리한 기록이면 서버에서 원본을 받아 덩어리로 되돌린다 */
-async function ensureRaw(s: SessionRecord): Promise<boolean> {
-  const repo = getRepo();
-  if ((await repo.chunks(s.id)).length > 0) return true;
-  const auth = getAuth();
-  if (!auth || !serverConfig.apiUrl || !s.uploadedAt) return false;
-  try {
-    const r = await fetch(`${serverConfig.apiUrl}/files/${auth.userId}/${s.id}.raw.json.gz`, { headers: { Authorization: `Bearer ${auth.token}` } });
-    if (!r.ok) return false;
-    const raw = readRawFile(await gunzipJson(new Uint8Array(await r.arrayBuffer())));
-    await repo.putChunk({ sessionId: s.id, seq: 0, gps: raw.gps, rawMotion: raw.motion, events: raw.events, channels: raw.channels });
-    return true;
-  } catch {
-    return false;
-  }
+/** 원본이 폰에 남아 있는지 (기록은 폰에만: 원본을 정리한 기록은 서버에서 받지 않고 건너뛴다) */
+async function hasRaw(s: SessionRecord): Promise<boolean> {
+  return (await getRepo().chunks(s.id)).length > 0;
 }
 
 /** 코스가 바뀐 뒤 이 코스의 기록을 모두 다시 계산한다. 원본을 구하지 못한 기록 수를 돌려준다 */
@@ -196,7 +173,7 @@ export async function recomputeCourse(courseId: string, onProgress?: (done: numb
   let skipped = 0;
   for (const s of list) {
     onProgress?.(done + skipped, list.length);
-    if (!(await ensureRaw(s))) {
+    if (!(await hasRaw(s))) {
       skipped++;
       continue;
     }
@@ -263,6 +240,7 @@ export interface GatePick {
 
 /** 지도에서 새 코스: 출발선(편도면 도착선도)의 위치와 진행 방향. 중심선은 첫 주행 뒤에 생긴다 (사양서 7.5) */
 export async function createMapCourse(opts: { name: string; kind: CourseKind; start: GatePick; finish?: GatePick | null }): Promise<Course> {
+  await assertCourseRoom(getDriveRepo());
   const name = opts.name.trim() || '새 코스';
   const origin = opts.start.at;
   const width = getSettings().gateWidthM;
@@ -298,6 +276,7 @@ export type GpxImport = { kind: 'course'; course: Course } | { kind: 'session'; 
 export async function importGpx(text: string, mode: 'course' | 'session', name: string): Promise<GpxImport> {
   const gpx = parseGpx(text);
   if (mode === 'course') {
+    await assertCourseRoom(getDriveRepo());
     const c = courseFromGpx(gpx, { id: crypto.randomUUID(), name: name.trim() || gpx.name || 'GPX 코스' });
     const w = getSettings().gateWidthM;
     const course = { ...c, startGate: { ...c.startGate, widthM: w }, finishGate: { ...c.finishGate, widthM: w } };

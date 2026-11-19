@@ -1,4 +1,4 @@
-// 설정 탭 (사양서 8.8): 닉네임, 친구, 동기화 상태, 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
+// 설정 탭 (사양서 8.8): 닉네임, 친구, 저장 공간·백업(기록은 폰에만), 기본 화면 모드, 상단 표시 값, 델타 색, 게이트 폭, 거치 팁, 개발자 메뉴.
 import { buildChannel, locationSharing } from '../../features';
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
 import { useEffect, useState } from 'react';
@@ -9,24 +9,26 @@ import { LoginChooser } from '../components/LoginChooser';
 import { deleteAccount } from '../../app/deleteAccount';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
 import { logout, logoutCheck } from '../../app/logout';
+import { shareBackup } from '../../app/backup';
 import { KakaoButton } from '../components/KakaoButton';
 import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { RestoreBanner } from '../components/RestoreBanner';
 import { Overlay } from '../components/Overlay';
 import { isApp } from '../../platform';
 import { LegalLink } from '../legal';
-import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, CAR_MARKER_LABEL, CURVE_TINT_LABEL, MAP_VIEW_LABEL, effectiveSettings, updateSettings, useSettings, topSummary, type CarMarker, type CurveTint, type DeltaPalette, type DriveMode } from '../../app/settings';
+import { G_MAX_OPTIONS, GATE_WIDTH_MAX_M, GATE_WIDTH_MIN_M, BIKE_MARKER_LABEL, CAR_MARKER_LABEL, CURVE_TINT_LABEL, VEHICLE_LABEL, MAP_VIEW_LABEL, effectiveSettings, setVehicle, updateSettings, useSettings, topSummary, type BikeMarker, type CarMarker, type CurveTint, type Vehicle, type DeltaPalette, type DriveMode } from '../../app/settings';
 import { OverlayCanvas } from '../components/OverlayCanvas';
 import { drawMeIcon } from '../overlay/minimap';
 import { MountTips } from '../components/MountTips';
-import { retryNow, useSync } from '../../app/sync';
 import { buildInfo } from '../buildInfo';
 import { FriendsSection } from '../components/FriendsSection';
 import { ProfilePhoto } from '../components/ProfilePhoto';
 import { TeamsSection } from '../components/TeamsSection';
+import { AccountIdCopy, BlocksSection } from '../components/BlocksSection';
+import { StorageSection } from '../components/StorageSection';
+import { BackupSection } from '../components/BackupSection';
 import { Tabbed } from '../components/TabBar';
 import { formatKst } from '../format';
-import { IconCloud, IconWarn } from '../icons';
 import { IconChevron } from '../icons';
 
 const MODES: Array<[DriveMode, string]> = [
@@ -46,7 +48,9 @@ function LoginAccount() {
   const [apple, setApple] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ask, setAsk] = useState<{ localOnly: number } | null>(null);
+  const [ask, setAsk] = useState(false);
+  const [wipe, setWipe] = useState(false);
+  const [backing, setBacking] = useState(false);
   useEffect(() => {
     let alive = true;
     void getProviders().then((p) => {
@@ -83,15 +87,17 @@ function LoginAccount() {
     setError(null);
     const c = await logoutCheck();
     setBusy(false);
-    if (c.ok) setAsk({ localOnly: c.localOnly });
-    else setError(c.error);
+    if (c.ok) {
+      setWipe(false);
+      setAsk(true);
+    } else setError(c.error);
   };
   const doLogout = async () => {
     setBusy(true);
-    const r = await logout();
+    const r = await logout({ wipe });
     if (!r.ok) {
       setBusy(false);
-      setAsk(null);
+      setAsk(false);
       setError(r.error);
     }
   };
@@ -121,7 +127,7 @@ function LoginAccount() {
           <div className="card-col" style={{ gap: 8 }}>
             <LoginChooser kakao={on} apple={apple} kakaoLabel="카카오로 로그인" disabled={busy} onKakao={() => void login()} onApple={() => void appleLogin()} />
             <span className="sub">
-              {acc.lost ? `예전에 ${apple ? '카카오나 Apple로' : '카카오로'} 연결했다면 이걸로 돌아와요` : '로그인하면 폰을 바꿔도 기록이 돌아와요'}
+              {acc.lost ? `예전에 ${apple ? '카카오나 Apple로' : '카카오로'} 연결했다면 이걸로 돌아와요` : '로그인하면 친구·팀을 쓸 수 있어요 · 기록은 이 폰에만 저장돼요'}
             </span>
           </div>
         )
@@ -133,13 +139,13 @@ function LoginAccount() {
           <div className="modal-backdrop">
             <div className="modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
               <h2 id="logout-title">로그아웃할까요?</h2>
-              <p>로그아웃하면 이 폰의 기록과 내 코스가 지워져요. 다시 로그인하면 서버에서 되살아나요.</p>
-              {ask.localOnly > 0 && <p className="warn-text">{`이 폰에만 있는 기록 ${ask.localOnly}개는 되살릴 수 없어요.`}</p>}
+              <p>로그아웃해도 이 폰의 기록과 내 코스는 그대로 남아요. 친구·팀은 다시 로그인하면 돌아와요.</p>
+              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} onBacking={setBacking} />
               <div className="modal-actions">
-                <button type="button" className="btn danger" disabled={busy} onClick={() => void doLogout()}>
+                <button type="button" className="btn danger" disabled={busy || backing} onClick={() => void doLogout()}>
                   로그아웃
                 </button>
-                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(null)}>
+                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(false)}>
                   취소
                 </button>
               </div>
@@ -169,7 +175,7 @@ function AccountSection() {
       </div>
       {acc.status === 'none' && acc.onboarded && !acc.lost && (
         <div className="notice" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-          <span>아직 서버 계정을 만들지 못했어요. 통신이 연결되면 자동으로 만들고 기록을 올려요.</span>
+          <span>아직 서버 계정을 만들지 못했어요. 통신이 연결되면 자동으로 만들어요.</span>
           <button type="button" className="btn" disabled={acc.busy} onClick={() => void recreateAccount()}>
             지금 계정 만들기
           </button>
@@ -177,7 +183,7 @@ function AccountSection() {
       )}
       {acc.status === 'none' && acc.lost && (
         <div className="notice warn" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-          <span>계정 연결이 끊겼어요. 새 계정으로 다시 시작하면 이 폰의 기록은 다시 올라가지만, 예전 계정의 서버 기록은 볼 수 없어요.</span>
+          <span>계정 연결이 끊겼어요. 새 계정으로 다시 시작하면 친구·팀을 다시 쓸 수 있어요. 이 폰의 기록은 그대로예요.</span>
           <button type="button" className="btn" disabled={acc.busy} onClick={() => void recreateAccount()}>
             새 계정 만들기
           </button>
@@ -185,50 +191,63 @@ function AccountSection() {
       )}
       {acc.error && <div className="notice warn">{acc.error}</div>}
       <LoginAccount />
+      {acc.userId && <AccountIdCopy userId={acc.userId} />}
       <span className="sub" style={{ lineHeight: 1.6 }}>
         {acc.status === 'disabled'
           ? '서버 연결 전이라 기록은 이 폰에만 있어요.'
           : signedIn(acc)
-            ? `${acc.kakao ? '카카오' : 'Apple'} 계정에 연결돼 있어요. 폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요.`
-            : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요(서버 기록은 남아요). 홈 화면 앱으로 쓰고 자주 올려 주세요.'}
+            ? `${acc.kakao ? '카카오' : 'Apple'} 계정에 연결돼 있어요. 폰을 바꿔도 같은 방법으로 로그인하면 친구·팀이 돌아와요. 기록은 이 폰에만 있어요.`
+            : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 친구·팀이 있는 이 계정으로 다시 들어올 수 없어요. 기록은 이 폰에만 있으니 백업 파일을 만들어 두세요.'}
       </span>
     </section>
   );
 }
 
-function SyncSection() {
-  const sync = useSync();
-  const acc = useAccount();
-  const status = !sync.enabled
-    ? '서버 연결 전 · 폰에만 저장'
-    : acc.status !== 'ready'
-      ? '계정이 없어 올리지 않음'
-      : sync.running
-        ? '올리는 중…'
-        : sync.pending > 0
-          ? `업로드 대기 ${sync.pending}건`
-          : '모두 올라감';
+/** 로그아웃·계정 지우기 창 (기록은 폰에만 6단계, 시안 ④): 기록은 기본으로 남기고, 체크하면 이 폰에서도 지운다. 지우기 전에 백업 */
+// 백업하는 동안은 지우기·로그아웃 단추와 체크를 막는다 (검토 지적: 백업이 끝나기 전에 지우면 백업 없이 지워졌다)
+function WipeChoice({ wipe, onWipe, disabled, onBacking }: { wipe: boolean; onWipe: (v: boolean) => void; disabled: boolean; onBacking: (on: boolean) => void }) {
+  const [note, setNote] = useState<string | null>(null);
+  const [backing, setBacking] = useState(false);
+  const busy = (on: boolean) => {
+    setBacking(on);
+    onBacking(on);
+  };
   return (
-    <section className="card card-col" style={{ gap: 8 }} aria-label="동기화 상태">
-      <div className="status-head">
-        {sync.lastError ? <IconWarn color="#FF5B4F" /> : <IconCloud color="#FFB224" />}
-        <strong>동기화</strong>
-        <span>{status}</span>
-      </div>
-      {sync.lastSyncAt && <span className="sub">마지막 업로드 {formatKst(sync.lastSyncAt)}</span>}
-      {sync.lastError && <span style={{ fontSize: 13, color: 'var(--bad)' }}>마지막 오류: {sync.lastError}</span>}
-      {sync.enabled && sync.pending > 0 && (
-        <button type="button" className="btn" disabled={sync.running || acc.status !== 'ready'} onClick={() => void retryNow()}>
-          지금 다시 시도
-        </button>
+    <>
+      <label className="check-row">
+        <input type="checkbox" checked={wipe} disabled={disabled || backing} onChange={(e) => onWipe(e.target.checked)} />
+        기록과 내 코스도 이 폰에서 지우기
+      </label>
+      <button
+        type="button"
+        className="link-btn"
+        disabled={disabled || backing}
+        onClick={() => {
+          setNote(null);
+          busy(true);
+          void shareBackup()
+            .then((r) => setNote(r === 'cancelled' ? null : '백업 파일을 만들었어요'))
+            .catch((e: Error) => setNote(e.message))
+            .finally(() => busy(false));
+        }}
+      >
+        지우기 전에 백업 파일 만들기 ›
+      </button>
+      {backing && (
+        <span className="sub" role="status">
+          백업 파일 만드는 중…
+        </span>
       )}
-    </section>
+      {note && <span className="sub">{note}</span>}
+    </>
   );
 }
 
 /** 계정 삭제 (사양서 13.3, 애플 심사 필수): 확인 창에서 "지우기"를 눌러야 지운다 */
 export function DeleteAccountSection() {
   const [ask, setAsk] = useState(false);
+  const [wipe, setWipe] = useState(false);
+  const [backing, setBacking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -239,27 +258,29 @@ export function DeleteAccountSection() {
         className="btn danger"
         onClick={() => {
           setError(null);
+          setWipe(false);
           setAsk(true);
         }}
       >
-        계정과 모든 기록 지우기
+        계정 지우기
       </button>
       {ask && (
         <Overlay>
           <div className="modal-backdrop">
             <div className="modal" role="dialog" aria-modal="true" aria-labelledby="account-delete-title">
               <h2 id="account-delete-title">계정을 지울까요?</h2>
-              <p>닉네임·친구·코스·주행 기록이 폰과 서버에서 모두 지워지고 되돌릴 수 없어요.</p>
+              <p>닉네임·친구·팀·프로필 사진·공개한 코스가 서버에서 지워지고 되돌릴 수 없어요.</p>
+              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} onBacking={setBacking} />
               {error && <div className="notice warn">{error}</div>}
               <div className="modal-actions">
                 <button
                   type="button"
                   className="btn danger"
-                  disabled={busy}
+                  disabled={busy || backing}
                   onClick={() => {
                     setBusy(true);
                     setError(null);
-                    void deleteAccount()
+                    void deleteAccount({ wipe })
                       .catch((e: Error) => setError(e.message))
                       .finally(() => setBusy(false));
                   }}
@@ -280,6 +301,7 @@ export function DeleteAccountSection() {
 
 export function SettingsScreen() {
   const s = useSettings();
+  const acc = useAccount();
   return (
     <Tabbed path="/settings">
       <main className="page">
@@ -289,7 +311,8 @@ export function SettingsScreen() {
         <AccountSection />
         <FriendsSection />
         <TeamsSection />
-        <SyncSection />
+        <StorageSection />
+        <BackupSection />
         <section className="card-col" style={{ gap: 8 }} aria-label="기본 화면 모드">
           <span className="label">기본 화면 모드</span>
           <div className="segmented" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
@@ -324,19 +347,46 @@ export function SettingsScreen() {
           </div>
           <span className="sub">통신이 없으면 저절로 코스 선만 그려요. 끄면 데이터와 배터리를 덜 써요.</span>
         </section>
-        {/* 내 차 표시 (사용자 요청 시안 2026-11-17 "내 차 너무 작아서 안 보여"): 그림을 눌러 고른다 */}
-        <section className="card-col" style={{ gap: 8 }} aria-label="내 차 표시">
-          <span className="label">내 차 표시 (주행 지도)</span>
-          <div className="marker-pick">
-            {(Object.keys(CAR_MARKER_LABEL) as CarMarker[]).map((k) => (
-              <button key={k} type="button" aria-label={CAR_MARKER_LABEL[k]} aria-pressed={s.carMarker === k} onClick={() => updateSettings({ carMarker: k })}>
-                <OverlayCanvas className="marker-icon" label={CAR_MARKER_LABEL[k]} draw={(ctx, w, h) => drawMeIcon(ctx, w, h, k)} />
-                <span aria-hidden="true">{CAR_MARKER_LABEL[k]}</span>
+        {/* 탈것 (2026-11-18 바이크 모드 시안): 바이크면 내 위치를 바이크로 그리고 길찾기가 고속도로·자동차전용도로를 피한다 */}
+        <section className="card-col" style={{ gap: 8 }} aria-label="탈것">
+          <span className="label">탈것</span>
+          <div className="segmented small" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+            {(Object.keys(VEHICLE_LABEL) as Vehicle[]).map((k) => (
+              <button key={k} type="button" aria-pressed={s.vehicle === k} onClick={() => setVehicle(k)}>
+                {VEHICLE_LABEL[k]}
               </button>
             ))}
           </div>
-          <span className="sub">주행 화면 지도에서 내 위치를 이 모양으로 그려요. 처음에는 화살표예요.</span>
+          <span className="sub">바이크면 길찾기에서 고속도로·자동차전용도로를 피해요.</span>
         </section>
+        {/* 내 차 표시 (사용자 요청 시안 2026-11-17 "내 차 너무 작아서 안 보여"): 그림을 눌러 고른다. 바이크면 바이크 5종 */}
+        {s.vehicle === 'bike' ? (
+          <section className="card-col" style={{ gap: 8 }} aria-label="내 바이크 표시">
+            <span className="label">내 바이크 표시 (주행 지도)</span>
+            <div className="marker-pick five">
+              {(Object.keys(BIKE_MARKER_LABEL) as BikeMarker[]).map((k) => (
+                <button key={k} type="button" aria-label={BIKE_MARKER_LABEL[k]} aria-pressed={s.bikeMarker === k} onClick={() => updateSettings({ bikeMarker: k })}>
+                  <OverlayCanvas className="marker-icon" label={BIKE_MARKER_LABEL[k]} draw={(ctx, w, h) => drawMeIcon(ctx, w, h, k)} />
+                  <span aria-hidden="true">{BIKE_MARKER_LABEL[k]}</span>
+                </button>
+              ))}
+            </div>
+            <span className="sub">주행 화면 지도에서 내 위치를 이 모양으로 그려요.</span>
+          </section>
+        ) : (
+          <section className="card-col" style={{ gap: 8 }} aria-label="내 차 표시">
+            <span className="label">내 차 표시 (주행 지도)</span>
+            <div className="marker-pick">
+              {(Object.keys(CAR_MARKER_LABEL) as CarMarker[]).map((k) => (
+                <button key={k} type="button" aria-label={CAR_MARKER_LABEL[k]} aria-pressed={s.carMarker === k} onClick={() => updateSettings({ carMarker: k })}>
+                  <OverlayCanvas className="marker-icon" label={CAR_MARKER_LABEL[k]} draw={(ctx, w, h) => drawMeIcon(ctx, w, h, k)} />
+                  <span aria-hidden="true">{CAR_MARKER_LABEL[k]}</span>
+                </button>
+              ))}
+            </div>
+            <span className="sub">주행 화면 지도에서 내 위치를 이 모양으로 그려요. 처음에는 화살표예요.</span>
+          </section>
+        )}
         {locationSharing() && <DriveFriendsToggle />}
         <section className="card-col" style={{ gap: 8 }} aria-label="커브 방향 화면 색">
           <span className="label">커브 방향 화면 색</span>
@@ -401,7 +451,27 @@ export function SettingsScreen() {
           <summary>거치 팁</summary>
           <MountTips />
         </details>
+        <BlocksSection />
         <DeleteAccountSection />
+        {/* 도움말 (설계 2026-11-18 help): 그림으로 보는 디고 사용법 */}
+        {acc.admin && (
+          <section className="card-col" style={{ gap: 8 }} aria-label="관리자">
+            <a className="list-link" href="#/admin/shared">
+              <strong style={{ fontSize: 15 }}>관리자 · 모두의 코스 관리</strong>
+              <IconChevron size={20} color="#9AA1A9" />
+            </a>
+          </section>
+        )}
+        <section className="card-col" style={{ gap: 8 }} aria-label="도움말">
+          <span className="label">도움말</span>
+          <a className="list-link" href="#/help">
+            <span className="card-col" style={{ gap: 3 }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>기능 알아보기</span>
+              <span className="sub">그림으로 보는 디고 사용법</span>
+            </span>
+            <IconChevron size={20} color="#9AA1A9" />
+          </a>
+        </section>
         <section className="card-col" style={{ gap: 8 }} aria-label="약관">
           <span className="label">약관</span>
           <span style={{ fontSize: 15, display: 'flex', gap: 16 }}>

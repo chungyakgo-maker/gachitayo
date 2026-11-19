@@ -1,11 +1,13 @@
 // 그룹 주행 방 대기실 (설계 docs/superpowers/specs/2026-11-16-group-drive-design.md, 시안 "방장 대기실"):
 // 방 코드·카톡 초대·링크 복사, 주행 순서(방장은 ↑↓), 차 간격(방장은 − +), 목적지(방장은 정하기·바꾸기), 출발 준비, 방 나가기.
 // 주행 중에도 열 수 있다 (방장이 중간에 목적지를 정해 모두에게 보낸다)
+// "이번 주행" 칸(3부, 시안 ⑨): 방장이 목적지 또는 코스 중 하나를 정한다 — 코스면 출발하면 각자 출발점까지 안내, 출발선부터 기록
 // 팀 주행 방(설계 2026-11-18 team-drive, 시안 ③)이면 방 코드 대신 팀 이름·"주행 열었어요" 알리기·아직 안 들어온 팀원·프사
 import { liveGap, locationSharing } from '../../features';
 import { useEffect, useState } from 'react';
 import { beginPrepare, chooseCourse, getDriveState, useDrive } from '../../app/drive';
 import {
+  acceptedCourse,
   groupColor,
   groupErrorText,
   hasPendingRoute,
@@ -22,6 +24,7 @@ import { loadTeams, useTeams } from '../../app/teams';
 import { Avatar } from '../components/Avatar';
 import { TeamSheet } from '../components/TeamSheet';
 import { IconBack } from '../icons';
+import { formatLength } from '../format';
 
 const GAP_MIN = 1;
 const GAP_MAX = 10;
@@ -96,10 +99,12 @@ export function GroupScreen() {
   const start = () => {
     beginPrepare();
     if (getDriveState().phase !== 'preparing') return;
-    chooseCourse(null);
+    // 받은 팀 코스가 있으면 코스 없이 고르지 않는다 — 그 코스로 고르고 출발점까지 안내한다 (startGroupNav)
+    if (!acceptedCourse()) chooseCourse(null);
     startGroupNav();
   };
   const destWaiting = !!room.dest && room.routeVersion > g.acceptedVersion;
+  const course = room.course ?? null;
 
   return (
     <main className="page" style={{ gap: 12 }}>
@@ -138,32 +143,62 @@ export function GroupScreen() {
         </span>
       )}
 
-      <section className="card card-row" style={{ gap: 8 }}>
-        <span className="card-col" style={{ gap: 2, flex: 1, minWidth: 0 }}>
-          <span className="label">목적지 · 모두 같은 경로</span>
-          <strong style={{ fontSize: 17 }}>{room.dest?.name ?? '없음'}</strong>
-          <span className="sub">
-            {!room.dest
-              ? host
-                ? '없어도 출발할 수 있어요. 주행 중에도 정할 수 있어요'
-                : '방장이 정하면 알려 드려요'
-              : destWaiting && !host
-                ? '아직 이 경로를 받지 않았어요'
-                : hasPendingRoute()
-                  ? '출발하면 이 경로로 안내해요'
-                  : '이 경로로 안내 중이거나 받았어요'}
-          </span>
-        </span>
-        {host ? (
-          <a className="btn small" href="#/group/destination" style={{ textDecoration: 'none' }}>
-            {room.dest ? '바꾸기' : '정하기'}
-          </a>
+      <section className="card card-col" style={{ gap: 10 }} aria-label="이번 주행 · 방장이 정해요">
+        <span className="label">이번 주행 · 방장이 정해요</span>
+        <div className="segmented small accent" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }} role="group" aria-label="목적지 또는 코스">
+          <button type="button" aria-pressed={!course} disabled={!host} onClick={() => (window.location.hash = '#/group/destination')}>
+            목적지
+          </button>
+          <button type="button" aria-pressed={!!course} disabled={!host} onClick={() => (window.location.hash = '#/group/course')}>
+            코스
+          </button>
+        </div>
+        {course ? (
+          <>
+            <strong style={{ fontSize: 20 }}>{course.name}</strong>
+            <span className="sub">{`${course.kind === 'loop' ? '랩' : '편도'} · ${formatLength(course.lengthM || null)} · 출발하면 각자 출발점까지 안내, 출발선부터 기록`}</span>
+            {!host && destWaiting && <span className="sub">아직 이 코스를 받지 않았어요</span>}
+            {host ? (
+              <a className="btn small" href="#/group/course" style={{ textDecoration: 'none', alignSelf: 'flex-start' }}>
+                코스 바꾸기
+              </a>
+            ) : (
+              g.later && (
+                <button type="button" className="btn small" style={{ alignSelf: 'flex-start' }} onClick={reopenRouteOffer}>
+                  코스 받기
+                </button>
+              )
+            )}
+          </>
         ) : (
-          g.later && (
-            <button type="button" className="btn small" onClick={reopenRouteOffer}>
-              경로 받기
-            </button>
-          )
+          <div className="card-row" style={{ gap: 8 }}>
+            <span className="card-col" style={{ gap: 2, flex: 1, minWidth: 0 }}>
+              <span className="label">목적지 · 모두 같은 경로</span>
+              <strong style={{ fontSize: 17 }}>{room.dest?.name ?? '없음'}</strong>
+              <span className="sub">
+                {!room.dest
+                  ? host
+                    ? '없어도 출발할 수 있어요. 주행 중에도 정할 수 있어요'
+                    : '방장이 정하면 알려 드려요'
+                  : destWaiting && !host
+                    ? '아직 이 경로를 받지 않았어요'
+                    : hasPendingRoute()
+                      ? '출발하면 이 경로로 안내해요'
+                      : '이 경로로 안내 중이거나 받았어요'}
+              </span>
+            </span>
+            {host ? (
+              <a className="btn small" href="#/group/destination" style={{ textDecoration: 'none' }}>
+                {room.dest ? '바꾸기' : '정하기'}
+              </a>
+            ) : (
+              g.later && (
+                <button type="button" className="btn small" onClick={reopenRouteOffer}>
+                  경로 받기
+                </button>
+              )
+            )}
+          </div>
         )}
       </section>
 
@@ -256,7 +291,7 @@ export function GroupScreen() {
               출발 준비
             </button>
             <span className="sub" style={{ textAlign: 'center' }}>
-              {locationSharing() ? '각자 출발 준비를 누르고 출발해요 · 주행 중 지도에 모두 보여요' : '각자 출발 준비를 누르고 출발해요 · 목적지 경로는 모두 같아요'}
+              {locationSharing() ? '각자 출발 준비를 누르고 출발해요 · 주행 중 지도에 모두 보여요' : course ? '각자 출발 준비를 누르고 출발해요 · 모두 같은 코스로 달려요' : '각자 출발 준비를 누르고 출발해요 · 목적지 경로는 모두 같아요'}
             </span>
           </>
         )}

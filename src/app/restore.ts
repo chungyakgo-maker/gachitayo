@@ -1,6 +1,7 @@
-// 되살리기 (설계 docs/superpowers/specs/2026-11-13-kakao-login-design.md 5.7·5.7-1·5.7-2):
-// 카카오 계정의 서버 기록 중 이 폰에 없는 것은 원본을 받아 같은 id로 다시 계산한다(예전 폰과 같은 랩).
-// 서버 코스 중 기본 코스는 폰의 같은 기본 코스로 이어 붙이고, 이 폰에만 있는 기록은 원본이 있으면 올린다.
+// 되살리기 (설계 docs/superpowers/specs/2026-11-13-kakao-login-design.md 5.7·5.7-1·5.7-2) → 기록은 폰에만(2026-11-18 설계)에서는
+// "처음 한 번 옮기기"로만 쓴다(migrateLocal.ts): 서버 기록 중 이 폰에 없는 것은 원본을 받아 같은 id로 다시 계산하고(예전 폰과 같은 랩),
+// 폰에 있지만 원본이 정리된 기록(예전 앱은 올린 뒤 7일이면 지웠다) 중 최근 30개는 원본만 받아 둔다. 지우기 목록의 기록은 받지 않는다.
+// 서버 코스 중 기본 코스는 폰의 같은 기본 코스로 이어 붙인다. (기록은 폰에만: 이 폰의 기록은 올리지 않는다)
 import { useSyncExternalStore } from 'react';
 import { toLocal } from '../engine/geo';
 import { ApiError, apiFetch } from '../server/api';
@@ -11,9 +12,11 @@ import { BUILTIN_COURSES } from '../courses/builtin';
 import type { Course, CourseKind, CourseSource, Gate } from '../types/course';
 import type { DeviceInfo, SessionRecord } from '../types/session';
 import { getAuth } from './account';
+import { RAW_KEEP } from './limits';
+import { pendingServerDeletes } from './records';
+import { pruneOldRaw } from './storageLimits';
 import { loadCourses, processRestoredSession } from './drive';
-import { getDriveRepo, getQueueRepo, getRecordingState, getRepo, refreshSessions, subscribeRecording } from './recording';
-import { enqueueSessionUpload } from './sync';
+import { getDriveRepo, getRecordingState, getRepo, refreshSessions, subscribeRecording } from './recording';
 
 export interface RestoreState {
   running: boolean;
@@ -119,18 +122,14 @@ async function serverLists(token: string): Promise<{ courses: ServerCourse[]; se
   return { courses, sessions };
 }
 
-/** 서버 계정에 없는 이 폰의 기록 (녹화 중 제외). 통신이 안 되면 던진다 */
-export async function localOnlySessions(): Promise<SessionRecord[]> {
-  const auth = getAuth();
-  if (!auth) return (await getRepo().list()).filter((s) => s.status !== 'recording');
-  const ids = new Set((await apiFetch<ServerSession[]>('GET', '/api/sessions', { token: auth.token })).map((s) => s.id));
-  return (await getRepo().list()).filter((s) => s.status !== 'recording' && !ids.has(s.id));
+async function fetchRaw(id: string, userId: string, token: string) {
+  const r = await fetch(`${serverConfig.apiUrl}/files/${userId}/${id}.raw.json.gz`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error(`원본을 받지 못했어요 (${r.status})`);
+  return readRawFile(await gunzipJson(new Uint8Array(await r.arrayBuffer())));
 }
 
 async function restoreOne(s: ServerSession, userId: string, token: string, courseMap: Map<string, Course>): Promise<void> {
-  const r = await fetch(`${serverConfig.apiUrl}/files/${userId}/${s.id}.raw.json.gz`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error(`원본을 받지 못했어요 (${r.status})`);
-  const { gps, motion, events, channels } = readRawFile(await gunzipJson(new Uint8Array(await r.arrayBuffer())));
+  const { gps, motion, events, channels } = await fetchRaw(s.id, userId, token);
   const mapped = s.courseId ? courseMap.get(s.courseId) : undefined;
   const repo = getRepo();
   await repo.create({
@@ -156,9 +155,7 @@ async function restoreOne(s: ServerSession, userId: string, token: string, cours
   }
 }
 
-async function run(): Promise<void> {
-  const auth = getAuth();
-  if (!auth || !serverConfig.apiUrl) return;
+async function run(auth: { userId: string; token: string }): Promise<void> {
   // 주행 중에는 하지 않는다 (끝난 뒤 이어서)
   while (recordingNow()) await untilIdle();
   const { courses, sessions } = await serverLists(auth.token);
@@ -168,7 +165,10 @@ async function run(): Promise<void> {
   const local = await drive.listCourses();
   const courseMap = new Map<string, Course>();
   let coursesChanged = false;
+  const goneCourses = new Set(pendingServerDeletes().courses);
   for (const sc of courses) {
+    // 이 폰에서 지운 코스(서버 지우기가 아직 안 된 것)는 다시 넣지 않는다 (검토 지적)
+    if (goneCourses.has(sc.id)) continue;
     const b = matchBuiltin(sc, local);
     if (b) {
       courseMap.set(sc.id, b);
@@ -186,8 +186,26 @@ async function run(): Promise<void> {
   const repo = getRepo();
   for (const s of await repo.list()) if (s.restoring) await drive.deleteSession(s.id);
   const mine = new Set((await repo.list()).map((s) => s.id));
-  const todo = sessions.filter((s) => !mine.has(s.id) && s.rawKey);
-  set({ done: 0, total: todo.length, failed: 0 });
+  const gone = new Set(pendingServerDeletes().sessions);
+  const todo = sessions.filter((s) => !mine.has(s.id) && !gone.has(s.id) && s.rawKey);
+  // 폰에 있지만 원본이 없는 기록 중 최근 RAW_KEEP 개: 서버에 원본이 있으면 받아 둔다 (다시 재생·다시 계산되게)
+  const withRaw = new Set(sessions.filter((s) => s.rawKey).map((s) => s.id));
+  const recent = (await repo.list()).filter((s) => (s.status === 'processed' || s.status === 'uploaded') && !s.noRecord).sort((a, b) => b.startedAt - a.startedAt).slice(0, RAW_KEEP);
+  const rawTodo: SessionRecord[] = [];
+  for (const s of recent) if (s.uploadedAt && withRaw.has(s.id) && (await repo.chunks(s.id)).length === 0) rawTodo.push(s);
+  set({ done: 0, total: todo.length + rawTodo.length, failed: 0 });
+  for (const s of rawTodo) {
+    while (recordingNow()) await untilIdle();
+    try {
+      const raw = await fetchRaw(s.id, auth.userId, auth.token);
+      if ((await repo.chunks(s.id)).length === 0) await repo.putChunk({ sessionId: s.id, seq: 0, gps: raw.gps, rawMotion: raw.motion, events: raw.events, channels: raw.channels });
+      if (s.rawPruned) await repo.update(s.id, { rawPruned: false });
+      set({ done: state.done + 1 });
+    } catch (e) {
+      set({ failed: state.failed + 1 });
+      if (e instanceof TypeError) break;
+    }
+  }
   for (const s of todo) {
     while (recordingNow()) await untilIdle();
     try {
@@ -199,29 +217,24 @@ async function run(): Promise<void> {
       if (e instanceof TypeError) break;
     }
   }
-  if (todo.length) await refreshSessions();
-
-  // 3. 이 폰에서 계산했지만 한 번도 올리지 않은 기록은 이 계정으로 올린다 (대기열에 없을 때).
-  //    다른 계정(끊긴 계정 등)에 올렸던 기록은 서버에서 그 계정 것이라 올릴 수 없고, 지운 기록이 되살아나면 안 되므로
-  //    올리지 않는다(로그아웃 때 "이 폰에만 있는 기록"으로 알린다). 중단된 주행·계산 전 기록·가져온 기록도 건드리지 않는다
-  const onServer = new Set(sessions.map((s) => s.id));
-  const queued = new Set((await getQueueRepo().all()).map((q) => q.targetId));
-  for (const s of await repo.list()) {
-    if (s.status !== 'processed' || s.uploadedAt || s.imported || onServer.has(s.id) || queued.has(s.id)) continue;
-    if (!(await drive.getResult(s.id))) continue;
-    await enqueueSessionUpload(s.id);
-  }
+  await pruneOldRaw(repo);
+  await refreshSessions();
 }
 
-let running: Promise<void> | null = null;
-/** 되살리기 (이미 도는 중이면 그것을 기다린다). 실패는 조용히 두고 다음 실행 때 다시 한다 */
-export function startRestore(): Promise<void> {
+let running: Promise<{ userId: string | null; ok: boolean }> | null = null;
+/** 되살리기 (이미 도는 중이면 그것을 기다린다). 실패는 조용히 두고 다음 실행 때 다시 한다.
+ *  어느 계정으로 돌았는지와 하나도 빠짐없이 끝났는지 */
+export function startRestore(): Promise<{ userId: string | null; ok: boolean }> {
   running ??= (async () => {
+    const auth = getAuth();
+    if (!auth || !serverConfig.apiUrl) return { userId: null, ok: false };
     set({ running: true });
     try {
-      await run();
+      await run(auth);
+      return { userId: auth.userId, ok: state.failed === 0 };
     } catch (e) {
       if (!(e instanceof ApiError) && !(e instanceof TypeError)) console.warn('되살리기 실패', e);
+      return { userId: auth.userId, ok: false };
     } finally {
       set({ running: false });
       running = null;

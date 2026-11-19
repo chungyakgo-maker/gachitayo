@@ -9,7 +9,7 @@ import { useAccount } from '../../app/account';
 import { useState } from 'react';
 import { cancelPrepare, chooseCourse, chooseFreeDrive, chooseRef, setDriveMode, startDrive, useDrive, useLiveSnapshot } from '../../app/drive';
 import { useRecording } from '../../app/recording';
-import { effectiveSettings, MAP_VIEW_LABEL, updateSettings, useSettings, topSummary, type DriveMode } from '../../app/settings';
+import { BIKE_MARKER_LABEL, effectiveSettings, MAP_VIEW_LABEL, setVehicle, updateSettings, useSettings, topSummary, VEHICLE_LABEL, type DriveMode, type Vehicle } from '../../app/settings';
 import { Sheet } from '../components/Sheet';
 import { DriveChoiceSheet } from '../components/DriveChoiceSheet';
 import { formatDayKst, formatLapTime, formatLength } from '../format';
@@ -79,6 +79,7 @@ export function PrepareScreen() {
       </header>
 
       {rec.error && <div className="notice warn">{rec.error}</div>}
+      {d.error && <div className="notice warn">{d.error}</div>}
       {rec.gpsError === 'denied' && (
         <div className="notice warn">
           <IconWarn size={20} />
@@ -204,6 +205,19 @@ export function PrepareScreen() {
             </button>
           ))}
         </div>
+      </section>
+
+      {/* 탈것 (바이크 모드 시안): 지금 탈것을 보이고 여기서도 바꾼다. 바이크 모양은 설정에서 */}
+      <section aria-label="탈것" className="card-col" style={{ gap: 8 }}>
+        <span className="label">탈것</span>
+        <div className="segmented small" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+          {(Object.keys(VEHICLE_LABEL) as Vehicle[]).map((k) => (
+            <button key={k} type="button" aria-pressed={settings.vehicle === k} onClick={() => setVehicle(k)}>
+              {VEHICLE_LABEL[k]}
+            </button>
+          ))}
+        </div>
+        {settings.vehicle === 'bike' && <span className="sub">{BIKE_MARKER_LABEL[settings.bikeMarker]} · 길찾기는 고속도로·자동차전용도로를 피해요</span>}
       </section>
 
       {d.mode === 'map' && (

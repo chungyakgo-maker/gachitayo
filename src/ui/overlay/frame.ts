@@ -35,6 +35,11 @@ export interface OverlayFrame {
   gEstimated?: boolean;
   /** G미터 바깥 원 g (설정, 기본 2) */
   gMax?: number;
+  /** 바이크 기울기 도 (+ 오른쪽, − 왼쪽, 추정). 모르면 null */
+  leanDeg?: number | null;
+  /** 이번 주행 최대 기울기 도 (왼쪽·오른쪽) */
+  maxLeanLeftDeg?: number;
+  maxLeanRightDeg?: number;
   /** 최근 G 궤적 [앞뒤 g, 좌우 g] (오래된 것부터, 마지막이 지금) */
   gTrail?: ReadonlyArray<readonly [number, number]>;
   currentSector: number | null;
@@ -87,6 +92,9 @@ export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, has
     gx: st?.gx ?? null,
     gy: st?.gy ?? null,
     gEstimated: st?.gEstimated ?? false,
+    leanDeg: st?.leanDeg ?? null,
+    maxLeanLeftDeg: st?.maxLeanLeftDeg ?? 0,
+    maxLeanRightDeg: st?.maxLeanRightDeg ?? 0,
     currentSector: st?.currentSector ?? null,
     sectorDeltas: st?.sectorDeltas ?? [null, null, null],
     me: snap?.pos ?? null,
@@ -146,8 +154,8 @@ export interface ValueTile {
   small: boolean;
 }
 
-/** 상단 표시 값 한 칸 (G미터 제외, 사양서 8.3.1) */
-export function widgetValue(id: Exclude<WidgetId, 'g' | 'pace' | 'none'>, f: OverlayFrame): ValueTile {
+/** 상단 표시 값 한 칸 (G미터·기울기 제외, 사양서 8.3.1) */
+export function widgetValue(id: Exclude<WidgetId, 'g' | 'lean' | 'pace' | 'none'>, f: OverlayFrame): ValueTile {
   const label = WIDGET_LABEL[id];
   if (id === 'gap') {
     const g = f.gap;

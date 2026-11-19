@@ -376,6 +376,55 @@ html.app-h .modal-backdrop {
   text-underline-offset: 3px;
 }
 
+/* 설정 › 저장 공간 (기록은 폰에만, 시안 ①): 이름 · 값 한 줄, 디고가 쓰는 저장 공간 막대 */
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15px;
+}
+.usage-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--card-line);
+  overflow: hidden;
+}
+.usage-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.backup-nudge {
+  align-items: center;
+  gap: 8px;
+}
+
+/* 모두의 코스 상세 아래 작은 단추 (신고·이 사람 코스 안 보기) */
+.shared-actions {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+}
+.shared-actions .link-btn {
+  align-self: auto;
+  color: var(--fg-dim);
+}
+
+/* 로그아웃·계정 지우기 창의 "기록도 지우기" (기록은 폰에만 6단계, 시안 ④): 손가락으로 누르기 쉽게 44px */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+}
+.check-row input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+  flex: none;
+}
+
 .segmented {
   display: grid;
   gap: 4px;
@@ -410,6 +459,12 @@ html.app-h .modal-backdrop {
   background: var(--bg);
 }
 
+/* 팀 방 "이번 주행" 목적지·코스 (시안 ⑨): 고른 칸은 강조색 — 분류 칩과 같은 색 */
+.segmented.accent button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 /* 설정: 내 차 표시 고르기 (그림 4개, 고른 칸은 흰 테두리 — 흰 화살표·흰 차가 흰 바탕에 묻히지 않게) */
 .marker-pick {
   display: grid;
@@ -419,6 +474,16 @@ html.app-h .modal-backdrop {
   background: var(--card);
   border: 1px solid var(--card-line);
   border-radius: 12px;
+}
+
+.marker-pick.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* 바이크 5종은 한 줄에 다섯 칸이라 그림을 조금 줄인다 (폰 폭 360에서도 넘치지 않게) */
+.marker-pick.five .marker-icon {
+  width: 54px;
+  height: 54px;
 }
 
 .marker-pick button {
@@ -487,6 +552,24 @@ html.app-h .modal-backdrop {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
+}
+
+.pill.bike {
+  background: rgba(58, 134, 255, 0.16);
+  color: #9cc4ff;
+}
+
+/* 바이크 경로에 자동차 전용 도로가 섞였을 때 (막는 오류가 아니라 확인해 달라는 알림이라 노란 테) */
+.notice.caution {
+  border-color: rgba(255, 196, 61, 0.55);
+  background: rgba(255, 196, 61, 0.08);
+  color: var(--fg);
+}
+
+.link-btn.inline {
+  min-height: 0;
+  display: inline;
+  font-size: inherit;
 }
 
 .pill.fast {
@@ -1625,6 +1708,18 @@ html.app-h .modal-backdrop {
   border: 1px solid var(--card-line);
 }
 
+/* 주행 요약 최대 기울기 (바이크): "왼쪽 41° 오른쪽 38°" */
+.lean-stat .v small {
+  margin-right: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-dim);
+}
+
+.lean-stat .v small.gap-left {
+  margin-left: 10px;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2410,6 +2505,14 @@ html.app-h .modal-backdrop {
 .dash-tile.g-tile .g-meter {
   display: block;
   flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* 대시보드 기울기 칸 (바이크): G미터 자리를 꽉 채운다 */
+.dash-tile.g-tile .lean-dash {
+  flex: 1;
+  align-self: stretch;
   min-height: 0;
   width: 100%;
 }
@@ -3502,4 +3605,145 @@ a.team-item {
   display: inline-flex;
   align-items: center;
   text-decoration: none;
+}
+
+/* ── 도움말 · 기능 알아보기 (설계 2026-11-18 help, 시안 docs/mock/2026-11-18-help.jpg) ── */
+.help-page {
+  gap: 12px;
+}
+
+.help-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  /* 칩으로 내려왔을 때 맨 위에 붙어 가리지 않게 (아이폰 상태 표시줄·다이내믹 아일랜드 아래로, 최종 검토 지적) */
+  scroll-margin-top: calc(12px + var(--safe-t));
+}
+
+.help-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.help-card ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+
+.help-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.help-steps li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  align-items: start;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.help-steps .n {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 칩 줄: 가로로 밀어서 더 본다 (폰 폭에 다 안 들어간다) */
+.help-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.help-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.help-chips button {
+  flex: none;
+  min-height: 36px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--card-line);
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.help-media {
+  position: relative;
+}
+
+.help-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--card-line);
+  background: var(--bg);
+}
+
+.help-gif {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.help-go {
+  align-self: flex-start;
+  min-height: 32px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* 메인: 처음 한 번 알림 */
+.help-nudge {
+  gap: 10px;
+}
+
+.help-nudge .btn {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.help-nudge-x {
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  background: none;
+  color: var(--fg-dim);
+  font-size: 16px;
 }

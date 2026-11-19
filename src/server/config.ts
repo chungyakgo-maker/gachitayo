@@ -5,5 +5,3 @@ export const serverConfig = {
 
 /** 계정(익명)을 만들 수 있는지 */
 export const accountEnabled = (): boolean => serverConfig.apiUrl !== '';
-/** 업로드할 수 있는지 */
-export const uploadEnabled = (): boolean => accountEnabled();

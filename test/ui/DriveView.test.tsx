@@ -47,6 +47,9 @@ function state(p: Partial<LiveState> = {}): LiveState {
     gx: -0.31,
     gy: 0.82,
     gEstimated: false,
+    leanDeg: null,
+    maxLeanLeftDeg: 0,
+    maxLeanRightDeg: 0,
     status: { gpsWeak: false, offCourse: false, gNotCalibrated: false, courseRecording: false },
     ...p,
   };
@@ -463,5 +466,21 @@ describe('일반 주행 화면', () => {
     expect(screen.getByText('일반 주행 · 기록 안 함')).toBeInTheDocument();
     expect(screen.getByText('끝나도 기록을 남기지 않아요')).toBeInTheDocument();
     expect(screen.queryByText('코스 기록 중')).toBeNull();
+  });
+});
+
+describe('바이크 기울기 칸 (2026-11-18 기울기 시안: 바늘)', () => {
+  it('상단 칸에 기울기를 고르면 지금 기울기와 이번 주행 최대를 그린다', () => {
+    const settings = { ...DEFAULT_SETTINGS, vehicle: 'bike' as const, widgets: ['lean', 'speed'] as ['lean', 'speed'] };
+    render(<DriveView {...props({ settings, snap: snap(state({ leanDeg: -32.4, maxLeanLeftDeg: 41, maxLeanRightDeg: 38 })) })} />);
+    expect(screen.getByRole('img', { name: '기울기 왼쪽 32도 (최대 왼쪽 41도, 오른쪽 38도)' })).toBeInTheDocument();
+  });
+
+  it('대시보드: 바이크면 G미터 자리에 기울기, 자동차면 G미터', () => {
+    const bike = render(<DriveView {...props({ mode: 'dashboard', settings: { ...DEFAULT_SETTINGS, vehicle: 'bike' }, snap: snap(state({ leanDeg: 12, maxLeanRightDeg: 20 })) })} />);
+    expect(screen.getByRole('img', { name: '기울기 오른쪽 12도 (최대 왼쪽 0도, 오른쪽 20도)' })).toBeInTheDocument();
+    bike.unmount();
+    render(<DriveView {...props({ mode: 'dashboard', snap: snap(state({ leanDeg: 12 })) })} />);
+    expect(screen.queryByRole('img', { name: /^기울기/ })).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import type { LiveSnapshot } from '../engine/live/livePipeline';
 import { bearingOfPsi, ROUTE, RouteGuide, type RouteStep } from '../engine/route/routeGuide';
 import type { Course } from '../types/course';
 import { getAuth } from './account';
+import { getSettings, subscribeSettings } from './settings';
 import { beginPrepare, chooseCourse, chooseFreeDrive, driveBusy, getDriveState, subscribeDrive, subscribeLive } from './drive';
 
 export interface Destination {
@@ -24,6 +25,13 @@ export interface RouteData {
   /** [위도, 경도] */
   points: Array<[number, number]>;
   destName: string | null;
+  /** 바이크 경로 (탈것이 바이크일 때 서버가 고속도로·자동차전용도로를 피해 찾은 경로) */
+  vehicle?: 'bike';
+  /** 바이크 경로에 섞였을 수 있는 자동차 전용 도로 이름 */
+  warnRoads?: string[];
+  /** 바이크 경로 후보 번호·수 ("다른 길로 다시 찾기") */
+  alt?: number;
+  alts?: number;
 }
 
 export interface RoutePlan {
@@ -61,10 +69,14 @@ const distM = (a: LatLon, b: LatLon) => {
 const online = () => typeof navigator === 'undefined' || navigator.onLine !== false;
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : NET_ERROR);
 
-async function requestRoute(from: LatLon, to: LatLon, headingDeg?: number): Promise<RouteData> {
+const bikeNow = () => getSettings().vehicle === 'bike';
+
+/** 탈것이 바이크면 바이크 경로(서버가 고속도로·자동차전용도로를 피함)를 묻는다. alt: 바이크 경로의 다음 후보 */
+async function requestRoute(from: LatLon, to: LatLon, headingDeg?: number, alt = 0): Promise<RouteData> {
   const auth = getAuth();
   if (!auth) throw new ApiError(401, NO_ACCOUNT);
-  const body = { from: { lat: from.lat, lon: from.lon }, to: { lat: to.lat, lon: to.lon }, ...(headingDeg === undefined ? {} : { headingDeg }) };
+  const bike = bikeNow() ? { vehicle: 'bike', ...(alt > 0 ? { alt } : {}) } : {};
+  const body = { from: { lat: from.lat, lon: from.lon }, to: { lat: to.lat, lon: to.lon }, ...(headingDeg === undefined ? {} : { headingDeg }), ...bike };
   return apiFetch<RouteData>('POST', '/api/route', { token: auth.token, body, signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) });
 }
 
@@ -107,11 +119,11 @@ export function usePlan(): RoutePlan {
 let planSeq = 0;
 
 /** 목적지까지 경로를 받는다. 그 사이 다른 목적지를 고르면 늦게 온 응답은 버린다 */
-export async function planTo(dest: Destination, from: LatLon): Promise<void> {
+export async function planTo(dest: Destination, from: LatLon, alt = 0): Promise<void> {
   const seq = ++planSeq;
   setPlan({ dest, route: null, status: 'loading', error: null });
   try {
-    const route = await requestRoute(from, dest);
+    const route = await requestRoute(from, dest, undefined, alt);
     if (seq !== planSeq) return;
     const name = dest.kind === 'map' ? (route.destName ? `${route.destName} 부근` : MAP_PICK_NAME) : dest.name;
     setPlan({ dest: { ...dest, name }, route, status: 'ready' });
@@ -119,6 +131,13 @@ export async function planTo(dest: Destination, from: LatLon): Promise<void> {
     if (seq !== planSeq) return;
     setPlan({ status: 'error', error: errText(e) });
   }
+}
+
+/** 바이크 경로에 자동차 전용 도로가 섞였을 때 "다른 길로 다시 찾기": 서버가 준 다음 후보 경로 (후보가 하나면 그대로) */
+export async function planOtherRoute(from: LatLon): Promise<void> {
+  const { dest, route } = plan;
+  if (!dest || !route || !route.alts || route.alts < 2) return;
+  await planTo(dest, from, ((route.alt ?? 0) + 1) % route.alts);
 }
 
 export function setRecord(on: boolean): void {
@@ -221,16 +240,35 @@ export function startRouteDrive(): void {
   beginPrepare();
   if (record) chooseCourse(null);
   else chooseFreeDrive();
-  startNavWithRoute(route, dest);
+  // 내가 찾은 경로: 그때 탈것으로 찾았으니 다시 찾지 않는다 (서버가 예전이라 바이크 표시가 없어도, 검토 지적: 출발마다 길찾기 한 번 더)
+  startNavWithRoute(route, dest, true);
 }
 
-/** 이 경로로 안내를 켠다 (목적지 화면의 출발, 그룹 주행의 방장 경로). 주행 준비는 부른 쪽이 연다 */
-export function startNavWithRoute(route: RouteData, dest: LatLon): void {
+/** 목적지만 받은 경로이거나, 남이 준 경로(팀 방장)인데 나는 바이크이고 바이크 경로가 아니면 내 위치에서 다시 찾는다 */
+const needOwnRoute = (route: RouteData, own = false): boolean => isDestOnly(route) || (!own && bikeNow() && route.vehicle !== 'bike');
+
+// 안내 중에 탈것을 바이크로 바꾸면(주행 준비 화면 등) 자동차 경로를 그대로 두지 않고 내 위치에서 바이크 경로로 다시 찾는다 (검토 지적)
+let lastVehicle = getSettings().vehicle;
+subscribeSettings(() => {
+  const v = getSettings().vehicle;
+  if (v === lastVehicle) return;
+  lastVehicle = v;
+  if (v === 'bike' && nav && nav.route.vehicle !== 'bike') rerouteNow = true;
+});
+
+/** 팀 방 코스의 출발점까지 안내할 때 그 코스 번호 (3부). 이 코스를 고른 동안은 안내를 끝내지 않는다 */
+let navCourseId: string | null = null;
+
+/** 이 경로로 안내를 켠다 (목적지 화면의 출발, 그룹 주행의 방장 경로). 주행 준비는 부른 쪽이 연다. own: 이 폰에서 찾은 경로.
+ *  toCourse: 팀 방 코스의 출발점까지 안내 — 그 코스를 골라도 안내를 이어 간다 (검토 지적: 코스를 고르면 안내가 바로 꺼졌다) */
+export function startNavWithRoute(route: RouteData, dest: LatLon, own = false, toCourse: string | null = null): void {
   stopNav();
   const first = route.points[0]!;
   navDest = { lat: dest.lat, lon: dest.lon };
-  // 목적지만 받은 경로(정식 빌드 팀 주행)면 내 위치가 잡히는 대로 내 위치에서 찾는다
-  rerouteNow = isDestOnly(route);
+  navCourseId = toCourse;
+  // 목적지만 받은 경로(정식 빌드 팀 주행)면 내 위치가 잡히는 대로 내 위치에서 찾는다.
+  // 바이크인데 바이크 경로가 아니면(방장이 자동차) 고속도로가 섞일 수 있어 내 위치에서 바이크 경로로 다시 찾는다
+  rerouteNow = needOwnRoute(route, own);
   setNav({ guide: new RouteGuide(route.points, { lat: first[0], lon: first[1] }), route, step: null, status: 'guiding' });
   unsubs = [
     subscribeLive((s) => {
@@ -243,21 +281,23 @@ export function startNavWithRoute(route: RouteData, dest: LatLon): void {
 }
 
 /** 주행 중 경로를 바꾼다 (그룹 주행: 방장이 목적지를 새로 정함). 안내가 꺼져 있으면 켠다 */
-export function replaceNavRoute(route: RouteData, dest: LatLon): void {
+export function replaceNavRoute(route: RouteData, dest: LatLon, toCourse: string | null = null): void {
   if (!nav) {
-    startNavWithRoute(route, dest);
+    startNavWithRoute(route, dest, false, toCourse);
     return;
   }
+  navCourseId = toCourse;
   navSeq++;
   inflight = false;
   lastReqAt = -Infinity;
   navDest = { lat: dest.lat, lon: dest.lon };
-  rerouteNow = isDestOnly(route);
+  rerouteNow = needOwnRoute(route);
   setNav({ guide: new RouteGuide(route.points, nav.guide.origin), route, step: null, status: 'guiding' });
 }
 
 export function stopNav(): void {
   rerouteNow = false;
+  navCourseId = null;
   navSeq++;
   inflight = false;
   lastReqAt = -Infinity;
@@ -274,8 +314,10 @@ const statusOf = (step: RouteStep): NavLive['status'] => (step.arrived ? 'arrive
 export function navTick(snap: LiveSnapshot, now = Date.now()): void {
   const n = nav;
   if (!n) return;
-  // 준비 화면에서 코스를 고르면 코스 주행 (경로 안내를 끝낸다: 뒤에서 다시 찾기를 계속 보내지 않게)
-  if (getDriveState().course) {
+  // 준비 화면에서 코스를 고르면 코스 주행 (경로 안내를 끝낸다: 뒤에서 다시 찾기를 계속 보내지 않게).
+  // 팀 방 코스의 출발점 안내는 그 코스를 고른 동안 이어 간다
+  const chosen = getDriveState().course;
+  if (chosen && chosen.id !== navCourseId) {
     stopNav();
     return;
   }

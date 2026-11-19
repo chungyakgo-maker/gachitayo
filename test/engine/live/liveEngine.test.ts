@@ -104,3 +104,18 @@ describe('주행 거리·평균 속도', () => {
     expect(st.distM).toBeCloseTo(60, 6);
   });
 });
+
+// 바이크 기울기 (2026-11-18 바이크 모드): 들어온 기울기를 그대로 보이고, 왼쪽·오른쪽 최대를 따로 기억한다
+describe('기울기', () => {
+  const inp = (t: number, leanDeg: number | null) => ({ t, x: t / 10, y: 0, v: 20, sigmaPos: 2, ax: null, ay: null, gpsOk: true, gCalibrated: false, leanDeg });
+
+  it('지금 기울기와 이번 주행 왼쪽·오른쪽 최대', () => {
+    const e = new LiveEngine(null, null);
+    let st = e.push(inp(0, null));
+    expect([st.leanDeg, st.maxLeanLeftDeg, st.maxLeanRightDeg]).toEqual([null, 0, 0]);
+    st = e.push(inp(100, 32));
+    st = e.push(inp(200, -41));
+    st = e.push(inp(300, 5));
+    expect([st.leanDeg, st.maxLeanLeftDeg, st.maxLeanRightDeg]).toEqual([5, 41, 32]);
+  });
+});

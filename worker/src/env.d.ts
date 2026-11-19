@@ -29,6 +29,8 @@ declare namespace Cloudflare {
     APPLE_TEAM_ID?: string;
     /** 아이폰 앱 번들 ID (없으면 kr.dgo.app) */
     APPLE_BUNDLE_ID?: string;
+    /** 관리자 계정 번호 (모두의 코스 관리, 쉼표로 여러 개, GitHub Secrets ADMIN_USER_IDS → 배포 때 Worker 비밀값). 없으면 관리자 없음 */
+    ADMIN_USER_IDS?: string;
     /** 테스트에서만: 적용할 D1 마이그레이션 */
     TEST_MIGRATIONS?: import('cloudflare:test').D1Migration[];
   }

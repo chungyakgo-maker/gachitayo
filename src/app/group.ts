@@ -1,15 +1,18 @@
 // 그룹 주행 (설계 docs/superpowers/specs/2026-11-16-group-drive-design.md, 사용자 요청 "방 만들고 그룹주행"):
 // 방 만들기·코드로 들어가기, 방 상태와 다른 사람 위치 받기(웹소켓), 주행 중 내 GPS 보내기, 방장 동작(순서·차 간격·목적지),
 // 방장이 정한 목적지 경로를 참가자에게 "이 경로로 진행"으로 묻고, 받으면 경로 안내를 켠다.
+// 방장이 목적지 대신 코스를 정하면(3부) 코스 모양을 받아 묻고, 받으면 폰의 코스로 이어 출발 때 그 코스를 고르고 출발점까지 안내한다.
 import { destOnlyRoute } from './destOnly';
 import { useSyncExternalStore } from 'react';
 import { shareAnyLocation } from '../features';
 import { ApiError, apiFetch } from '../server/api';
 import { friendlyServerError, getAuth } from './account';
-import { getDriveState, subscribeDrive } from './drive';
+import type { Course } from '../types/course';
+import { chooseCourse, getDriveState, notePrepareError, subscribeDrive } from './drive';
 import { keepConnected, type LivePoint } from './liveLink';
 import { subscribeSamples } from './recording';
 import { getNavLive, replaceNavRoute, startNavWithRoute, type RouteData } from './routeNav';
+import { courseForRoom, refreshTeamCourse, roomCourseBody, type RoomCourse, type RoomCourseMeta } from './teamCourse';
 
 /** 들어온 순서로 하나씩 (방 안에서 안 겹침, 서버 색 번호 0~7) */
 export const GROUP_COLORS = ['#5ac8fa', '#ff9f43', '#2ecc71', '#ff6b9a', '#ffd23f', '#c084fc', '#22d3ee', '#a3e635'] as const;
@@ -33,12 +36,18 @@ export interface GroupRoomState {
   members: GroupMember[];
   gapS: number;
   dest: { name: string; lat: number; lon: number } | null;
+  /** 방장이 코스를 정했으면 그 요약 (dest 는 그 코스의 출발점, 3부). 예전 서버·목적지 판이면 null */
+  course?: RoomCourseMeta | null;
   routeVersion: number;
 }
 export interface GroupOffer {
   version: number;
   dest: { name: string; lat: number; lon: number };
   route: RouteData;
+  /** 코스 판이면 코스 모양 */
+  course?: RoomCourse;
+  /** 코스를 폰에 담지 못한 까닭 (코스 200개 등) — 창에 보이고 다시 누를 수 있다 */
+  error?: string;
 }
 export interface GroupState {
   room: GroupRoomState | null;
@@ -106,7 +115,11 @@ let unsubGps: (() => void) | null = null;
 let unsubDrive: (() => void) | null = null;
 let lastSent = 0;
 /** 받은(또는 방장이 정한) 경로: 출발할 때마다 이 경로로 안내 (지금 방 판과 같을 때만) */
-let accepted: GroupOffer | null = null;
+let accepted: (GroupOffer & { local?: Course }) | null = null;
+/** 팀 방 코스라서 저절로 고른 코스 번호 (방장이 목적지로 바꾸면 준비 중인 주행에서 풀어 준다. 내가 고른 코스는 건드리지 않는다) */
+let autoCourseId: string | null = null;
+/** 방장이 방금 고른 코스 (자기 판은 다시 찾지 않고 이 코스로 받는다) */
+let hostPick: Course | null = null;
 /** 방 열기 번호: 늦게 끝난 열기는 버린다 */
 let openSeq = 0;
 /** 만들기·코드 입장이 진행 중 (앱을 열 때 예전 방으로 돌아가기가 끼어들지 않게) */
@@ -160,7 +173,7 @@ function onMessage(data: string): void {
   if (m.type === 'state') {
     const room = m as unknown as GroupRoomState;
     set({
-      room: { roomId: room.roomId || state.room?.roomId || '', code: room.code, teamId: room.teamId ?? null, teamName: room.teamName ?? null, members: room.members, gapS: room.gapS, dest: room.dest, routeVersion: room.routeVersion },
+      room: { roomId: room.roomId || state.room?.roomId || '', code: room.code, teamId: room.teamId ?? null, teamName: room.teamName ?? null, members: room.members, gapS: room.gapS, dest: room.dest, course: room.course ?? null, routeVersion: room.routeVersion },
     });
     void checkRoute();
   } else if (m.type === 'pos' && typeof m.userId === 'string') {
@@ -184,12 +197,24 @@ async function checkRoute(): Promise<void> {
   if (settled() || fetching === v) return;
   fetching = v;
   try {
-    const route = await apiFetch<(RouteData & { version?: number }) | null>('GET', `/api/rooms/${room.roomId}/route`, { token: token() });
-    const cur = state.room;
+    let offer: GroupOffer | null = null;
     // 그사이 방·판이 바뀌었거나 이미 답했으면 버린다 (검토 지적: 받은 뒤 다시 묻는 창이 떴다)
-    if (!route || !cur?.dest || cur.roomId !== room.roomId || cur.routeVersion !== v || (route.version !== undefined && route.version !== v) || settled()) return;
-    const offer: GroupOffer = { version: v, dest: cur.dest, route: { points: route.points, distanceM: route.distanceM, durationS: route.durationS, destName: route.destName ?? null } };
-    if (isGroupHost(state) || v <= state.acceptedVersion) applyOffer(offer);
+    const stale = (version: number | undefined) => {
+      const cur = state.room;
+      return !cur?.dest || cur.roomId !== room.roomId || cur.routeVersion !== v || (version !== undefined && version !== v) || settled();
+    };
+    if (room.course) {
+      // 코스 판: 길은 각자 찾는다 — 출발점(목적지)만 담은 경로 (방장 위치를 담지 않는다)
+      const c = await apiFetch<(RoomCourse & { version?: number }) | null>('GET', `/api/rooms/${room.roomId}/course`, { token: token() });
+      if (!c || stale(c.version)) return;
+      const { version: _v, ...course } = c;
+      offer = { version: v, dest: state.room!.dest!, route: destOnlyRoute(state.room!.dest!), course };
+    } else {
+      const route = await apiFetch<(RouteData & { version?: number }) | null>('GET', `/api/rooms/${room.roomId}/route`, { token: token() });
+      if (!route || stale(route.version)) return;
+      offer = { version: v, dest: state.room!.dest!, route: { points: route.points, distanceM: route.distanceM, durationS: route.durationS, destName: route.destName ?? null } };
+    }
+    if (isGroupHost(state) || v <= state.acceptedVersion) await takeOffer(offer);
     else set({ offer, later: null });
   } catch {
     // 다음 상태 때 다시
@@ -198,24 +223,68 @@ async function checkRoute(): Promise<void> {
   }
 }
 
-function applyOffer(o: GroupOffer): void {
-  accepted = o;
+function applyOffer(o: GroupOffer & { local?: Course }): void {
+  const { error: _e, ...ok } = o;
+  accepted = ok;
   set({ offer: null, later: null, acceptedVersion: o.version });
   if (state.room) remember(state.room.roomId, o.version);
+  const d = getDriveState();
+  if (o.local) {
+    // 코스 판: 주행 준비 중이면 바로 그 코스로. 이미 달리는 중이면 지금 주행의 코스는 두고 다음 출발부터 (검토 초점 5)
+    if (d.phase === 'preparing') {
+      chooseCourse(o.local);
+      autoCourseId = o.local.id;
+      replaceNavRoute(o.route, o.dest, o.local.id);
+    }
+    return;
+  }
+  // 목적지 판: 준비 중인데 팀 코스를 저절로 골라 둔 상태면 풀고 목적지로 (검토 지적: 예전 코스가 남아 새 안내가 꺼졌다)
+  if (d.phase === 'preparing' && autoCourseId && d.course?.id === autoCourseId) {
+    autoCourseId = null;
+    chooseCourse(null);
+  }
   // 주행 중이면 바로 바꾸고, 아니면 출발할 때 켠다 (startGroupNav)
-  if (getDriveState().phase !== 'idle') replaceNavRoute(o.route, o.dest);
+  if (d.phase !== 'idle') replaceNavRoute(o.route, o.dest);
 }
 
-export function acceptRouteOffer(): void {
-  if (state.offer) applyOffer(state.offer);
+/** 받기: 코스 판이면 폰의 코스로 먼저 잇는다 (못 담으면 창에 까닭을 두고 방은 그대로) */
+let taking = 0;
+async function takeOffer(o: GroupOffer): Promise<void> {
+  if (!o.course) {
+    applyOffer(o);
+    return;
+  }
+  if (taking === o.version) return;
+  taking = o.version;
+  const roomId = state.room?.roomId;
+  // 그사이 다른 방으로 옮겼거나 판이 바뀌었으면 버린다 (검토 지적: 다른 방의 같은 판 번호에 붙었다)
+  const same = () => state.room?.roomId === roomId && state.room?.routeVersion === o.version;
+  try {
+    // 방장 자기 판은 방금 고른 코스 그대로 (다시 찾다 어긋나면 사본이 생기거나 팀원 창이 떴다, 검토 지적)
+    const local = hostPick && isGroupHost(state) ? hostPick : await courseForRoom(o.course);
+    if (same()) applyOffer({ ...o, local });
+  } catch (e) {
+    if (same()) set({ offer: { ...o, error: e instanceof Error ? e.message : String(e) }, later: null });
+  } finally {
+    if (taking === o.version) taking = 0;
+  }
+}
+
+export async function acceptRouteOffer(): Promise<void> {
+  if (state.offer) await takeOffer(state.offer);
 }
 export function dismissRouteOffer(): void {
   set({ offer: null, later: state.offer });
 }
 /** 대기실에서 "나중에" 했던 목적지를 다시 묻는다 */
 export function reopenRouteOffer(): void {
-  if (state.later && state.later.version === state.room?.routeVersion) set({ offer: state.later, later: null });
+  if (!state.later || state.later.version !== state.room?.routeVersion) return;
+  // 예전에 담지 못한 까닭은 지운다 (그사이 코스를 지웠을 수 있다)
+  const { error: _e, ...o } = state.later;
+  set({ offer: o, later: null });
 }
+/** 받은 코스 (지금 방 판일 때만) — 대기실 "출발 준비"가 코스 없이 고르지 않게 */
+export const acceptedCourse = (): Course | null => (accepted && accepted.version === state.room?.routeVersion ? (accepted.local ?? null) : null);
 /** 출발 때 켤 경로가 있는지 (대기실 안내) */
 export const hasPendingRoute = (): boolean => !!accepted && accepted.version === state.room?.routeVersion && getNavLive() === null;
 
@@ -273,6 +342,8 @@ async function open(roomId: string, seq: number, acceptedVersion = 0): Promise<b
   remember(roomId, acceptedVersion);
   accepted = null;
   fetching = 0;
+  taking = 0;
+  autoCourseId = null;
   setPoints({});
   set({ ...EMPTY, room: { ...room, roomId }, me: getAuth()?.userId ?? null, acceptedVersion });
   connect(roomId);
@@ -342,7 +413,20 @@ export const setGroupGap = (gapS: number) => post('gap', { gapS });
 export async function shareGroupDestination(dest: { name: string; lat: number; lon: number }, route: RouteData): Promise<void> {
   // 정식 빌드: 방장 위치에서 시작하는 경로 대신 목적지만 보낸다 (받은 사람은 자기 위치에서 찾는다, destOnly.ts)
   const r = shareAnyLocation() ? route : destOnlyRoute(dest);
+  hostPick = null;
   await post('dest', { name: dest.name, lat: dest.lat, lon: dest.lon, route: { points: r.points, distanceM: r.distanceM, durationS: r.durationS } });
+}
+/** 방장: 목적지 대신 코스를 정한다 (코스 모양만 보낸다 — 방장 위치 없음). 방은 목적지를 그 코스의 출발점으로 같이 바꾼다 */
+export async function shareGroupCourse(c: Course): Promise<void> {
+  const body = roomCourseBody(c);
+  // 방 상태가 답보다 먼저 올 수 있어 보내기 전에 적어 둔다
+  hostPick = c;
+  try {
+    await post('course', body);
+  } catch (e) {
+    hostPick = null;
+    throw e;
+  }
 }
 
 /** 방장: 순서 한 칸 올리기·내리기 */
@@ -355,11 +439,33 @@ export async function moveGroupMember(userId: string, d: -1 | 1): Promise<void> 
   await setGroupOrder(ms.map((m) => m.userId));
 }
 
-/** 출발: 받은 경로가 지금 방 판이면 그 경로로 안내를 켠다. 이미 다른 안내 중이면(목적지 화면에서 출발 등) 그대로 둔다 */
+/** 출발: 받은 경로가 지금 방 판이면 그 경로로 안내를 켠다. 이미 다른 안내 중이면(목적지 화면에서 출발 등) 그대로 둔다.
+ *  코스 판이면 출발점까지 안내하고 그 코스를 고른다 — 같은 탭에서 내가 직접 코스를 골랐으면(코스 상세의 "이 코스로 주행") 그 코스를 둔다 */
 export function startGroupNav(): void {
   const o = accepted;
   if (!o || !state.room || o.version !== state.room.routeVersion || getNavLive() !== null) return;
-  startNavWithRoute(o.route, o.dest);
+  const local = o.local;
+  if (!local) {
+    startNavWithRoute(o.route, o.dest);
+    return;
+  }
+  // beginPrepare 가 준비 상태를 알리는 순간에 불린다: 같은 탭의 chooseCourse(내 선택)가 끝난 뒤에 본다.
+  // 폰에서 그 코스를 다시 찾는다 (고쳤으면 고친 판, 지웠으면 다시 잇기)
+  const ok = () => {
+    const d = getDriveState();
+    return d.phase === 'preparing' && !d.courseChosen && accepted === o && getNavLive() === null;
+  };
+  void Promise.resolve()
+    .then(() => (ok() && o.course ? refreshTeamCourse(local, o.course) : null))
+    .then((cur) => {
+      if (!cur || !ok()) return;
+      accepted = { ...o, local: cur };
+      chooseCourse(cur);
+      autoCourseId = cur.id;
+      // 그 코스의 출발점까지 각자 위치에서 안내 (코스를 골라도 안내가 이어지게 코스 번호를 같이 준다)
+      startNavWithRoute(o.route, o.dest, false, cur.id);
+    })
+    .catch((e: unknown) => notePrepareError(e instanceof Error ? e.message : String(e)));
 }
 
 /** 서버에 알리지 않고 이 폰에서만 방을 잊는다 (로그아웃, 방이 닫힘) */
@@ -373,6 +479,9 @@ export function leaveGroupLocal(): void {
   unsubDrive = null;
   accepted = null;
   fetching = 0;
+  taking = 0;
+  autoCourseId = null;
+  hostPick = null;
   try {
     localStorage.removeItem(ROOM_KEY);
   } catch {

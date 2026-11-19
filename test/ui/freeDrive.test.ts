@@ -51,3 +51,22 @@ describe('일반 주행 (기록 안 남김)', () => {
     await d.cancelPrepare();
   });
 });
+
+describe('바이크로 달린 주행 표시 (2026-11-18 바이크 모드: 요약에 최대 기울기)', () => {
+  it('탈것이 바이크면 시작할 때 세션에 vehicle: bike, 자동차면 없음', async () => {
+    const d = await import('../../src/app/drive');
+    const { updateSettings, DEFAULT_SETTINGS } = await import('../../src/app/settings');
+    for (const vehicle of ['bike', 'car'] as const) {
+      update.mockClear();
+      updateSettings({ vehicle });
+      d.beginPrepare();
+      d.chooseFreeDrive();
+      d.startDrive();
+      const patch = (update.mock.calls.at(-1) as unknown as [string, Record<string, unknown>])[1];
+      if (vehicle === 'bike') expect(patch).toMatchObject({ vehicle: 'bike' });
+      else expect(patch).not.toHaveProperty('vehicle');
+      await d.endDrive();
+    }
+    updateSettings(DEFAULT_SETTINGS);
+  });
+});

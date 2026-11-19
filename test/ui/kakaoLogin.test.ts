@@ -181,4 +181,18 @@ describe('카카오 로그인 시작·마치기 (앱)', () => {
     expect(a.getAccountState().kakao).toBe(true);
     expect(localStorage.getItem('gachitayo.kakao')).toBe('1');
   });
+
+  it('/api/me의 admin(모두의 코스 관리자)을 상태에만 반영한다 (폰에 저장 안 함)', async () => {
+    localStorage.setItem('gachitayo.token', 't'.repeat(43));
+    localStorage.setItem('gachitayo.userId', 'u1');
+    localStorage.setItem('gachitayo.onboarded', '1');
+    const { a } = await load();
+    fetchMock.mockResolvedValueOnce(json(200, { userId: 'u1', nickname: '민수', kakao: true, admin: true }));
+    await a.initAccount();
+    expect(a.getAccountState().admin).toBe(true);
+    expect(Object.keys(localStorage).some((k) => k.includes('admin'))).toBe(false);
+    // 로그아웃하면 관리자 표시도 지운다 (다음 계정에 남지 않게)
+    a.forgetAccount();
+    expect(a.getAccountState().admin).toBeFalsy();
+  });
 });

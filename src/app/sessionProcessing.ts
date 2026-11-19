@@ -1,5 +1,6 @@
 // 주행이 끝난 뒤: 폰에 저장된 원본 → 주행 후 처리(사양서 5.4) → 결과·비교 랩·세션 요약 저장.
 // 첫 주행이면 코스를 제안만 하고, 사용자가 종료 화면에서 종류·이름을 정해 저장한다 (사양서 8.5).
+import { assertCourseRoom } from './storageLimits';
 import type { DriveInput, DriveResult } from '../engine/process/processDrive';
 import type { DriveRepo } from '../storage/driveRepo';
 import type { SessionRepo } from '../storage/sessionRepo';
@@ -89,6 +90,7 @@ export async function processStoredSession(deps: ProcessDeps, sessionId: string,
 export async function saveDetourAsNew(deps: ProcessDeps, sessionId: string, name: string): Promise<{ result: DriveResultRecord; course: Course }> {
   const rec = await deps.drive.getResult(sessionId);
   if (!rec?.detourCourse) throw new Error('저장할 길이 없습니다');
+  await assertCourseRoom(deps.drive);
   const newId = deps.newId ?? (() => crypto.randomUUID());
   const { builtin: _builtin, ...d } = rec.detourCourse;
   const course: Course = { ...d, id: newId(), name: name.trim() || '새 코스', source: 'auto', version: 1 };
@@ -143,6 +145,7 @@ export async function saveProposedCourse(
 ): Promise<{ result: DriveResultRecord; course: Course }> {
   const [session, rec] = await Promise.all([deps.sessions.get(sessionId), deps.drive.getResult(sessionId)]);
   if (!session || !rec?.proposedCourse) throw new Error('저장할 코스가 없습니다');
+  await assertCourseRoom(deps.drive);
   const course: Course = { ...rec.proposedCourse, name: name.trim() || '새 코스' };
   await deps.drive.putCourse(course);
   const result: DriveResultRecord = { ...rec, courseId: course.id, courseVersion: course.version, proposedCourse: null, previousBestMs: null };

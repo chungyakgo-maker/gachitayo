@@ -5,7 +5,8 @@ import { gateFromPoint, gateSegment } from '../../engine/course/geometry';
 import type { RouteGuide } from '../../engine/route/routeGuide';
 import { toLocal } from '../../engine/geo';
 import type { Course } from '../../types/course';
-import type { CarMarker } from '../../app/settings';
+import type { MeMarker } from '../../app/settings';
+import { BIKE_MARK, drawBikeMark, type BikeMarker } from './bikeMarks';
 import { roundRect, type Ctx } from './draw';
 import type { OverlayFrame, XY } from './frame';
 import type { OverlayTheme } from './theme';
@@ -126,7 +127,7 @@ export interface MiniMapOpts {
   /** 돌린 지도에서 왼쪽 위 작은 나침반 (주행 화면은 나침반 버튼이 대신하므로 끈다) */
   north?: boolean;
   /** 내 차 표시 모양 (설정, 기본 화살표) */
-  marker?: CarMarker;
+  marker?: MeMarker;
 }
 
 /** 화면에 맞추기: 코스가 있으면 코스 전체, 없으면 지나온 경로와 내 위치 (너무 작으면 200 m 범위) */
@@ -386,10 +387,19 @@ function withShadow(ctx: Ctx, draw: () => void): void {
 }
 
 /** 내 위치. dir: 화면에서 진행 방향(단위 벡터), 모르면 null → 방향 없는 큰 점 */
-function drawMe(ctx: Ctx, x: number, y: number, dir: readonly [number, number] | null, kind: CarMarker): void {
-  const m = ME_MARKER[kind];
+function drawMe(ctx: Ctx, x: number, y: number, dir: readonly [number, number] | null, kind: MeMarker): void {
   ctx.setLineDash([]);
   ctx.lineJoin = 'round';
+  if (kind in BIKE_MARK) {
+    // 바이크는 방향을 모르면 위를 보게 그린다 (바이크 모양이 곧 표시라 점으로 바꾸지 않는다)
+    ctx.save();
+    ctx.translate(x, y);
+    if (dir) ctx.rotate(Math.atan2(dir[0], -dir[1]));
+    drawBikeMark(ctx, kind as BikeMarker);
+    ctx.restore();
+    return;
+  }
+  const m = ME_MARKER[kind as keyof typeof ME_MARKER];
   if (!dir) {
     disc(ctx, x, y, 24, m.halo);
     withShadow(ctx, () => disc(ctx, x, y, 12, m.body));
@@ -411,7 +421,7 @@ function drawMe(ctx: Ctx, x: number, y: number, dir: readonly [number, number] |
 }
 
 /** 설정 화면의 작은 미리보기: 칸 가운데에 위를 보게, 줄여서 */
-export function drawMeIcon(ctx: Ctx, w: number, h: number, kind: CarMarker): void {
+export function drawMeIcon(ctx: Ctx, w: number, h: number, kind: MeMarker): void {
   ctx.save();
   ctx.translate(w / 2, h / 2 + 2);
   ctx.scale(0.62, 0.62);

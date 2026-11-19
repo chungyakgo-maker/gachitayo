@@ -221,4 +221,67 @@ describe('그룹 주행 방 (검토 지적)', () => {
     hs.ws.close();
     as.ws.close();
   });
+
+  // 3부 팀 방 코스 지정 (설계 2026-11-18-local-records-course-share-design.md 3부, 시안 ⑨⑩)
+  describe('방장이 코스를 정한다', () => {
+    const gate = (lat: number) => ({ lat, lon: 127.5, bearingDeg: 30, widthM: 30 });
+    const course = (p: Record<string, unknown> = {}) => ({
+      name: '유명산 업힐',
+      kind: 'point_to_point',
+      lengthM: 7800,
+      key: 's:pub-1',
+      startGate: gate(37.5),
+      finishGate: gate(37.57),
+      sectorBoundsM: [2600, 5200],
+      line: Array.from({ length: 50 }, (_, i) => [37.5 + i * 0.0014, 127.5]),
+      ...p,
+    });
+
+    it('방장만 정한다. 정하면 상태에 코스 요약, 목적지는 "이름 · 출발점"(출발선), 판 +1, /route 는 목적지만', async () => {
+      const h = await user('방장');
+      const { roomId, code } = await create(h);
+      const a = await user('친구1');
+      await call('POST', '/api/rooms/join', { token: a.token, body: { code } });
+      expect((await call('POST', `/api/rooms/${roomId}/course`, { token: a.token, body: course() })).status).toBe(403);
+      expect((await call('POST', `/api/rooms/${roomId}/course`, { token: h.token, body: course() })).status).toBe(200);
+      const s = (await state(roomId, a)) as Room & { course: unknown };
+      expect(s.course).toEqual({ name: '유명산 업힐', kind: 'point_to_point', lengthM: 7800, key: 's:pub-1' });
+      expect(s.dest).toEqual({ name: '유명산 업힐 · 출발점', lat: 37.5, lon: 127.5 });
+      expect(s.routeVersion).toBe(1);
+      // 예전 앱은 이 목적지만 담은 경로로 각자 길을 찾는다
+      expect(await (await call('GET', `/api/rooms/${roomId}/route`, { token: a.token })).json()).toMatchObject({ distanceM: 0, durationS: 0, version: 1 });
+      const got = (await (await call('GET', `/api/rooms/${roomId}/course`, { token: a.token })).json()) as Record<string, unknown>;
+      expect(got).toMatchObject({ name: '유명산 업힐', startGate: gate(37.5), finishGate: gate(37.57), sectorBoundsM: [2600, 5200], key: 's:pub-1', version: 1 });
+      expect((got.line as unknown[]).length).toBe(50);
+      const outsider = await user('남');
+      expect((await call('GET', `/api/rooms/${roomId}/course`, { token: outsider.token })).status).toBe(403);
+    });
+
+    it('목적지를 정하면 코스는 비워진다', async () => {
+      const h = await user('방장');
+      const { roomId } = await create(h);
+      await call('POST', `/api/rooms/${roomId}/course`, { token: h.token, body: course() });
+      const route = { points: [[37.5, 127], [37.51, 127.01]], distanceM: 1500, durationS: 120 };
+      await call('POST', `/api/rooms/${roomId}/dest`, { token: h.token, body: { name: '만항재', lat: 37.51, lon: 127.01, route } });
+      const s = (await state(roomId, h)) as Room & { course: unknown };
+      expect(s.course).toBeNull();
+      expect(s.routeVersion).toBe(2);
+      expect(await (await call('GET', `/api/rooms/${roomId}/course`, { token: h.token })).json()).toBeNull();
+    });
+
+    it('잘못된 코스는 400 (이름·종류·선·열쇠·게이트), 선 없는 코스는 된다', async () => {
+      const h = await user('방장');
+      const { roomId } = await create(h);
+      const bad = async (p: Record<string, unknown>) => (await call('POST', `/api/rooms/${roomId}/course`, { token: h.token, body: course(p) })).status;
+      expect(await bad({ name: '' })).toBe(400);
+      expect(await bad({ name: 'x'.repeat(41) })).toBe(400);
+      expect(await bad({ kind: 'circle' })).toBe(400);
+      expect(await bad({ line: [[37.5, 127.5]] })).toBe(400);
+      expect(await bad({ line: Array.from({ length: 3001 }, () => [37.5, 127.5]) })).toBe(400);
+      expect(await bad({ key: 'haogogae' })).toBe(400);
+      expect(await bad({ startGate: { lat: 99, lon: 127, bearingDeg: 0, widthM: 30 } })).toBe(400);
+      expect(await bad({ lengthM: 100_001 })).toBe(400);
+      expect(await bad({ line: [], key: null })).toBe(200);
+    });
+  });
 });

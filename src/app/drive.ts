@@ -26,7 +26,8 @@ import {
   subscribeSamples,
 } from './recording';
 import { getSettings, type DriveMode } from './settings';
-import { enqueueSessionUpload } from './sync';
+import { pruneOldRaw } from './storageLimits';
+import { droveKeyOf, reportDrove } from './droveSignal';
 import { changeProposedKind, dismissDetour, loadRaw, overwriteWithDetour, processStoredSession, saveDetourAsNew, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
@@ -214,6 +215,11 @@ export function chooseFreeDrive(): void {
   void applyCourse(null, true);
 }
 
+/** 주행 준비 화면에 보일 알림 (다른 화면에서 주행 준비로 넘긴 뒤 생긴 오류, 예: 모두의 코스 받기 실패) */
+export function notePrepareError(text: string): void {
+  if (state.phase === 'preparing') set({ error: text });
+}
+
 export function chooseCourse(course: Course | null): void {
   // 바로 고른 것으로 표시해, 그 사이 위치로 자동 감지한 코스가 덮어쓰지 않게 한다
   set({ course, courseChosen: true });
@@ -252,7 +258,9 @@ export function startDrive(): void {
   startLinks();
   markRecordingEvent('drive_start', state.course ? { courseId: state.course.id, courseVersion: state.course.version } : {});
   const id = getRecordingState().sessionId;
-  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null, ...(state.noRecord ? { noRecord: true } : {}) });
+  // 바이크로 달린 주행은 표시해 둔다 (주행 요약에 최대 기울기를 보인다, 바이크 모드). 이 기기에만 두는 칸
+  const bike = getSettings().vehicle === 'bike' ? { vehicle: 'bike' as const } : {};
+  if (id) void getRepo().update(id, { courseId: state.course?.id ?? null, courseVersion: state.course?.version ?? null, ...(state.noRecord ? { noRecord: true } : {}), ...bike });
   set({ phase: 'driving' });
   go('#/drive');
 }
@@ -343,26 +351,39 @@ async function track<T>(sessionId: string, work: () => Promise<T>): Promise<T | 
   }
 }
 
-/** 처리·코스 저장이 끝나면 서버에 올릴 차례에 넣는다 (사양서 5.4-4) */
-async function andUpload<T>(sessionId: string, r: T | null): Promise<T | null> {
-  if (r) void enqueueSessionUpload(sessionId);
+/** 처리·코스 저장이 끝나면 원본 한도(최근 30개)를 지킨다 (기록은 폰에만: 서버에 올리지 않는다) */
+async function afterProcess<T>(r: T | null): Promise<T | null> {
+  if (r) {
+    void pruneOldRaw(getRepo())
+      .then((n) => (n > 0 ? refreshSessions() : undefined))
+      .catch(() => {});
+  }
   return r;
 }
 
 export async function processSession(sessionId: string, kind?: CourseKind): Promise<DriveResultRecord | null> {
-  return andUpload(sessionId, await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
+  const r = await afterProcess(await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
+  if (r) void signalDrove(sessionId, r).catch(() => {});
+  return r;
+}
+
+/** 기본 코스로 달린 주행이면 인기 도로 신호 (코스 열쇠만, droveSignal.ts) */
+async function signalDrove(sessionId: string, r: DriveResultRecord): Promise<void> {
+  const [session, course] = await Promise.all([getRepo().get(sessionId), r.courseId ? getDriveRepo().getCourse(r.courseId) : Promise.resolve(undefined)]);
+  const key = session ? droveKeyOf(r, course ?? null, session.startedAt) : null;
+  if (key) await reportDrove(key);
 }
 
 /** 벗어난 길을 새 코스로 저장하고 이 주행을 그 코스로 옮긴다 (코스 이탈) */
 export async function saveDetour(sessionId: string, name: string): Promise<boolean> {
-  const r = await andUpload(sessionId, await track(sessionId, () => saveDetourAsNew(deps(), sessionId, name)));
+  const r = await afterProcess(await track(sessionId, () => saveDetourAsNew(deps(), sessionId, name)));
   if (r) await loadCourses();
   return r !== null;
 }
 
 /** 지금 코스(내 코스)를 벗어난 길로 덮어쓴다 */
 export async function overwriteDetour(sessionId: string): Promise<boolean> {
-  const r = await andUpload(sessionId, await track(sessionId, () => overwriteWithDetour(deps(), sessionId)));
+  const r = await afterProcess(await track(sessionId, () => overwriteWithDetour(deps(), sessionId)));
   if (r) await loadCourses();
   return r !== null;
 }
@@ -378,11 +399,11 @@ export async function processRestoredSession(sessionId: string): Promise<DriveRe
 }
 
 export async function changeKind(sessionId: string, kind: CourseKind): Promise<DriveResultRecord | null> {
-  return andUpload(sessionId, await track(sessionId, () => changeProposedKind(deps(), sessionId, kind)));
+  return afterProcess(await track(sessionId, () => changeProposedKind(deps(), sessionId, kind)));
 }
 
 export async function saveCourse(sessionId: string, name: string): Promise<boolean> {
-  const r = await andUpload(sessionId, await track(sessionId, () => saveProposedCourse(deps(), sessionId, name)));
+  const r = await afterProcess(await track(sessionId, () => saveProposedCourse(deps(), sessionId, name)));
   if (r) await loadCourses();
   return r !== null;
 }

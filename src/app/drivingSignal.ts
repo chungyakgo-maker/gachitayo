@@ -16,7 +16,9 @@ export function startDrivingSignal(): () => void {
   };
   const check = () => {
     const s = getDriveState();
-    const builtin = s.phase === 'driving' && !s.replay && s.course?.builtin ? s.course.builtin : null;
+    // 기본 코스는 예전처럼 열쇠만, 받은 모두의 코스는 s:{공개 번호} (서버는 아무 열쇠나 센다)
+    const c = s.phase === 'driving' && !s.replay ? s.course : null;
+    const builtin = c?.builtin ? c.builtin : c?.shared ? `s:${c.shared.id}` : null;
     if (builtin === current) return;
     current = builtin;
     if (timer) clearInterval(timer);

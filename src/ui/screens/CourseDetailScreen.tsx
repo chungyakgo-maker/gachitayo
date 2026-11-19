@@ -11,6 +11,7 @@ import { shareOrDownload } from '../../storage/exportFile';
 import type { Course } from '../../types/course';
 import { Overlay } from '../components/Overlay';
 import { PickMap } from '../components/PickMap';
+import { PublishSection } from '../components/PublishSection';
 import { Sheet } from '../components/Sheet';
 import { formatLapTime, formatLength } from '../format';
 import { IconBack } from '../icons';
@@ -67,7 +68,7 @@ export function NavOpen({ course }: { course: Course }) {
   );
 }
 
-const SOURCE: Record<Course['source'], string> = { auto: '첫 주행으로 자동', map: '지도에서', gpx: 'GPX' };
+const SOURCE: Record<Course['source'], string> = { auto: '첫 주행으로 자동', map: '지도에서', gpx: 'GPX', shared: '모두의 코스', team: '팀 방에서 받음' };
 
 export function courseShapes(c: Course, pending: LatLon | null): { shapes: MapShape[]; fit: Array<[number, number]> } {
   const shapes: MapShape[] = [];
@@ -202,6 +203,8 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
         </div>
       )}
       {msg && <div className={`notice${msg.warn ? ' warn' : ''}`}>{msg.text}</div>}
+      {/* 모두의 코스 공개 (설계 2부, 시안 ⑥): 내 코스만 */}
+      {!mode && <PublishSection course={course} />}
 
       <label htmlFor="course-name" className="label">
         코스 이름

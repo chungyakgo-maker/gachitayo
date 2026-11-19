@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSettings, setWidget, topSummary, updateSettings, DEFAULT_SETTINGS, WIDGET_LABEL } from '../../src/app/settings';
+import { getSettings, setVehicle, setWidget, topSummary, updateSettings, DEFAULT_SETTINGS, WIDGET_LABEL } from '../../src/app/settings';
 
 describe('설정 (폰 보관)', () => {
   beforeEach(() => {
@@ -8,7 +8,7 @@ describe('설정 (폰 보관)', () => {
   });
 
   it('기본값: 지도 모드, 상단 칸 델타·G미터·표지판, 델타 색 초록·빨강, 앞 친구 간격 꺼짐(목표 2초), 게이트 폭 30 m, 주행 중 바탕 지도 보이기, G미터 최대 2g', () => {
-    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D', courseFilter: 'all', popularPeriod: '30d', driveZoom: 0, carMarker: 'arrow' });
+    expect(getSettings()).toEqual({ defaultMode: 'map', topDelta: true, deltaSource: 'friend', widgets: ['g', 'pace'], deltaPalette: 'green-red', gap: { friendId: null, nickname: null, targetS: 2 }, gateWidthM: 30, mapView: 'fit', mapTiles: true, gMaxG: 2, driveFriends: true, mainCourses: true, curveTint: 'D', courseFilter: 'all', popularPeriod: '30d', sharedSort: 'near', driveZoom: -1, carMarker: 'arrow', vehicle: 'car', bikeMarker: 'sport' });
   });
 
   it('G미터 최대값은 1.5·2·2.5·3 g만 (저장된 값이 이상하면 2g)', async () => {
@@ -44,6 +44,25 @@ describe('설정 (폰 보관)', () => {
       localStorage.setItem('gachitayo.settings', JSON.stringify({ carMarker: saved }));
       vi.resetModules();
       expect((await import('../../src/app/settings')).getSettings().carMarker).toBe(want);
+    }
+    localStorage.removeItem('gachitayo.settings');
+  });
+
+  it('탈것: 자동차·바이크 (기본 자동차), 바이크 표시 5종 (기본 R차, 2026-11-18 바이크 모드)', async () => {
+    const { meMarker, VEHICLE_LABEL, BIKE_MARKER_LABEL } = await import('../../src/app/settings');
+    expect(VEHICLE_LABEL).toEqual({ car: '자동차', bike: '바이크' });
+    expect(Object.values(BIKE_MARKER_LABEL)).toEqual(['스쿠터', 'R차', '크루저', '네이키드', '모타드']);
+    expect(meMarker(getSettings())).toBe('arrow');
+    updateSettings({ vehicle: 'bike', bikeMarker: 'cruiser', carMarker: 'red' });
+    expect(meMarker(getSettings())).toBe('cruiser');
+    updateSettings({ vehicle: 'car' });
+    expect(meMarker(getSettings())).toBe('red');
+    const { vi } = await import('vitest');
+    for (const [saved, want] of [[{ vehicle: 'bike', bikeMarker: 'motard' }, ['bike', 'motard']], [{ vehicle: 'boat', bikeMarker: 'harley' }, ['car', 'sport']], [{}, ['car', 'sport']]] as const) {
+      localStorage.setItem('gachitayo.settings', JSON.stringify(saved));
+      vi.resetModules();
+      const s = (await import('../../src/app/settings')).getSettings();
+      expect([s.vehicle, s.bikeMarker]).toEqual(want);
     }
     localStorage.removeItem('gachitayo.settings');
   });
@@ -148,20 +167,73 @@ describe('주행 중 칸을 누르면 다음 값으로', () => {
   });
   it('코스 분류 칩·인기 기간·주행 지도 확대는 남고, 이상한 값은 기본값으로 (코스 둘러보기 설계)', async () => {
     localStorage.setItem('gachitayo.settings', JSON.stringify({ courseFilter: 'fav', popularPeriod: 'autumn', driveZoom: 9 }));
+    localStorage.setItem('gachitayo.driveZoom.v', '2');
     vi.resetModules();
     const m = await import('../../src/app/settings');
     expect(m.getSettings()).toMatchObject({ courseFilter: 'fav', popularPeriod: 'autumn', driveZoom: 2 });
     localStorage.setItem('gachitayo.settings', JSON.stringify({ courseFilter: 'winding', popularPeriod: 'year', driveZoom: 'x' }));
     vi.resetModules();
     const m2 = await import('../../src/app/settings');
-    expect(m2.getSettings()).toMatchObject({ courseFilter: 'all', popularPeriod: '30d', driveZoom: 0 });
+    expect(m2.getSettings()).toMatchObject({ courseFilter: 'all', popularPeriod: '30d', driveZoom: -1 });
     localStorage.clear();
   });
 
   it('주행 지도 확대는 두 손가락으로 고른 소수도 남는다 (0.01 단위, 2026-11-17 "부드럽게 확대·축소")', async () => {
     localStorage.setItem('gachitayo.settings', JSON.stringify({ driveZoom: 0.537 }));
+    localStorage.setItem('gachitayo.driveZoom.v', '2');
     vi.resetModules();
     expect((await import('../../src/app/settings')).getSettings().driveZoom).toBe(0.54);
     localStorage.removeItem('gachitayo.settings');
+  });
+
+  it('기본 주행 지도 확대는 한 단계 가깝게(−1), 예전 빌드에서 저장된 확대는 한 번만 기본값으로 되돌린다 (2026-11-18 세영 "기본 축척이 너무 멀어")', async () => {
+    expect(DEFAULT_SETTINGS.driveZoom).toBe(-1);
+    localStorage.clear();
+    localStorage.setItem('gachitayo.settings', JSON.stringify({ driveZoom: -2.66, mapView: 'heading' }));
+    vi.resetModules();
+    const m = await import('../../src/app/settings');
+    expect(m.getSettings()).toMatchObject({ driveZoom: -1, mapView: 'heading' });
+    // 되돌린 값이 저장돼, 다음에 켜도 −1. 그 뒤 사용자가 바꾼 값은 그대로 남는다
+    vi.resetModules();
+    const m2 = await import('../../src/app/settings');
+    expect(m2.getSettings().driveZoom).toBe(-1);
+    m2.updateSettings({ driveZoom: -2 });
+    vi.resetModules();
+    expect((await import('../../src/app/settings')).getSettings().driveZoom).toBe(-2);
+    localStorage.clear();
+  });
+
+  it('처음 설치해 저장한 확대도 되돌리지 않는다', async () => {
+    localStorage.clear();
+    vi.resetModules();
+    const m = await import('../../src/app/settings');
+    m.updateSettings({ driveZoom: 1 });
+    vi.resetModules();
+    expect((await import('../../src/app/settings')).getSettings().driveZoom).toBe(1);
+    localStorage.clear();
+  });
+});
+
+describe('탈것을 바꾸면 G미터 칸 ↔ 기울기 칸 (2026-11-18 기울기 시안)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    updateSettings(DEFAULT_SETTINGS);
+  });
+
+  it('바이크로 바꾸면 G미터 칸이 기울기로, 자동차로 돌리면 다시 G미터', () => {
+    expect(WIDGET_LABEL.lean).toBe('기울기');
+    setVehicle('bike');
+    expect(getSettings()).toMatchObject({ vehicle: 'bike', widgets: ['lean', 'pace'] });
+    setVehicle('car');
+    expect(getSettings()).toMatchObject({ vehicle: 'car', widgets: ['g', 'pace'] });
+    // G미터를 안 골랐으면 칸은 그대로
+    updateSettings({ widgets: ['speed', 'pace'] });
+    setVehicle('bike');
+    expect(getSettings().widgets).toEqual(['speed', 'pace']);
+  });
+
+  it('주행 중 칸을 누를 때 기울기는 바이크에서만 (자동차는 건너뛴다)', () => {
+    expect(nextWidget(['g', 'pace'], 0, { hasCourse: true, hasFriend: false })).toEqual(['speed', 'pace']);
+    expect(nextWidget(['g', 'pace'], 0, { hasCourse: true, hasFriend: false, bike: true })).toEqual(['lean', 'pace']);
   });
 });

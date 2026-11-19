@@ -185,3 +185,34 @@ export function sameCourse(a: Course, b: Course): boolean {
   };
   return near(a.startGate, b.startGate) && near(a.finishGate, b.finishGate);
 }
+
+/** 받은 코스·백업·팀 코스를 "이미 있는 코스"로 이을 때 (검토 지적: sameCourse 는 출발·도착선만 봐서, 같은 곳에서 시작하는 다른 길이·다른 길도 같다고 했다).
+ *  출발·도착선 + 길이 3% 안 + 선이 둘 다 있으면 새 선의 점(20곳)이 모두 있는 선에서 15 m 안 */
+export function sameCourseShape(a: Course, b: Course): boolean {
+  if (!sameCourse(a, b)) return false;
+  if (a.lengthM && b.lengthM && Math.abs(a.lengthM - b.lengthM) > 0.03 * Math.max(a.lengthM, b.lengthM)) return false;
+  if ((!a.lengthM || !b.lengthM) && !(a.centerline && b.centerline)) return a.lengthM === b.lengthM || (!a.lengthM && !b.lengthM);
+  if (!a.centerline || !b.centerline || a.centerline.length < 2 || b.centerline.length < 2) return true;
+  const o = { lat: a.centerline[0]![0], lon: a.centerline[0]![1] };
+  const pa = a.centerline.map(([lat, lon]) => toLocal(o, lat, lon));
+  const near = (lat: number, lon: number): number => {
+    const q = toLocal(o, lat, lon);
+    let best = Infinity;
+    for (let i = 0; i + 1 < pa.length; i++) {
+      const p0 = pa[i]!;
+      const p1 = pa[i + 1]!;
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((q.x - p0.x) * dx + (q.y - p0.y) * dy) / l2)) : 0;
+      best = Math.min(best, Math.hypot(p0.x + dx * t - q.x, p0.y + dy * t - q.y));
+    }
+    return best;
+  };
+  const n = b.centerline.length;
+  for (let k = 0; k < 20; k++) {
+    const [lat, lon] = b.centerline[Math.round((k / 19) * (n - 1))]!;
+    if (near(lat, lon) > 15) return false;
+  }
+  return true;
+}
