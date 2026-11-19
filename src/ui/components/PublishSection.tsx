@@ -98,6 +98,7 @@ export function PublishSection({ course }: { course: Course }) {
               </select>
               <div className="notice caution">코스 선·이름·내 닉네임이 모두에게 보여요. 출발·도착이 집이나 회사 근처면 공개하지 마세요.</div>
               <span className="sub">기록(랩 시간)은 올라가지 않아요. 언제든 공개를 내릴 수 있어요.</span>
+              <span className="sub">위험하거나 불쾌한 코스는 신고되면 숨겨지고, 운영자가 지우고 공개를 막을 수 있어요.</span>
               <label className="check-row">
                 <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
                 일반 도로 법규를 지키며 달릴 수 있는 길이에요

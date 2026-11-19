@@ -75,6 +75,8 @@ describe('모두에게 공개 (시안 ⑥)', () => {
     expect(within(dlg).getByRole('combobox', { name: '지역' })).toHaveValue('강원');
     expect(dlg).toHaveTextContent('코스 선·이름·내 닉네임이 모두에게 보여요. 출발·도착이 집이나 회사 근처면 공개하지 마세요.');
     expect(dlg).toHaveTextContent('기록(랩 시간)은 올라가지 않아요. 언제든 공개를 내릴 수 있어요.');
+    // 애플 심사 1.2: 불쾌·위험한 콘텐츠는 지운다는 이용 규칙을 공개 전에 보인다
+    expect(dlg).toHaveTextContent('위험하거나 불쾌한 코스는 신고되면 숨겨지고, 운영자가 지우고 공개를 막을 수 있어요.');
     const go = within(dlg).getByRole('button', { name: '공개하기' });
     expect(go).toBeDisabled();
     fireEvent.change(within(dlg).getByRole('combobox', { name: '지역' }), { target: { value: '경기' } });

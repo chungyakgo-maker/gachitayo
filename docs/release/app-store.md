@@ -96,6 +96,9 @@
 - 기타 데이터 · 기타 데이터 유형(모션 센서 값·기기 종류): **지운다** (폰 밖으로 나가지 않음).
 - 사용자 콘텐츠 · 기타 사용자 콘텐츠: "닉네임, 팀 이름"만 (직접 만든 코스·즐겨찾기는 폰에만). 2부 "모두의 코스"를 넣으면 "공개한 코스"를 더한다.
 - 사용 데이터 · 제품 상호작용: "인기 도로 신호(기본 코스를 달렸다는 표시와 날짜, 위치 없음)" — 보수적으로 표시.
+- 사용자 콘텐츠 · 기타 사용자 콘텐츠: "모두의 코스로 공개한 코스(이름·코스 선·출발선·도착선), 신고 이유"를 더한다 (공개한 경우만, 모두에게 보임).
+
+1.0.1 심사 메모에 더할 줄 (사용자 콘텐츠, 심사 1.2): `Shared courses (user-generated content): Courses (코스) → "모두의 코스" (Everyone's courses) lists courses other users published. Publishing requires Kakao or Apple sign-in and a checkbox; course names are filtered for objectionable words. Each shared course has "신고" (Report — 3 reports hide it immediately) and "이 사람 코스 안 보기" (Block this user — removes all their courses from the list; undo in Settings → 안 보는 사람). The operator reviews reports in an admin screen and can hide or delete courses and block an account from publishing. Only the course line and nickname are shared — never drive records or locations.`
 
 1.0.1 심사 메모의 계정 삭제 줄: `Account deletion: Settings (설정) → "계정 지우기" (Delete account) deletes the account on the server (nickname, friends, teams, photo). Driving records are stored only on the phone; the dialog offers "기록과 내 코스도 이 폰에서 지우기" (also delete records on this phone). If the account used Sign in with Apple, the Apple token is revoked.`
 
