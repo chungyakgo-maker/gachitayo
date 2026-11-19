@@ -26,6 +26,7 @@ import { WidgetsScreen } from './screens/WidgetsScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { KakaoAuthScreen } from './screens/KakaoAuthScreen';
 import { GroupScreen } from './screens/GroupScreen';
+import { GroupCourseScreen } from './screens/GroupCourseScreen';
 import { JoinScreen } from './screens/JoinScreen';
 import { RouteOfferSheet } from './components/RouteOfferSheet';
 import { rememberPendingLink, takePendingLink } from '../app/pendingJoin';
@@ -89,6 +90,8 @@ function route(path: string): ReactElement {
       return <GroupScreen />;
     case '/group/destination':
       return <DestinationScreen forRoom />;
+    case '/group/course':
+      return <GroupCourseScreen />;
     case '/auth/kakao':
       return <KakaoAuthScreen />;
     case '/dev/recorder':

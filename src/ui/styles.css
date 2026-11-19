@@ -459,6 +459,12 @@ html.app-h .modal-backdrop {
   background: var(--bg);
 }
 
+/* 팀 방 "이번 주행" 목적지·코스 (시안 ⑨): 고른 칸은 강조색 — 분류 칩과 같은 색 */
+.segmented.accent button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 /* 설정: 내 차 표시 고르기 (그림 4개, 고른 칸은 흰 테두리 — 흰 화살표·흰 차가 흰 바탕에 묻히지 않게) */
 .marker-pick {
   display: grid;
