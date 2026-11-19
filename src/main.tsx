@@ -1,10 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { initRecording } from './app/recording';
-import { getAccountState, initAccount, signedIn } from './app/account';
+import { getAccountState, initAccount } from './app/account';
 import { finishFromHash, setAfterKakaoLogin } from './app/kakaoLogin';
 import { setAfterAppleLogin } from './app/appleLogin';
-import { startRestore } from './app/restore';
+import { startMigrateLocal } from './app/migrateLocal';
 import { initRecords } from './app/records';
 import { initFriends } from './app/friends';
 import { seedBuiltinCourses } from './app/courses';
@@ -31,14 +31,14 @@ lockPageZoom();
 void initRecording();
 // 계정 확인 뒤 예전 앱이 남긴 서버 지우기를 보낸다 (기록은 폰에만, 올리기는 없다).
 // 카카오에서 이 창으로 돌아왔으면 계정 확인보다 먼저 로그인을 마친다 (예전 열쇠로 "계정 끊김"이 뜨지 않게)
-// 카카오 계정이면 서버에 있고 이 폰에 없는 기록·코스를 되살린다 (로그인 직후와 앱을 열 때마다)
-setAfterKakaoLogin(() => void startRestore());
-setAfterAppleLogin(() => void startRestore());
+// 기록은 폰에만: 예전 앱이 서버에 올려 둔 기록을 계정마다 한 번 이 폰으로 옮긴다 (앱을 열 때·로그인 직후)
+setAfterKakaoLogin(() => void startMigrateLocal());
+setAfterAppleLogin(() => void startMigrateLocal());
 void finishFromHash(window.location.hash)
   .then(initAccount)
   .then(initRecords)
   .then(() => {
-    if (signedIn(getAccountState())) void startRestore();
+    void startMigrateLocal();
     // 들어가 있던 그룹 주행 방으로 다시 (24시간이 지났거나 나갔으면 잊는다)
     void resumeGroupRoom();
     // 즐겨찾기·분류를 계정과 맞춘다 (카카오 로그인으로 계정이 바뀌어도 다시)

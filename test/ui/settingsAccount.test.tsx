@@ -81,10 +81,10 @@ describe('설정: 카카오 계정', () => {
     vi.resetModules();
     const { RestoreBanner } = await import('../../src/ui/components/RestoreBanner');
     const { restoreProgressText } = await import('../../src/ui/components/RestoreBanner');
-    expect(restoreProgressText({ running: true, done: 12, total: 40, failed: 0 })).toBe('기록 되살리는 중 12/40');
-    expect(restoreProgressText({ running: true, done: 12, total: 40, failed: 2 })).toBe('기록 되살리는 중 12/40 · 실패 2 (다음에 다시)');
+    expect(restoreProgressText({ running: true, done: 12, total: 40, failed: 0 })).toBe('예전 기록을 이 폰으로 옮기는 중 12/40');
+    expect(restoreProgressText({ running: true, done: 12, total: 40, failed: 2 })).toBe('예전 기록을 이 폰으로 옮기는 중 12/40 · 실패 2 (다음에 다시)');
     expect(restoreProgressText({ running: false, done: 0, total: 0, failed: 0 })).toBeNull();
-    expect(restoreProgressText({ running: false, done: 3, total: 5, failed: 2 })).toBe('기록 되살리기: 실패 2 (다음에 다시)');
+    expect(restoreProgressText({ running: false, done: 3, total: 5, failed: 2 })).toBe('예전 기록 옮기기: 실패 2 (다음에 다시)');
     render(<RestoreBanner />);
     await waitFor(() => expect(document.body).toBeTruthy());
   });

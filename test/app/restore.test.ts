@@ -158,7 +158,9 @@ describe('되살리기', () => {
     expect(got.imported).toBeFalsy();
     expect((await rec.getRepo().chunks(missing))[0]!.gps.length).toBe(2);
     expect(await rec.getQueueRepo().count()).toBe(0);
-    expect(restore.getRestoreState()).toMatchObject({ running: false, done: 1, total: 1, failed: 0 });
+    // 폰에 있던 기록(have)은 원본이 없어 원본만 받는다 (옮기기 3단계) → 2건
+    expect(restore.getRestoreState()).toMatchObject({ running: false, done: 2, total: 2, failed: 0 });
+    expect((await rec.getRepo().chunks(have)).length).toBe(1);
   });
 
   it('서버의 기본 코스(키 있음)를 쓴 기록은 폰의 같은 기본 코스로 이어 붙이고, 코스를 새로 넣지 않는다', async () => {
@@ -282,5 +284,79 @@ describe('되살리기', () => {
     restore.recordingSettled();
     await p;
     expect(processRestoredSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 기록은 폰에만 3단계 (설계 "처음 켤 때 한 번 옮기기"): 서버 열쇠가 있는 계정이면 한 번 — 서버에만 있는 기록 받기 +
+// 폰에 있지만 원본이 정리된 기록 중 최근 30개의 원본 받기. 계정마다 한 번, 실패가 있으면 다음에 다시
+describe('처음 한 번 옮기기 (서버 → 폰)', () => {
+  async function loadMigrate() {
+    const { rec, restore } = await load();
+    const migrate = await import('../../src/app/migrateLocal');
+    return { rec, restore, migrate };
+  }
+
+  it('폰에 있지만 원본이 없는 기록 중 최근 30개만 서버 원본을 받는다 (나머지는 rawPruned)', async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 32; i++) ids.push(await serverSession());
+    const { rec, migrate } = await loadMigrate();
+    for (const [i, id] of ids.entries()) {
+      await rec.getRepo().create({ id, courseId: null, courseVersion: null, status: 'uploaded', startedAt: 1_800_000_000_000 + i * 1000, endedAt: null, device, calibration: null, summary: null, uploadedAt: 5 });
+      await rec.getDriveRepo().putResult({ sessionId: id, courseId: null, courseVersion: null, processedAt: 1, laps: [] } as never);
+    }
+    await migrate.startMigrateLocal();
+    const rawCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/files/'));
+    expect(rawCalls.length).toBe(30);
+    // 가장 오래된 2개(0, 1번)는 받지 않고 정리됨 표시
+    for (const [i, id] of ids.entries()) {
+      const chunks = await rec.getRepo().chunks(id);
+      expect(chunks.length).toBe(i < 2 ? 0 : 1);
+      if (i < 2) expect((await rec.getRepo().get(id))!.rawPruned).toBe(true);
+    }
+    // 이미 있는 기록이라 다시 계산하지 않는다
+    expect(processRestoredSession).not.toHaveBeenCalled();
+  });
+
+  it('지우기 목록에 있는 기록은 받지 않는다 (지운 기록이 되살아나지 않게)', async () => {
+    const gone = await serverSession();
+    const keep = await serverSession();
+    localStorage.setItem('gachitayo.serverDeletes.v1', JSON.stringify({ sessions: [gone], courses: [] }));
+    const { migrate } = await loadMigrate();
+    await migrate.startMigrateLocal();
+    expect(processRestoredSession.mock.calls.map((c) => c[0])).toEqual([keep]);
+  });
+
+  it('끝나면 계정 번호를 기억하고 다시 안 한다, 실패가 있으면 기억하지 않는다', async () => {
+    await serverSession();
+    failFile = `${ME}/${serverSessions[0]!.id as string}.raw.json.gz`;
+    let { migrate } = await loadMigrate();
+    await migrate.startMigrateLocal();
+    expect(migrate.migratedUsers()).toEqual([]);
+    failFile = null;
+    ({ migrate } = await loadMigrate());
+    await migrate.startMigrateLocal();
+    expect(migrate.migratedUsers()).toEqual([ME]);
+    processRestoredSession.mockClear();
+    fetchMock.mockClear();
+    ({ migrate } = await loadMigrate());
+    await migrate.startMigrateLocal();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('로그인 없이 시작한 계정도 한다 (예전 앱은 모두 올렸다)', async () => {
+    localStorage.removeItem('gachitayo.kakao');
+    const id = await serverSession();
+    const { migrate } = await loadMigrate();
+    await migrate.startMigrateLocal();
+    expect(processRestoredSession.mock.calls.map((c) => c[0])).toEqual([id]);
+  });
+
+  it('다른 계정으로 로그인하면 그 계정으로 한 번 더', async () => {
+    localStorage.setItem('gachitayo.localOnly.v1', JSON.stringify(['someone-else']));
+    const id = await serverSession();
+    const { migrate } = await loadMigrate();
+    await migrate.startMigrateLocal();
+    expect(processRestoredSession.mock.calls.map((c) => c[0])).toEqual([id]);
+    expect(migrate.migratedUsers().sort()).toEqual([ME, 'someone-else'].sort());
   });
 });
