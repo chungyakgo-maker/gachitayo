@@ -2,7 +2,7 @@
 // 숨기기·숨김 풀기·지우기(되돌릴 수 없음, 받은 사람 폰의 코스는 남음)·이 계정 공개 막기. 관리자 아니면 서버가 403 이라 안내만
 import { useEffect, useState } from 'react';
 import { useAccount } from '../../app/account';
-import { adminBan, adminDelete, adminList, adminSet, REPORT_REASONS, type AdminRow } from '../../app/sharedCourses';
+import { adminBan, adminDelete, adminList, adminSet, adminUnban, REPORT_REASONS, type AdminRow } from '../../app/sharedCourses';
 import { Overlay } from '../components/Overlay';
 import { sharedLine } from '../components/SharedCourseList';
 import { IconBack } from '../icons';
@@ -62,7 +62,7 @@ export function AdminSharedScreen() {
                   </a>
                   <span className="sub">{`${sharedLine(r)} · 올린 사람 ${r.by} · ${r.adds}명 받음`}</span>
                   <span className={r.status === 'hidden' || r.reports ? 'warn-text' : 'sub'}>
-                    {[r.status === 'hidden' ? '숨김' : '공개 중', r.reports ? `신고 ${r.reports}${reasonText(r.reasons) ? ` (${reasonText(r.reasons)})` : ''}` : ''].filter(Boolean).join(' · ')}
+                    {[r.status === 'hidden' ? '숨김' : '공개 중', r.reports ? `신고 ${r.reports}${reasonText(r.reasons) ? ` (${reasonText(r.reasons)})` : ''}` : '', r.banned ? '공개 막힌 계정' : ''].filter(Boolean).join(' · ')}
                   </span>
                   <div className="button-pair">
                     <button type="button" className="btn small" disabled={busy} onClick={() => act(() => adminSet(r.id, r.status === 'hidden' ? 'show' : 'hide'))}>
@@ -72,9 +72,15 @@ export function AdminSharedScreen() {
                       지우기
                     </button>
                   </div>
-                  <button type="button" className="link-btn" disabled={busy} onClick={() => setAsk({ kind: 'ban', row: r })}>
-                    이 계정 공개 막기
-                  </button>
+                  {r.banned ? (
+                    <button type="button" className="link-btn" disabled={busy} onClick={() => act(() => adminUnban(r.byId))}>
+                      공개 막기 풀기
+                    </button>
+                  ) : (
+                    <button type="button" className="link-btn" disabled={busy} onClick={() => setAsk({ kind: 'ban', row: r })}>
+                      이 계정 공개 막기
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

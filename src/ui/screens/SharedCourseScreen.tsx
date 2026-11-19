@@ -2,7 +2,7 @@
 // 출발점으로 길찾기, 작게 "신고"·"이 사람 코스 안 보기"(애플 심사 1.2). 내가 올린 코스면 "공개 내리기", 신고로 숨겨졌으면 안내
 import { useEffect, useMemo, useState } from 'react';
 import { signedIn, useAccount } from '../../app/account';
-import { beginPrepare, chooseCourse } from '../../app/drive';
+import { beginPrepare, chooseCourse, getDriveState, notePrepareError } from '../../app/drive';
 import { handOffDestination } from '../../app/routeNav';
 import { addSharedToPhone, blockUser, fetchSharedDetail, REPORT_REASONS, reportShared, sharedOnPhone, unpublishById, type ReportReason } from '../../app/sharedCourses';
 import { courseFromShared } from '../../engine/course/share';
@@ -35,7 +35,8 @@ export function SharedCourseScreen({ id }: { id: string }) {
       alive = false;
     };
   }, [id]);
-  const preview = useMemo(() => (d ? courseFromShared(d, `preview-${d.id}`) : null), [d]);
+  // 지도에는 줄인 선을 그대로 그린다 (1 m 로 펴면 100 km 코스가 10만 점, 검토 지적)
+  const preview = useMemo(() => (d ? { ...courseFromShared({ ...d, line: [] }, `preview-${d.id}`), centerline: d.line } : null), [d]);
   const map = useMemo(() => (preview ? courseShapes(preview, null) : { shapes: [], fit: [] }), [preview]);
 
   if (error || !d || !preview) {
@@ -54,11 +55,15 @@ export function SharedCourseScreen({ id }: { id: string }) {
 
   const fail = (e: unknown) => setMsg({ text: e instanceof Error ? e.message : String(e), warn: true });
   // 아이폰 모션 권한은 탭 처리 안에서 물어야 하므로 주행 준비를 먼저 열고, 받은 코스를 고른다
+  // 이미 주행 중이면 beginPrepare 는 준비 화면으로만 보낸다 — 그 주행의 코스를 바꾸지 않는다 (검토 지적, prepareWithCourse 와 같게)
   const drive = () => {
     beginPrepare();
+    if (getDriveState().phase !== 'preparing') return;
     void addSharedToPhone(d.id, d)
-      .then((c) => chooseCourse(c))
-      .catch(fail);
+      .then((c) => {
+        if (getDriveState().phase === 'preparing') chooseCourse(c);
+      })
+      .catch((e: unknown) => notePrepareError(e instanceof Error ? e.message : String(e)));
   };
   const add = () => {
     setBusy(true);
@@ -113,7 +118,7 @@ export function SharedCourseScreen({ id }: { id: string }) {
         <h1 style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</h1>
       </header>
       <span className="sub" style={{ marginTop: -8 }}>{`${sharedLine(d)} · 올린 사람 ${d.by} · ${d.adds}명 받음`}</span>
-      {d.status === 'hidden' && <div className="notice warn">신고로 숨겨졌어요. 운영자가 확인하고 있어요</div>}
+      {d.status === 'hidden' && <div className="notice warn">숨겨진 코스예요 (신고 또는 운영자). 다른 사람에게는 안 보여요</div>}
       <PickMap shapes={map.shapes} fit={map.fit} fitKey={d.id} label="모두의 코스 지도: 중심선, 출발선, 도착선" onPick={() => {}} />
       <button type="button" className="primary-btn" disabled={busy} onClick={drive}>
         이 코스로 주행

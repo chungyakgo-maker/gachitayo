@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   calls: [] as string[],
   signedIn: true,
   onPhone: null as unknown,
+  phase: 'preparing',
+  addFails: false,
 }));
 const gate = (lat: number) => ({ lat, lon: 127.5, bearingDeg: 0, widthM: 30 });
 const line = (n: number): Array<[number, number]> => Array.from({ length: n }, (_, i) => [37.5 + i * 0.0001, 127.5] as [number, number]);
@@ -22,6 +24,7 @@ vi.mock('../../src/app/sharedCourses', async (orig) => ({
   sharedOnPhone: async () => h.onPhone,
   addSharedToPhone: async (id: string) => {
     h.calls.push(`add ${id}`);
+    if (h.addFails) throw new Error('내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요');
     return { id: 'local-1', name: 'x', shared: { id, by: '바람' } };
   },
   reportShared: async (id: string, reason: string) => void h.calls.push(`report ${id} ${reason}`),
@@ -36,6 +39,8 @@ vi.mock('../../src/app/drive', async (orig) => ({
   ...(await orig<typeof import('../../src/app/drive')>()),
   beginPrepare: () => void h.calls.push('prepare'),
   chooseCourse: (c: { id: string }) => void h.calls.push(`choose ${c.id}`),
+  getDriveState: () => ({ phase: h.phase }),
+  notePrepareError: (t: string) => void h.calls.push(`error ${t}`),
 }));
 
 const { CoursesScreen } = await import('../../src/ui/screens/CoursesScreen');
@@ -49,6 +54,8 @@ beforeEach(() => {
   h.calls = [];
   h.signedIn = true;
   h.onPhone = null;
+  h.phase = 'preparing';
+  h.addFails = false;
   window.location.hash = '#/courses';
   updateSettings({ ...DEFAULT_SETTINGS, courseFilter: 'all' });
 });
@@ -73,6 +80,21 @@ describe('공개 코스 상세 (시안 ⑧)', () => {
     render(<SharedCourseScreen id="a" />);
     fireEvent.click(await screen.findByRole('button', { name: '이 코스로 주행' }));
     await waitFor(() => expect(h.calls).toEqual(['prepare', 'add a', 'choose local-1']));
+  });
+
+  it('이미 주행 중이면 그 주행의 코스를 바꾸지 않는다 (검토 지적)', async () => {
+    h.phase = 'driving';
+    render(<SharedCourseScreen id="a" />);
+    fireEvent.click(await screen.findByRole('button', { name: '이 코스로 주행' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.calls).toEqual(['prepare']);
+  });
+
+  it('받기가 안 되면 주행 준비 화면에 알린다 (화면이 넘어가도 보이게)', async () => {
+    h.addFails = true;
+    render(<SharedCourseScreen id="a" />);
+    fireEvent.click(await screen.findByRole('button', { name: '이 코스로 주행' }));
+    await waitFor(() => expect(h.calls).toEqual(['prepare', 'add a', 'error 내 코스가 200개예요. 안 쓰는 코스를 지운 뒤 다시 해 주세요']));
   });
 
   it('내 코스에 담기 → "내 코스에 있어요", 이미 있으면 처음부터 그 코스로 가는 링크', async () => {
@@ -115,7 +137,7 @@ describe('공개 코스 상세 (시안 ⑧)', () => {
   it('내가 올린 코스: 신고·안 보기 대신 공개 내리기, 숨겨졌으면 안내', async () => {
     h.detail = detail('a', { mine: true, status: 'hidden' });
     render(<SharedCourseScreen id="a" />);
-    expect(await screen.findByText('신고로 숨겨졌어요. 운영자가 확인하고 있어요')).toBeInTheDocument();
+    expect(await screen.findByText('숨겨진 코스예요 (신고 또는 운영자). 다른 사람에게는 안 보여요')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '신고' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '공개 내리기' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '내리기' }));

@@ -19,7 +19,7 @@ const base: Course = {
   sectorBoundsM: null,
   version: 1,
 };
-const h = vi.hoisted(() => ({ courses: [] as Course[], calls: [] as string[], signedIn: true }));
+const h = vi.hoisted(() => ({ courses: [] as Course[], calls: [] as string[], signedIn: true, detail: { adds: 23, status: 'open' } as unknown, detailFails: 0 }));
 vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => h.courses), useDrive: () => ({ courses: h.courses }), prepareWithCourse: vi.fn(), startCoursePreview: vi.fn() }));
 vi.mock('../../src/ui/screens/useBestTimes', () => ({ useBestTimes: () => ({}) }));
 vi.mock('../../src/app/courses', () => ({
@@ -44,7 +44,14 @@ vi.mock('../../src/app/sharedCourses', async (orig) => ({
   publishCourse: async (id: string, region: string) => (h.calls.push(`publish ${id} ${region}`), 'pub-1'),
   updatePublished: async (id: string) => void h.calls.push(`update ${id}`),
   unpublish: async (id: string) => void h.calls.push(`unpublish ${id}`),
-  fetchSharedDetail: async () => ({ adds: 23 }),
+  fetchSharedDetail: async () => {
+    if (h.detailFails) {
+      const { ApiError } = await import('../../src/server/api');
+      throw new ApiError(h.detailFails, '없음');
+    }
+    return h.detail;
+  },
+  forgetPublished: async (id: string) => void h.calls.push(`forget ${id}`),
 }));
 
 const { CourseDetailScreen } = await import('../../src/ui/screens/CourseDetailScreen');
@@ -54,6 +61,8 @@ beforeEach(() => {
   h.calls = [];
   h.signedIn = true;
   h.courses = [base];
+  h.detail = { adds: 23, status: 'open' };
+  h.detailFails = 0;
 });
 
 describe('모두에게 공개 (시안 ⑥)', () => {
@@ -106,5 +115,16 @@ describe('모두에게 공개 (시안 ⑥)', () => {
     fireEvent.click(screen.getByRole('button', { name: '공개 내리기' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '내리기' }));
     await waitFor(() => expect(h.calls).toEqual(['update c1', 'unpublish c1']));
+  });
+
+  it('숨겨졌으면 알리고, 서버에서 내려졌으면(404) 공개 표시를 지운다 (검토 지적)', async () => {
+    h.courses = [{ ...base, publishedId: 'pub-1', publishedVersion: 1, publishedName: base.name }];
+    h.detail = { adds: 5, status: 'hidden' };
+    const { unmount } = render(<CourseDetailScreen courseId="c1" />);
+    expect(await screen.findByText('숨겨졌어요 (신고 또는 운영자) · 다른 사람에게는 안 보여요')).toBeInTheDocument();
+    unmount();
+    h.detailFails = 404;
+    render(<CourseDetailScreen courseId="c1" />);
+    await waitFor(() => expect(h.calls).toEqual(['forget pub-1']));
   });
 });

@@ -191,5 +191,8 @@ describe('카카오 로그인 시작·마치기 (앱)', () => {
     await a.initAccount();
     expect(a.getAccountState().admin).toBe(true);
     expect(Object.keys(localStorage).some((k) => k.includes('admin'))).toBe(false);
+    // 로그아웃하면 관리자 표시도 지운다 (다음 계정에 남지 않게)
+    a.forgetAccount();
+    expect(a.getAccountState().admin).toBeFalsy();
   });
 });

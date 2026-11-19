@@ -18,6 +18,7 @@ vi.mock('../../src/app/sharedCourses', async (orig) => ({
   adminSet: async (id: string, a: string) => void h.calls.push(`${a} ${id}`),
   adminDelete: async (id: string) => void h.calls.push(`delete ${id}`),
   adminBan: async (u: string) => void h.calls.push(`ban ${u}`),
+  adminUnban: async (u: string) => void h.calls.push(`unban ${u}`),
 }));
 
 const { SettingsScreen } = await import('../../src/ui/screens/SettingsScreen');
@@ -86,5 +87,15 @@ describe('관리자 화면', () => {
     fireEvent.click(within(items[0]!).getByRole('button', { name: '이 계정 공개 막기' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '막기' }));
     await waitFor(() => expect(h.calls).toEqual(['show r', 'hide q', 'delete q', 'ban owner-r']));
+  });
+
+  it('공개 막힌 계정이면 표시하고 "공개 막기 풀기"', async () => {
+    h.admin = true;
+    h.rows = [row('b', { status: 'hidden', banned: true })];
+    render(<AdminSharedScreen />);
+    const [item] = await screen.findAllByRole('listitem');
+    expect(item).toHaveTextContent('공개 막힌 계정');
+    fireEvent.click(within(item!).getByRole('button', { name: '공개 막기 풀기' }));
+    await waitFor(() => expect(h.calls).toEqual(['unban owner-b']));
   });
 });

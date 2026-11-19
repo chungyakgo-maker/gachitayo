@@ -2,7 +2,8 @@
 // 법규 체크를 거쳐 공개. 공개 중이면 받은 수, 선·이름을 고친 뒤 "공개 코스도 고친 선으로 바꾸기", "공개 내리기"
 import { useEffect, useState } from 'react';
 import { signedIn, useAccount } from '../../app/account';
-import { fetchSharedDetail, publishCourse, unpublish, updatePublished } from '../../app/sharedCourses';
+import { fetchSharedDetail, forgetPublished, publishCourse, unpublish, updatePublished } from '../../app/sharedCourses';
+import { ApiError } from '../../server/api';
 import { guessSido, SIDOS, type Sido } from '../../courses/sidos';
 import type { Course } from '../../types/course';
 import { formatLength } from '../format';
@@ -17,12 +18,21 @@ export function PublishSection({ course }: { course: Course }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; warn?: boolean } | null>(null);
   const [adds, setAdds] = useState<number | null>(null);
+  const [hidden, setHidden] = useState(false);
   useEffect(() => {
     if (!course.publishedId) return;
     let alive = true;
-    fetchSharedDetail(course.publishedId).then(
-      (d) => alive && setAdds(d.adds),
-      () => {},
+    const id = course.publishedId;
+    fetchSharedDetail(id).then(
+      (d) => {
+        if (!alive) return;
+        setAdds(d.adds);
+        setHidden(d.status === 'hidden');
+      },
+      (e: unknown) => {
+        // 서버에서 내려졌으면(관리자가 지움·상세에서 내림) 이 폰의 "공개 중" 표시도 지운다 (검토 지적)
+        if (alive && e instanceof ApiError && e.status === 404) void forgetPublished(id);
+      },
     );
     return () => {
       alive = false;
@@ -47,6 +57,7 @@ export function PublishSection({ course }: { course: Course }) {
       {course.publishedId ? (
         <>
           <span className="label">{adds === null ? '공개 중' : `공개 중 · ${adds}명 받음`}</span>
+          {hidden && <div className="notice warn">숨겨졌어요 (신고 또는 운영자) · 다른 사람에게는 안 보여요</div>}
           <div className="button-pair">
             <button type="button" className="btn" disabled={busy || !changed} onClick={() => run(() => updatePublished(course.id), '공개 코스도 바꿨어요')}>
               공개 코스도 고친 선으로 바꾸기

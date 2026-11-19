@@ -79,6 +79,7 @@ export function PrepareScreen() {
       </header>
 
       {rec.error && <div className="notice warn">{rec.error}</div>}
+      {d.error && <div className="notice warn">{d.error}</div>}
       {rec.gpsError === 'denied' && (
         <div className="notice warn">
           <IconWarn size={20} />

@@ -172,7 +172,7 @@ export async function unblockUser(userId: string): Promise<void> {
 }
 export const listBlocks = (): Promise<Array<{ userId: string; nickname: string }>> => call('GET', '/api/blocks');
 
-export type AdminRow = SharedSummary & { status: 'open' | 'hidden'; reports: number; reasons: Partial<Record<ReportReason, number>> };
+export type AdminRow = SharedSummary & { status: 'open' | 'hidden'; reports: number; reasons: Partial<Record<ReportReason, number>>; banned?: boolean };
 export const adminList = (): Promise<AdminRow[]> => call('GET', '/api/admin/shared');
 export async function adminSet(id: string, action: 'hide' | 'show'): Promise<void> {
   await call('POST', `/api/admin/shared/${encodeURIComponent(id)}`, { action });

@@ -215,6 +215,11 @@ export function chooseFreeDrive(): void {
   void applyCourse(null, true);
 }
 
+/** 주행 준비 화면에 보일 알림 (다른 화면에서 주행 준비로 넘긴 뒤 생긴 오류, 예: 모두의 코스 받기 실패) */
+export function notePrepareError(text: string): void {
+  if (state.phase === 'preparing') set({ error: text });
+}
+
 export function chooseCourse(course: Course | null): void {
   // 바로 고른 것으로 표시해, 그 사이 위치로 자동 감지한 코스가 덮어쓰지 않게 한다
   set({ course, courseChosen: true });
