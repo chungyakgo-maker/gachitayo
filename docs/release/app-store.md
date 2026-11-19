@@ -89,6 +89,16 @@
 
 수집하지 않음: 연락처, 건강, 금융, 광고 데이터, 진단(충돌) 데이터.
 
+### 1.0.1 부터 바꿀 것 (기록은 폰에만, 2026-11-18 설계)
+
+1.0.1 을 올릴 때 App Store Connect → 앱 개인정보 보호에서 고친다 (1.0.0 심사 중에는 그대로):
+- 위치 · 정확한 위치: 이유를 "목적지 길찾기(서버에 저장하지 않고 네이버로 바로 보냄)"로. 주행 기록은 폰에만 저장해 "수집"이 아니다.
+- 기타 데이터 · 기타 데이터 유형(모션 센서 값·기기 종류): **지운다** (폰 밖으로 나가지 않음).
+- 사용자 콘텐츠 · 기타 사용자 콘텐츠: "닉네임, 팀 이름"만 (직접 만든 코스·즐겨찾기는 폰에만). 2부 "모두의 코스"를 넣으면 "공개한 코스"를 더한다.
+- 사용 데이터 · 제품 상호작용: "인기 도로 신호(기본 코스를 달렸다는 표시와 날짜, 위치 없음)" — 보수적으로 표시.
+
+1.0.1 심사 메모의 계정 삭제 줄: `Account deletion: Settings (설정) → "계정 지우기" (Delete account) deletes the account on the server (nickname, friends, teams, photo). Driving records are stored only on the phone; the dialog offers "기록과 내 코스도 이 폰에서 지우기" (also delete records on this phone). If the account used Sign in with Apple, the Apple token is revoked.`
+
 ## 심사 메모 (App Review Information → 메모, 영어)
 
 메리고처럼 영어로. 데모 계정 대신 "로그인 없이 시작" 또는 "Apple로 로그인" 안내.

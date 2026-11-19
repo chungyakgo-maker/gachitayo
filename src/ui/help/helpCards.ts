@@ -74,7 +74,7 @@ export const HELP_CARDS: HelpCard[] = [
     title: '기록 · 분석',
     chip: '기록',
     media: pic('history'),
-    lines: ['주행이 끝나면 랩 표와 요약을 보여줘요', '지난 주행을 다시 재생하고 랩·구간·G값을 분석해요', 'GPX·CSV로 내보낼 수 있어요'],
+    lines: ['주행이 끝나면 랩 표와 요약을 보여줘요', '지난 주행을 다시 재생하고 랩·구간·G값을 분석해요', '기록은 이 폰에만 저장돼요 · 폰을 바꿀 땐 설정 › 백업 파일로 (GPX·CSV 내보내기도 돼요)'],
     link: { href: '#/history', label: '기록 보기' },
   },
   {

@@ -36,5 +36,7 @@ describe('기능 알아보기 카드', () => {
     expect(link('course')).toBe('#/courses');
     expect(link('bike')).toBe('#/settings');
     expect(link('history')).toBe('#/history');
+    // 기록은 폰에만 (2026-11-18): 기록 카드에 백업 안내
+    expect(HELP_CARDS.find((c) => c.id === 'history')!.lines).toContain('기록은 이 폰에만 저장돼요 · 폰을 바꿀 땐 설정 › 백업 파일로 (GPX·CSV 내보내기도 돼요)')
   });
 });
