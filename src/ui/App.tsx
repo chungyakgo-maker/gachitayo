@@ -27,6 +27,7 @@ import { WelcomeScreen } from './screens/WelcomeScreen';
 import { KakaoAuthScreen } from './screens/KakaoAuthScreen';
 import { GroupScreen } from './screens/GroupScreen';
 import { GroupCourseScreen } from './screens/GroupCourseScreen';
+import { LeanTestScreen } from './screens/LeanTestScreen';
 import { JoinScreen } from './screens/JoinScreen';
 import { RouteOfferSheet } from './components/RouteOfferSheet';
 import { rememberPendingLink, takePendingLink } from '../app/pendingJoin';
@@ -96,6 +97,8 @@ function route(path: string): ReactElement {
       return <KakaoAuthScreen />;
     case '/dev/recorder':
       return <RecorderTestScreen />;
+    case '/dev/lean':
+      return <LeanTestScreen />;
     case '/replay':
     case '/dev/replay':
       return <ReplayScreen />;
