@@ -1,8 +1,8 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 로그아웃 (설계 5.6·5.7-2, 계획 Task 7): 주행·되살리기 중이거나 올릴 것이 남았으면 막고,
-// 통과하면 서버 열쇠를 지우고 폰 저장소·계정 정보를 지운다 (설정은 남김)
+// 로그아웃 (설계 5.6, 기록은 폰에만 6단계): 주행·옮기기 중이면 막는다. 서버 열쇠를 지우고(통신이 안 돼도 폰은 로그아웃)
+// 계정 정보를 지운다. 기록·코스·즐겨찾기는 기본으로 남기고, "지우기"를 골랐을 때만 지운다 (설정은 늘 남김)
 class MemoryStorage {
   private m = new Map<string, string>();
   getItem(k: string) {
@@ -70,7 +70,7 @@ describe('로그아웃', () => {
   it('주행 중이면 막는다', async () => {
     const { rec, logout } = await load();
     vi.spyOn(rec, 'getRecordingState').mockReturnValue({ ...rec.getRecordingState(), phase: 'recording' });
-    expect(await logout.logoutCheck()).toEqual({ ok: false, error: '주행이나 되살리기가 끝난 뒤에 로그아웃할 수 있어요' });
+    expect(await logout.logoutCheck()).toEqual({ ok: false, error: '주행이나 옮기기가 끝난 뒤에 로그아웃할 수 있어요' });
   });
 
   it('되살리는 중이면 막는다', async () => {
@@ -79,28 +79,26 @@ describe('로그아웃', () => {
     expect((await logout.logoutCheck()).ok).toBe(false);
   });
 
-  it('올릴 것이 남았으면 막는다', async () => {
+  it('업로드 대기가 남아 있어도 막지 않는다 (기록은 폰에만)', async () => {
     const { rec, logout } = await load();
     await rec.getQueueRepo().enqueue('session', 's1', 0);
-    expect(await logout.logoutCheck()).toEqual({ ok: false, error: '아직 올리지 못한 기록이 있어요. 올린 뒤에 다시 해 주세요' });
+    expect(await logout.logoutCheck()).toEqual({ ok: true });
   });
 
-  it('통신이 안 되면 막는다', async () => {
-    const { logout } = await load();
+  it('통신 실패해도 폰은 로그아웃, 기록·코스·즐겨찾기는 그대로 (기본)', async () => {
+    const { rec, logout, account } = await load();
+    logout.logoutNav.reload = vi.fn();
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
-    expect(await logout.logoutCheck()).toEqual({ ok: false, error: '통신이 연결돼야 로그아웃할 수 있어요' });
-  });
-
-  it('이 폰에만 있는 기록 수를 알려 준다', async () => {
-    const { rec, logout } = await load();
+    localStorage.setItem('gachitayo.coursePrefs.v1', JSON.stringify({ prefs: { favorites: ['c1'], tags: {} } }));
     await rec.getRepo().create(session('a'));
-    await rec.getRepo().create(session('b', { imported: true }));
-    await rec.getRepo().create(session('c'));
-    serverIds = ['a'];
-    expect(await logout.logoutCheck()).toEqual({ ok: true, localOnly: 2 });
+    expect(await logout.logout({ wipe: false })).toEqual({ ok: true });
+    expect((await rec.getRepo().list()).map((s) => s.id)).toEqual(['a']);
+    expect(localStorage.getItem('gachitayo.coursePrefs.v1')).not.toBeNull();
+    expect(localStorage.getItem('gachitayo.token')).toBeNull();
+    expect(account.getAccountState()).toMatchObject({ status: 'none', userId: null });
   });
 
-  it('로그아웃하면 서버 열쇠를 지우고, 폰 기록·코스와 계정 정보를 지운다 (설정은 남김)', async () => {
+  it('지우기를 고르면 서버 열쇠를 지우고, 폰 기록·코스와 계정 정보를 지운다 (기본 코스·설정은 남김)', async () => {
     const { rec, logout, account } = await load();
     const reload = vi.fn();
     logout.logoutNav.reload = reload;
@@ -111,7 +109,7 @@ describe('로그아웃', () => {
     await rec.getDriveRepo().putCourse({ ...c, id: 'b1', name: '배후령', builtin: 'baehuryeong' });
     await rec.getDriveRepo().putRefLaps([{ id: 'r1', sessionId: 'a', courseId: 'b1', courseVersion: 1, lapNo: 1, lapTimeMs: 60000 } as never]);
     serverIds = ['a'];
-    expect(await logout.logout()).toEqual({ ok: true });
+    expect(await logout.logout({ wipe: true })).toEqual({ ok: true });
     expect(fetchMock.mock.calls.some((c) => String(c[0]).endsWith('/auth/logout'))).toBe(true);
     expect(await rec.getRepo().list()).toEqual([]);
     expect((await rec.getDriveRepo().listCourses()).map((c) => c.id)).toEqual(['b1']);

@@ -122,14 +122,6 @@ async function serverLists(token: string): Promise<{ courses: ServerCourse[]; se
   return { courses, sessions };
 }
 
-/** 서버 계정에 없는 이 폰의 기록 (녹화 중 제외). 통신이 안 되면 던진다 */
-export async function localOnlySessions(): Promise<SessionRecord[]> {
-  const auth = getAuth();
-  if (!auth) return (await getRepo().list()).filter((s) => s.status !== 'recording');
-  const ids = new Set((await apiFetch<ServerSession[]>('GET', '/api/sessions', { token: auth.token })).map((s) => s.id));
-  return (await getRepo().list()).filter((s) => s.status !== 'recording' && !ids.has(s.id));
-}
-
 async function fetchRaw(id: string, userId: string, token: string) {
   const r = await fetch(`${serverConfig.apiUrl}/files/${userId}/${id}.raw.json.gz`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error(`원본을 받지 못했어요 (${r.status})`);

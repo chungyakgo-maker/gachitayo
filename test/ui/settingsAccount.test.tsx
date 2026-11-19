@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 // 설정 계정 칸 (설계 5.6, 계획 Task 7): 카카오로 로그인 / 카카오 연결됨 + 로그아웃 / 끊긴 계정 / 되살리는 중
 const API = 'https://gachitayo-api.example.workers.dev';
@@ -41,7 +41,7 @@ describe('설정: 카카오 계정', () => {
     account();
     await showSettings();
     expect(await screen.findByRole('button', { name: '카카오로 로그인' })).toBeInTheDocument();
-    expect(screen.getByText('로그인하면 폰을 바꿔도 기록이 돌아와요')).toBeInTheDocument();
+    expect(screen.getByText('로그인하면 친구·팀을 쓸 수 있어요 · 기록은 이 폰에만 저장돼요')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '로그아웃' })).toBeNull();
   });
 
@@ -52,6 +52,7 @@ describe('설정: 카카오 계정', () => {
     expect(screen.getByRole('button', { name: '로그아웃' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '카카오로 로그인' })).toBeNull();
     expect(screen.getByText(/카카오 계정에 연결돼 있어요/)).toBeInTheDocument();
+    expect(screen.queryByText(/기록이 돌아와요/)).toBeNull();
   });
 
   it('끊긴 계정에도 카카오로 로그인을 보인다', async () => {
@@ -61,19 +62,41 @@ describe('설정: 카카오 계정', () => {
     expect(screen.getByRole('button', { name: '새 계정 만들기' })).toBeInTheDocument();
   });
 
-  it('로그아웃 확인 창에 이 폰에만 있는 기록 수를 보인다', async () => {
+  async function logoutDialog() {
     account({ kakao: true });
     vi.resetModules();
     const rec = await import('../../src/app/recording');
     await rec.clearLocalData();
     const device = { os: 'iOS', browser: 'Safari', userAgent: 'ua', standalone: true };
-    for (const id of ['on-server', 'only-1', 'only-2']) await rec.getRepo().create({ id, courseId: null, courseVersion: null, status: 'uploaded', startedAt: 1, endedAt: null, device, calibration: null, summary: null });
+    for (const id of ['r1', 'r2']) await rec.getRepo().create({ id, courseId: null, courseVersion: null, status: 'processed', startedAt: 1, endedAt: null, device, calibration: null, summary: null });
+    const lo = await import('../../src/app/logout');
+    const reload = vi.fn();
+    lo.logoutNav.reload = reload;
     const { SettingsScreen } = await import('../../src/ui/screens/SettingsScreen');
     render(<SettingsScreen />);
     fireEvent.click(screen.getByRole('button', { name: '로그아웃' }));
-    expect(await screen.findByText(/로그아웃하면 이 폰의 기록과 내 코스가 지워져요/)).toBeInTheDocument();
-    expect(screen.getByText('이 폰에만 있는 기록 2개는 되살릴 수 없어요.')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog');
+    return { rec, reload, dialog };
+  }
+
+  it('로그아웃 창: 기록은 기본으로 남고, 지우기 체크·백업 링크가 있다', async () => {
+    const { rec, reload, dialog } = await logoutDialog();
+    expect(dialog).toHaveTextContent('로그아웃해도 이 폰의 기록과 내 코스는 그대로 남아요. 친구·팀은 다시 로그인하면 돌아와요.');
+    const box = screen.getByRole('checkbox', { name: '기록과 내 코스도 이 폰에서 지우기' });
+    expect(box).not.toBeChecked();
+    expect(within(dialog).getByRole('button', { name: '지우기 전에 백업 파일 만들기 ›' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: '로그아웃' }));
+    await waitFor(() => expect(reload).toHaveBeenCalled());
+    expect((await rec.getRepo().list()).length).toBe(2);
     await rec.clearLocalData();
+  });
+
+  it('로그아웃 창: 지우기를 체크하면 기록도 지운다', async () => {
+    const { rec, reload, dialog } = await logoutDialog();
+    fireEvent.click(screen.getByRole('checkbox', { name: '기록과 내 코스도 이 폰에서 지우기' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '로그아웃' }));
+    await waitFor(() => expect(reload).toHaveBeenCalled());
+    expect((await rec.getRepo().list()).length).toBe(0);
   });
 
   it('되살리는 중이면 진행 상황을 보인다', async () => {

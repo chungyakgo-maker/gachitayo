@@ -3,6 +3,7 @@
 // 기본 코스는 그 폰의 같은 기본 코스(열쇠)로, 같은 모양 코스(sameCourse)는 있는 코스로 잇는다. 코스 한도를 넘으면 아무것도 안 바꾼다.
 import { buildBackup, readBackup, type BackupManifest, type BackupSessionInput } from '../backup/backupFile';
 import { sameCourse } from '../engine/course/edit';
+import { shareOrDownload } from '../storage/exportFile';
 import { gunzipJson, gzipJson } from '../storage/gzip';
 import { buildRawFile, readRawFile } from '../storage/rawFile';
 import type { Course } from '../types/course';
@@ -34,6 +35,15 @@ export async function createBackupFile(now = Date.now()): Promise<File> {
   }
   const blob = await buildBackup({ createdAt: now, courses, prefs: getCoursePrefs(), sessionCount: list.length, sessions: items() });
   return new File([blob], `디고 백업 ${kstDate(now)}.dgo`, { type: 'application/octet-stream' });
+}
+
+/** 전체 백업 파일을 만들어 공유 창(앱)·내려받기(웹)로 내보낸다. 내보냈으면 "마지막 백업"을 기억한다.
+ *  아이폰 공유 창은 탭 처리 안에서 열어야 해서, 버튼 탭에서 바로 부른다 */
+export async function shareBackup(): Promise<'shared' | 'downloaded' | 'cancelled'> {
+  const file = await createBackupFile();
+  const r = await shareOrDownload(file);
+  if (r !== 'cancelled') markBackedUp(file.size);
+  return r;
 }
 
 /** 불러오기 확인 창에 보일 내용 */

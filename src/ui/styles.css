@@ -376,6 +376,21 @@ html.app-h .modal-backdrop {
   text-underline-offset: 3px;
 }
 
+/* 로그아웃·계정 지우기 창의 "기록도 지우기" (기록은 폰에만 6단계, 시안 ④): 손가락으로 누르기 쉽게 44px */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+}
+.check-row input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+  flex: none;
+}
+
 .segmented {
   display: grid;
   gap: 4px;

@@ -9,6 +9,7 @@ import { LoginChooser } from '../components/LoginChooser';
 import { deleteAccount } from '../../app/deleteAccount';
 import { getProviders, startKakaoLogin } from '../../app/kakaoLogin';
 import { logout, logoutCheck } from '../../app/logout';
+import { shareBackup } from '../../app/backup';
 import { KakaoButton } from '../components/KakaoButton';
 import { KakaoPendingCard } from '../components/KakaoPendingCard';
 import { RestoreBanner } from '../components/RestoreBanner';
@@ -44,7 +45,8 @@ function LoginAccount() {
   const [apple, setApple] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ask, setAsk] = useState<{ localOnly: number } | null>(null);
+  const [ask, setAsk] = useState(false);
+  const [wipe, setWipe] = useState(false);
   useEffect(() => {
     let alive = true;
     void getProviders().then((p) => {
@@ -81,15 +83,17 @@ function LoginAccount() {
     setError(null);
     const c = await logoutCheck();
     setBusy(false);
-    if (c.ok) setAsk({ localOnly: c.localOnly });
-    else setError(c.error);
+    if (c.ok) {
+      setWipe(false);
+      setAsk(true);
+    } else setError(c.error);
   };
   const doLogout = async () => {
     setBusy(true);
-    const r = await logout();
+    const r = await logout({ wipe });
     if (!r.ok) {
       setBusy(false);
-      setAsk(null);
+      setAsk(false);
       setError(r.error);
     }
   };
@@ -119,7 +123,7 @@ function LoginAccount() {
           <div className="card-col" style={{ gap: 8 }}>
             <LoginChooser kakao={on} apple={apple} kakaoLabel="카카오로 로그인" disabled={busy} onKakao={() => void login()} onApple={() => void appleLogin()} />
             <span className="sub">
-              {acc.lost ? `예전에 ${apple ? '카카오나 Apple로' : '카카오로'} 연결했다면 이걸로 돌아와요` : '로그인하면 폰을 바꿔도 기록이 돌아와요'}
+              {acc.lost ? `예전에 ${apple ? '카카오나 Apple로' : '카카오로'} 연결했다면 이걸로 돌아와요` : '로그인하면 친구·팀을 쓸 수 있어요 · 기록은 이 폰에만 저장돼요'}
             </span>
           </div>
         )
@@ -131,13 +135,13 @@ function LoginAccount() {
           <div className="modal-backdrop">
             <div className="modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
               <h2 id="logout-title">로그아웃할까요?</h2>
-              <p>로그아웃하면 이 폰의 기록과 내 코스가 지워져요. 다시 로그인하면 서버에서 되살아나요.</p>
-              {ask.localOnly > 0 && <p className="warn-text">{`이 폰에만 있는 기록 ${ask.localOnly}개는 되살릴 수 없어요.`}</p>}
+              <p>로그아웃해도 이 폰의 기록과 내 코스는 그대로 남아요. 친구·팀은 다시 로그인하면 돌아와요.</p>
+              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} />
               <div className="modal-actions">
                 <button type="button" className="btn danger" disabled={busy} onClick={() => void doLogout()}>
                   로그아웃
                 </button>
-                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(null)}>
+                <button type="button" className="btn" disabled={busy} onClick={() => setAsk(false)}>
                   취소
                 </button>
               </div>
@@ -187,16 +191,44 @@ function AccountSection() {
         {acc.status === 'disabled'
           ? '서버 연결 전이라 기록은 이 폰에만 있어요.'
           : signedIn(acc)
-            ? `${acc.kakao ? '카카오' : 'Apple'} 계정에 연결돼 있어요. 폰을 바꿔도 같은 방법으로 로그인하면 기록이 돌아와요.`
-            : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 이 계정으로 다시 들어올 수 없어요(서버 기록은 남아요). 홈 화면 앱으로 쓰고 자주 올려 주세요.'}
+            ? `${acc.kakao ? '카카오' : 'Apple'} 계정에 연결돼 있어요. 폰을 바꿔도 같은 방법으로 로그인하면 친구·팀이 돌아와요. 기록은 이 폰에만 있어요.`
+            : '익명 계정이라 브라우저 데이터를 지우거나 폰을 바꾸면 친구·팀이 있는 이 계정으로 다시 들어올 수 없어요. 기록은 이 폰에만 있으니 백업 파일을 만들어 두세요.'}
       </span>
     </section>
+  );
+}
+
+/** 로그아웃·계정 지우기 창 (기록은 폰에만 6단계, 시안 ④): 기록은 기본으로 남기고, 체크하면 이 폰에서도 지운다. 지우기 전에 백업 */
+function WipeChoice({ wipe, onWipe, disabled }: { wipe: boolean; onWipe: (v: boolean) => void; disabled: boolean }) {
+  const [note, setNote] = useState<string | null>(null);
+  return (
+    <>
+      <label className="check-row">
+        <input type="checkbox" checked={wipe} disabled={disabled} onChange={(e) => onWipe(e.target.checked)} />
+        기록과 내 코스도 이 폰에서 지우기
+      </label>
+      <button
+        type="button"
+        className="link-btn"
+        disabled={disabled}
+        onClick={() => {
+          setNote(null);
+          void shareBackup()
+            .then((r) => setNote(r === 'cancelled' ? null : '백업 파일을 만들었어요'))
+            .catch((e: Error) => setNote(e.message));
+        }}
+      >
+        지우기 전에 백업 파일 만들기 ›
+      </button>
+      {note && <span className="sub">{note}</span>}
+    </>
   );
 }
 
 /** 계정 삭제 (사양서 13.3, 애플 심사 필수): 확인 창에서 "지우기"를 눌러야 지운다 */
 export function DeleteAccountSection() {
   const [ask, setAsk] = useState(false);
+  const [wipe, setWipe] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -207,17 +239,19 @@ export function DeleteAccountSection() {
         className="btn danger"
         onClick={() => {
           setError(null);
+          setWipe(false);
           setAsk(true);
         }}
       >
-        계정과 모든 기록 지우기
+        계정 지우기
       </button>
       {ask && (
         <Overlay>
           <div className="modal-backdrop">
             <div className="modal" role="dialog" aria-modal="true" aria-labelledby="account-delete-title">
               <h2 id="account-delete-title">계정을 지울까요?</h2>
-              <p>닉네임·친구·코스·주행 기록이 폰과 서버에서 모두 지워지고 되돌릴 수 없어요.</p>
+              <p>닉네임·친구·팀·프로필 사진·공개한 코스가 서버에서 지워지고 되돌릴 수 없어요.</p>
+              <WipeChoice wipe={wipe} onWipe={setWipe} disabled={busy} />
               {error && <div className="notice warn">{error}</div>}
               <div className="modal-actions">
                 <button
@@ -227,7 +261,7 @@ export function DeleteAccountSection() {
                   onClick={() => {
                     setBusy(true);
                     setError(null);
-                    void deleteAccount()
+                    void deleteAccount({ wipe })
                       .catch((e: Error) => setError(e.message))
                       .finally(() => setBusy(false));
                   }}

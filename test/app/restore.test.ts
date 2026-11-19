@@ -269,7 +269,6 @@ describe('되살리기', () => {
     expect((await rec.getRepo().get(interrupted))!.status).toBe('interrupted');
     expect((await rec.getRepo().get(unprocessed))!.status).toBe('finished');
     expect((await rec.getRepo().get(elsewhere))!).toMatchObject({ status: 'uploaded', uploadedAt: 99 });
-    expect((await restore.localOnlySessions()).map((s) => s.id).sort()).toEqual([fresh, elsewhere, imported, interrupted, unprocessed].sort());
   });
 
   it('주행(기록) 중에는 하지 않고, 끝난 뒤에 한다', async () => {
