@@ -154,3 +154,15 @@ describe('저장 공간 요약 (설정 시안 ①)', () => {
     expect(s.rawBytes).toBeGreaterThan(0);
   });
 });
+
+describe('원본 크기 어림 (검토 지적: 옮기거나 불러온 기록은 덩어리 하나에 주행 전체)', () => {
+  it('덩어리 하나짜리 30분 주행은 덩어리 수가 아니라 주행 시간으로 어림한다', async () => {
+    const { storageSummary } = await import('../../src/app/storageLimits');
+    const repo = createSessionRepo(db);
+    const s = session('one', 1_800_000_000_000);
+    await repo.create({ ...s, endedAt: s.startedAt + 30 * 60_000 });
+    await repo.putChunk(chunk('one'));
+    const sum = await storageSummary(repo, createDriveRepo(db));
+    expect(sum.rawBytes).toBe(360 * 20_000);
+  });
+});

@@ -5,6 +5,7 @@
 import { ApiError, apiFetch } from '../server/api';
 import { serverConfig } from '../server/config';
 import { getAuth } from './account';
+import { migratedUsers } from './migrationState';
 import { getDriveRepo, getQueueRepo, getRecordingState, getRepo, refreshSessions } from './recording';
 
 const KEY = 'gachitayo.serverDeletes.v1';
@@ -72,22 +73,24 @@ export function flushServerDeletes(): Promise<void> {
   return flushing;
 }
 
-/** 기록 지우기: 폰에서 세션·덩어리·결과·비교 랩을 지우고, 예전에 서버에 올라간 기록이면 서버 사본도 지운다 */
+/** 기록 지우기: 폰에서 세션·덩어리·결과·비교 랩을 지우고, 서버에 사본이 있을 수 있으면 서버 사본도 지운다.
+ *  올린 표시가 없어도 이 계정의 옮기기가 아직이면 보낸다 (예전 앱이 올리다 꺼져 표시만 못 남긴 사본이 되살아나지 않게, 없으면 404 로 끝).
+ *  지울 것 목록에 먼저 넣고 폰에서 지운다. 서버 지우기는 기다리지 않는다 (통신이 느려도 창이 멈추지 않게) */
 export async function deleteSessionRecord(sessionId: string): Promise<void> {
   if (getRecordingState().sessionId === sessionId) throw new Error('기록 중인 주행은 지울 수 없어요');
   const s = await getRepo().get(sessionId);
+  const auth = getAuth();
+  const maybeOnServer = !!s?.uploadedAt || (!!auth && !migratedUsers().includes(auth.userId));
+  if (maybeOnServer) add('sessions', sessionId);
   await getDriveRepo().deleteSession(sessionId);
   await refreshSessions();
-  if (s?.uploadedAt) {
-    add('sessions', sessionId);
-    await flushServerDeletes();
-  }
+  if (maybeOnServer) void flushServerDeletes();
 }
 
-/** 코스를 지웠을 때 서버의 예전 코스 행도 지운다 (없으면 404로 끝, 그 코스의 서버 기록이 남았으면 다음에 다시) */
+/** 코스를 지웠을 때 서버의 예전 코스 행도 지운다 (없으면 404로 끝, 그 코스의 서버 기록이 남았으면 다음에 다시). 기다리지 않는다 */
 export async function forgetServerCourse(courseId: string): Promise<void> {
   add('courses', courseId);
-  await flushServerDeletes();
+  void flushServerDeletes();
 }
 
 let started = false;

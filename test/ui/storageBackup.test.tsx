@@ -39,7 +39,11 @@ vi.mock('../../src/app/backup', async (orig) => ({
 }));
 vi.mock('../../src/app/recording', async (orig) => {
   const real = await orig<typeof import('../../src/app/recording')>();
-  return { ...real, useRecording: () => ({ ...real.getRecordingState(), sessions: h.sessions, sessionId: null }) };
+  return {
+    ...real,
+    useRecording: () => ({ ...real.getRecordingState(), sessions: h.sessions, sessionId: null }),
+    refreshSessions: async () => void h.calls.push('refresh'),
+  };
 });
 
 const { StorageSection } = await import('../../src/ui/components/StorageSection');
@@ -85,6 +89,8 @@ describe('설정 › 저장 공간 (시안 ①)', () => {
     await waitFor(() => expect(btn).toBeEnabled());
     fireEvent.click(btn);
     await waitFor(() => expect(h.calls).toContain('prune'));
+    // 기록 탭·재생 목록의 "원본 정리됨"도 바로 바뀌게 (검토 지적)
+    await waitFor(() => expect(h.calls).toContain('refresh'));
     await waitFor(() => expect(btn).toBeDisabled());
   });
 });

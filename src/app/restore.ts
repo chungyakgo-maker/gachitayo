@@ -155,9 +155,7 @@ async function restoreOne(s: ServerSession, userId: string, token: string, cours
   }
 }
 
-async function run(): Promise<void> {
-  const auth = getAuth();
-  if (!auth || !serverConfig.apiUrl) return;
+async function run(auth: { userId: string; token: string }): Promise<void> {
   // 주행 중에는 하지 않는다 (끝난 뒤 이어서)
   while (recordingNow()) await untilIdle();
   const { courses, sessions } = await serverLists(auth.token);
@@ -167,7 +165,10 @@ async function run(): Promise<void> {
   const local = await drive.listCourses();
   const courseMap = new Map<string, Course>();
   let coursesChanged = false;
+  const goneCourses = new Set(pendingServerDeletes().courses);
   for (const sc of courses) {
+    // 이 폰에서 지운 코스(서버 지우기가 아직 안 된 것)는 다시 넣지 않는다 (검토 지적)
+    if (goneCourses.has(sc.id)) continue;
     const b = matchBuiltin(sc, local);
     if (b) {
       courseMap.set(sc.id, b);
@@ -220,17 +221,20 @@ async function run(): Promise<void> {
   await refreshSessions();
 }
 
-let running: Promise<boolean> | null = null;
-/** 되살리기 (이미 도는 중이면 그것을 기다린다). 실패는 조용히 두고 다음 실행 때 다시 한다. 하나도 빠짐없이 끝났으면 true */
-export function startRestore(): Promise<boolean> {
+let running: Promise<{ userId: string | null; ok: boolean }> | null = null;
+/** 되살리기 (이미 도는 중이면 그것을 기다린다). 실패는 조용히 두고 다음 실행 때 다시 한다.
+ *  어느 계정으로 돌았는지와 하나도 빠짐없이 끝났는지 */
+export function startRestore(): Promise<{ userId: string | null; ok: boolean }> {
   running ??= (async () => {
+    const auth = getAuth();
+    if (!auth || !serverConfig.apiUrl) return { userId: null, ok: false };
     set({ running: true });
     try {
-      await run();
-      return state.failed === 0;
+      await run(auth);
+      return { userId: auth.userId, ok: state.failed === 0 };
     } catch (e) {
       if (!(e instanceof ApiError) && !(e instanceof TypeError)) console.warn('되살리기 실패', e);
-      return false;
+      return { userId: auth.userId, ok: false };
     } finally {
       set({ running: false });
       running = null;

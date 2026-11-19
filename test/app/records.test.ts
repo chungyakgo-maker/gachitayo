@@ -74,8 +74,10 @@ describe('기록 지우기 (폰에만)', () => {
     const { rec, records } = await load();
     await rec.getRepo().create(session('up', { status: 'uploaded', uploadedAt: 1 }));
     await rec.getRepo().create(session('local'));
+    localStorage.setItem('gachitayo.localOnly.v1', JSON.stringify([ME]));
     await records.deleteSessionRecord('up');
     await records.deleteSessionRecord('local');
+    await records.flushServerDeletes();
     expect(deletes()).toEqual(['/api/sessions/up']);
     expect(await rec.getRepo().get('up')).toBeUndefined();
     expect(await rec.getRepo().get('local')).toBeUndefined();
@@ -89,6 +91,7 @@ describe('기록 지우기 (폰에만)', () => {
       throw new TypeError('Failed to fetch');
     };
     await records.deleteSessionRecord('up');
+    await records.flushServerDeletes();
     expect(await rec.getRepo().get('up')).toBeUndefined();
     expect(records.pendingServerDeletes().sessions).toEqual(['up']);
     reply = () => json(200, { ok: true });
@@ -102,6 +105,8 @@ describe('기록 지우기 (폰에만)', () => {
     for (const id of ['a', 'b', 'c']) await rec.getRepo().create(session(id, { status: 'uploaded', uploadedAt: 1 }));
     reply = (_m, url) => (url.endsWith('/a') ? json(403, { error: '남의 것' }) : url.endsWith('/b') ? json(404, { error: '없음' }) : json(500, { error: '서버 오류' }));
     for (const id of ['a', 'b', 'c']) await records.deleteSessionRecord(id);
+    await records.flushServerDeletes();
+    await records.flushServerDeletes();
     expect(records.pendingServerDeletes().sessions).toEqual(['c']);
   });
 
@@ -109,10 +114,34 @@ describe('기록 지우기 (폰에만)', () => {
     const { records } = await load();
     reply = () => json(409, { error: '기록이 남아 있어요' });
     await records.forgetServerCourse('c1');
+    await records.flushServerDeletes();
     expect(records.pendingServerDeletes().courses).toEqual(['c1']);
     reply = () => json(200, { ok: true });
     await records.flushServerDeletes();
     expect(records.pendingServerDeletes().courses).toEqual([]);
+  });
+
+  it('옮기기를 아직 안 끝낸 계정이면 올린 표시가 없어도 서버에 지우기를 보낸다 (서버에만 남은 사본이 되살아나지 않게)', async () => {
+    const { rec, records } = await load();
+    await rec.getRepo().create(session('maybe'));
+    await records.deleteSessionRecord('maybe');
+    await records.flushServerDeletes();
+    expect(deletes()).toEqual(['/api/sessions/maybe']);
+    localStorage.setItem('gachitayo.localOnly.v1', JSON.stringify([ME]));
+    calls = [];
+    await rec.getRepo().create(session('local2'));
+    await records.deleteSessionRecord('local2');
+    await records.flushServerDeletes();
+    expect(deletes()).toEqual([]);
+  });
+
+  it('통신을 기다리지 않는다: 서버가 답하지 않아도 폰에서는 바로 지워지고 목록에 남는다', async () => {
+    const { rec, records } = await load();
+    await rec.getRepo().create(session('slow', { status: 'uploaded', uploadedAt: 1 }));
+    reply = () => new Promise<Response>(() => {});
+    await records.deleteSessionRecord('slow');
+    expect(await rec.getRepo().get('slow')).toBeUndefined();
+    expect(records.pendingServerDeletes().sessions).toEqual(['slow']);
   });
 
   it('세션·덩어리·결과·비교 랩을 모두 지운다', async () => {

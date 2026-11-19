@@ -3,7 +3,7 @@
 // 막대는 브라우저가 알려 주는 디고 저장 공간. 웹은 사파리가 오래 안 쓴 사이트 저장소를 지울 수 있어 안내하고 보존을 부탁한다.
 import { useEffect, useState } from 'react';
 import { MY_COURSE_LIMIT, RAW_KEEP } from '../../app/limits';
-import { getDriveRepo, getRepo, useRecording } from '../../app/recording';
+import { getDriveRepo, getRepo, refreshSessions, useRecording } from '../../app/recording';
 import { pruneOldRaw, storageSummary, type StorageSummary } from '../../app/storageLimits';
 import { isApp } from '../../platform';
 import { formatBytes } from '../format';
@@ -33,7 +33,7 @@ export function StorageSection() {
   const prune = async () => {
     setBusy(true);
     try {
-      await pruneOldRaw(getRepo());
+      if ((await pruneOldRaw(getRepo())) > 0) await refreshSessions();
     } finally {
       setBusy(false);
       setTick((t) => t + 1);

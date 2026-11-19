@@ -47,7 +47,6 @@ export function SummaryView({
   /** 지금 코스(내 코스)를 벗어난 길로 덮어쓰기 */
   onDetourOverwrite?: () => void;
   onDetourDismiss?: () => void;
-  /** 업로드 상태 한 줄 */
 }) {
   const { session, result, course } = data;
   const [name, setName] = useState('');

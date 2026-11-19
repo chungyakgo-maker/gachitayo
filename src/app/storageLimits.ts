@@ -49,7 +49,9 @@ export async function storageSummary(repo: SessionRepo, drive: DriveRepo, keep =
     const n = await repo.chunkCount(s.id);
     if (n === 0) continue;
     rawSessions++;
-    chunks += n;
+    // 옮기거나 불러온 기록은 덩어리 하나에 주행 전체가 들어 있다 → 주행 시간(5초에 덩어리 하나)으로도 어림해 큰 쪽 (검토 지적)
+    const byTime = s.endedAt ? Math.ceil((s.endedAt - s.startedAt) / 5000) : 0;
+    chunks += Math.max(n, byTime);
     if (i >= keep) prunable++;
   }
   let usage: StorageSummary['usage'] = null;

@@ -342,6 +342,29 @@ describe('처음 한 번 옮기기 (서버 → 폰)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('계속 실패하면 5번째에 그만한다 (매번 받으려 하지 않게, 검토 지적)', async () => {
+    await serverSession();
+    failFile = `${ME}/${serverSessions[0]!.id as string}.raw.json.gz`;
+    for (let i = 1; i <= 5; i++) {
+      const { migrate } = await loadMigrate();
+      await migrate.startMigrateLocal();
+      expect(migrate.migratedUsers().includes(ME)).toBe(i === 5);
+    }
+    fetchMock.mockClear();
+    const { migrate } = await loadMigrate();
+    await migrate.startMigrateLocal();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('지우기 목록의 코스는 다시 넣지 않는다 (검토 지적)', async () => {
+    const sc = serverCourse({ name: '지운 코스' });
+    serverCourses.push(sc);
+    localStorage.setItem('gachitayo.serverDeletes.v1', JSON.stringify({ sessions: [], courses: [sc.id] }));
+    const { rec, migrate } = await loadMigrate();
+    await migrate.startMigrateLocal();
+    expect((await rec.getDriveRepo().listCourses()).some((c) => c.id === sc.id)).toBe(false);
+  });
+
   it('로그인 없이 시작한 계정도 한다 (예전 앱은 모두 올렸다)', async () => {
     localStorage.removeItem('gachitayo.kakao');
     const id = await serverSession();

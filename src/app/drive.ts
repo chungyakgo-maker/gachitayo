@@ -358,7 +358,7 @@ async function afterProcess<T>(r: T | null): Promise<T | null> {
 
 export async function processSession(sessionId: string, kind?: CourseKind): Promise<DriveResultRecord | null> {
   const r = await afterProcess(await track(sessionId, () => processStoredSession(deps(), sessionId, kind)));
-  if (r) void signalDrove(sessionId, r);
+  if (r) void signalDrove(sessionId, r).catch(() => {});
   return r;
 }
 
