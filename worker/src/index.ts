@@ -26,6 +26,7 @@
 //   GET /api/popular?period=             인기 도로 (기본 코스별 달린 사람 수)
 //   POST /api/driving {builtin}          기본 코스로 주행 중 신호 (실시간 인기, 위치 없음)
 //   POST /api/drove {course}             코스를 달렸다는 신호 (인기 도로, 코스 열쇠·한국 날짜만)
+//   /api/shared…                         모두의 코스: 공개·목록·상세·고치기·내리기·받기 (shared.ts)
 //   /api/rooms…, 웹소켓 /group/{id}      그룹 주행 방 (group.ts)
 //   /api/teams…                          팀·팀 주행 (teams.ts)
 //   GET /live/{userId} (WebSocket)       앞 친구 간격용 실시간 방 (M9). 본인 방이면 보내기, 친구 방이면 받기
@@ -44,6 +45,7 @@ import { findRoute } from './route';
 import { finishKakao, kakaoCallback, kakaoEnabled, startKakao } from './kakao';
 import { finishApple } from './apple';
 import { deleteAvatar, getAvatar, putAvatar } from './avatar';
+import { addShared, deleteShared, getShared, listShared, publishShared, updateShared } from './shared';
 import { createTeam, deleteTeam, getTeam, leaveTeam, listTeams, teamDrive, updateTeam } from './teams';
 
 export { LiveRoom } from './live';
@@ -172,6 +174,26 @@ async function route(req: Request, env: Cloudflare.Env, headers: Headers, ctx?: 
     if (method !== 'POST') throw new HttpError(405);
     const body = act === 'leave' ? null : await readJson(req, 1_048_576);
     return json(200, headers, await roomAction(env, id!, userId, act, body));
+  }
+
+  if (path === '/api/shared') {
+    const userId = await authenticate(req, env);
+    if (method === 'GET') return json(200, headers, await listShared(env, userId, new URL(req.url).searchParams.get('after')));
+    if (method === 'POST') return json(201, headers, await publishShared(env, userId, await readJson(req, 1_048_576)));
+    throw new HttpError(405);
+  }
+  const sh = /^\/api\/shared\/([^/]+)(?:\/(add))?$/.exec(path);
+  if (sh) {
+    const userId = await authenticate(req, env);
+    const [, id, act] = sh;
+    if (act) {
+      if (method !== 'POST') throw new HttpError(405);
+      return json(200, headers, await addShared(env, userId, id!));
+    }
+    if (method === 'GET') return json(200, headers, await getShared(env, userId, id!));
+    if (method === 'PUT') return json(200, headers, await updateShared(env, userId, id!, await readJson(req, 1_048_576)));
+    if (method === 'DELETE') return json(200, headers, await deleteShared(env, userId, id!));
+    throw new HttpError(405);
   }
 
   if (path === '/api/teams') {
