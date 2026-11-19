@@ -28,6 +28,7 @@ import {
 import { getSettings, type DriveMode } from './settings';
 import { pruneOldRaw } from './storageLimits';
 import { droveKeyOf, reportDrove } from './droveSignal';
+import { leanFused } from '../features';
 import { changeProposedKind, dismissDetour, loadRaw, overwriteWithDetour, processStoredSession, saveDetourAsNew, saveProposedCourse, type ProcessDeps } from './sessionProcessing';
 
 export type DrivePhase = 'idle' | 'preparing' | 'driving' | 'ending';
@@ -178,7 +179,7 @@ export function beginPrepare(): void {
     return;
   }
   startRecording();
-  pipeline = new LivePipeline({ course: null, ref: null });
+  pipeline = new LivePipeline({ course: null, ref: null, leanFused: leanFused() });
   set({ phase: 'preparing', replay: null, course: null, courseChosen: false, refs: [], ref: null, mode: getSettings().defaultMode, error: null, noRecord: false });
   publish(null);
   void loadCourses();
@@ -213,6 +214,11 @@ export function beginPrepare(): void {
 export function chooseFreeDrive(): void {
   set({ course: null, courseChosen: true, noRecord: true });
   void applyCourse(null, true);
+}
+
+/** 지금 자세를 기울기 0점으로 (주행 준비·기울기 시험의 "0점 맞추기", 웹 빌드). 주행 준비 중이 아니거나 센서 값이 없으면 false */
+export function zeroLean(): boolean {
+  return pipeline?.zeroLean() ?? false;
 }
 
 /** 주행 준비 화면에 보일 알림 (다른 화면에서 주행 준비로 넘긴 뒤 생긴 오류, 예: 모두의 코스 받기 실패) */
@@ -415,7 +421,7 @@ export async function resumeDrive(sessionId: string): Promise<void> {
   const session = await getRepo().get(sessionId);
   const courses = await loadCourses();
   const course = courses.find((c) => c.id === session?.courseId) ?? null;
-  pipeline = new LivePipeline({ course: null, ref: null });
+  pipeline = new LivePipeline({ course: null, ref: null, leanFused: leanFused() });
   await applyCourse(course, true);
   const unsub = subscribeSamples((e) => (e.kind === 'gps' ? pipeline?.pushGps(e.s) : pipeline?.pushMotion(e.s)));
   const stopTicker = startTicker(recordingClockNow);
@@ -605,7 +611,7 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
       replayTimer = () => clearInterval(timer);
       return;
     }
-    pipeline = new LivePipeline({ course: null, ref: null });
+    pipeline = new LivePipeline({ course: null, ref: null, leanFused: leanFused() });
     pipeline.setCourse(course, toLiveRef(ref));
     set({ phase: 'driving', replay: info, course, courseChosen: true, refs: ref ? [ref] : [], ref, mode: getSettings().defaultMode });
     publish(null);

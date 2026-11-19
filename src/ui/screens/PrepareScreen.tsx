@@ -1,6 +1,7 @@
 // 주행 준비 (사양서 8.3, 디자인 시안 Prepare)
 import { liveGap, locationSharing, shareAnyLocation } from '../../features';
 import { MountTips } from '../components/MountTips';
+import { LeanZeroCard } from '../components/LeanZeroCard';
 import { GapSection } from '../components/GapSection';
 import { ShareToggle } from '../components/ShareToggle';
 import { DriveFriendsToggle } from '../components/DriveFriendsToggle';
@@ -219,6 +220,8 @@ export function PrepareScreen() {
         </div>
         {settings.vehicle === 'bike' && <span className="sub">{BIKE_MARKER_LABEL[settings.bikeMarker]} · 길찾기는 고속도로·자동차전용도로를 피해요</span>}
       </section>
+      {/* 기울기 0점 (웹 빌드만: 기울기 합치기가 켜져 있을 때 스냅숏에 기울기 칸이 있다) */}
+      {settings.vehicle === 'bike' && <LeanZeroCard />}
 
       {d.mode === 'map' && (
         <section aria-label="지도 보기" className="card-col" style={{ gap: 8 }}>

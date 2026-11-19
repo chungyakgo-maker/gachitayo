@@ -202,3 +202,74 @@ describe('보정 전 임시 G (사용자 요청: 손으로 흔들어도 움직�
     expect(shaking.every((x) => x.state!.gEstimated)).toBe(true);
   });
 });
+
+describe('기울기 합치기 (웹 빌드에서 시험, 2026-11-19 세영 "0에서도 기울기 동작하게끔해")', () => {
+  const RAD = Math.PI / 180;
+  /** 화면이 타는 사람을 본 채 바이크가 오른쪽으로 deg 기운 정차 자세의 원본 모션 */
+  const tilted = (t: number, deg: number): RawMotionSample => ({ t, gax: -9.81 * Math.sin(deg * RAD), gay: 9.81 * Math.cos(deg * RAD), gaz: 0, rx: 0, ry: 0, rz: 0 });
+  const restGps = (end: number): GpsSample[] => {
+    const g: GpsSample[] = [];
+    for (let t = 0; t <= end; t += 1000) g.push({ tRecv: t, tFix: 1_800_000_000_000 + t, lat: 37.2, lon: 127.1, alt: null, altAcc: null, hAcc: 3, speed: 0, heading: null });
+    return g;
+  };
+  const motionOf = (from: number, to: number, deg: number) => {
+    const m: RawMotionSample[] = [];
+    for (let t = from; t <= to; t += 20) m.push(tilted(t, deg));
+    return m;
+  };
+
+  it('꺼져 있으면(앱 빌드) 스냅숏에 기울기 칸이 없다 — 예전 계산 그대로', () => {
+    const p = new LivePipeline({ course: null, ref: null });
+    const snaps = replay(p, restGps(3000), motionOf(0, 3000, 10), 3000);
+    expect(snaps.at(-1)!.lean ?? null).toBeNull();
+    expect(p.zeroLean()).toBe(false);
+  });
+
+  it('GPS 없이 정차 중에도: 0점을 맞추고 오른쪽으로 15° 기울이면 15°', () => {
+    const p = new LivePipeline({ course: null, ref: null, leanFused: true });
+    replay(p, [], motionOf(0, 2000, 0), 2000);
+    expect(p.zeroLean()).toBe(true);
+    const motion = motionOf(2020, 5000, 15);
+    let j = 0;
+    let last: LiveSnapshot | null = null;
+    for (let t = 2100; t <= 5000; t += 100) {
+      while (j < motion.length && motion[j]!.t <= t) p.pushMotion(motion[j++]!);
+      last = p.tick(t);
+    }
+    expect(last!.state).toBeNull();
+    expect(last!.lean).toMatchObject({ ref: 'user' });
+    expect(last!.lean!.deg).toBeCloseTo(15, 0);
+  });
+
+  it('주행 상태가 나오면 화면 기울기(state.leanDeg)도 합친 값 (정차, 오른쪽 12°)', () => {
+    const p = new LivePipeline({ course: null, ref: null, leanFused: true });
+    const gps = restGps(8000);
+    replay(p, gps.filter((g) => g.tRecv <= 3000), motionOf(0, 3000, 0), 3000);
+    expect(p.zeroLean()).toBe(true);
+    const motion = motionOf(3020, 8000, 12);
+    let i = gps.findIndex((g) => g.tRecv > 3000);
+    let j = 0;
+    let last: LiveSnapshot | null = null;
+    for (let t = 3100; t <= 8000; t += 100) {
+      while (i < gps.length && gps[i]!.tRecv <= t) p.pushGps(gps[i++]!);
+      while (j < motion.length && motion[j]!.t <= t) p.pushMotion(motion[j++]!);
+      last = p.tick(t);
+    }
+    expect(last!.state).not.toBeNull();
+    expect(last!.state!.leanDeg).toBeCloseTo(12, 0);
+  });
+
+  it('차(기울지 않음)로 코너를 돌면: 예전 계산은 크게 눕지만 합친 기울기는 0 가까이 (보정 뒤)', () => {
+    const truth = simulateDrive(oval, base);
+    const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed: 95 });
+    const end = truth.t.at(-1)! * 1000;
+    const fused = replay(new LivePipeline({ course: null, ref: null, leanFused: true }), s.gps, s.motion, end);
+    const old = replay(new LivePipeline({ course: null, ref: null }), s.gps, s.motion, end);
+    const after = (xs: LiveSnapshot[]) => xs.filter((x) => x.calibration.signsConfirmed && x.state?.leanDeg != null).map((x) => Math.abs(x.state!.leanDeg!));
+    const f = after(fused).sort((a, b) => a - b);
+    const o = after(old);
+    expect(f.length).toBeGreaterThan(100);
+    expect(Math.max(...o)).toBeGreaterThan(20);
+    expect(f[Math.floor(f.length * 0.95)]!).toBeLessThan(6);
+  });
+});

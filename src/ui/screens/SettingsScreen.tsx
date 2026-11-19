@@ -490,6 +490,13 @@ export function SettingsScreen() {
               </span>
               <IconChevron size={20} color="#9AA1A9" />
             </a>
+            <a className="list-link" href="#/dev/lean">
+              <span className="card-col" style={{ gap: 3 }}>
+                <strong style={{ fontSize: 15 }}>기울기 시험</strong>
+                <span className="sub">폰 센서 기울기와 계산 기울기를 나란히 보기 · 0점 맞추기</span>
+              </span>
+              <IconChevron size={20} color="#9AA1A9" />
+            </a>
           </section>
         )}
         <footer className="build-info">

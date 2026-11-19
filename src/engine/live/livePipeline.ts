@@ -3,6 +3,7 @@
 // 기록기와 같은 샘플을 받는다. 화면은 tick(지금 시각)을 100 ms마다 불러 스냅숏을 그린다.
 import { GpsAccelEstimator } from '../derive/gpsAccel';
 import { LeanEstimator } from '../derive/lean';
+import { LeanFusion, type LeanParts } from '../derive/leanFusion';
 import { SensorGEstimator } from '../derive/sensorG';
 import { fromLocal, toLocal, type LatLon } from '../geo';
 import { buildGeometry, type CourseGeometry } from '../course/geometry';
@@ -23,6 +24,8 @@ export interface LivePipelineOpts {
   ref: LiveRef | null;
   /** 플랫폼 기본 축 부호 (없으면 +1, +1. 주행 중 확인으로 바로잡는다) */
   axisSigns?: AxisSigns;
+  /** 기울기를 센서 기울기 + 계산 기울기로 (웹 빌드에서 시험, leanFusion.ts). 없으면 예전 계산(lean.ts)만 */
+  leanFused?: boolean;
 }
 
 export interface LiveSnapshot {
@@ -51,6 +54,8 @@ export interface LiveSnapshot {
   };
   /** 베스트 고스트: 비교 랩이 지금과 같은 랩 경과 시간에 있던 곳 */
   ghost: { x: number; y: number; s: number } | null;
+  /** 합친 기울기와 그 나눔 (leanFused 일 때만, 위치가 없어도 나온다 — 기울기 시험 화면) */
+  lean?: LeanParts | null;
   /** 지나온 경로 (같은 좌표계, 3 m 간격) */
   path: ReadonlyArray<readonly [number, number]>;
   /** 이번 랩(또는 랩 밖 구간)이 시작된 path 위치. 코스 주행 지도는 여기부터 그린다 (사용자 요청: 코스 주행도 지나온 길) */
@@ -60,6 +65,8 @@ export interface LiveSnapshot {
 }
 
 const STEP_MS = 20;
+/** 융합 위치가 이만큼 끊기면 기울기는 속도 0 으로 보고 센서로만 (실내·GPS 끊김) */
+const LEAN_STALE_MS = 1500;
 /** 모션이 이만큼 넘게 늦으면(권한 없음, 멈춤) GPS만으로 진행한다 */
 const MOTION_STALE_MS = 500;
 /** GPS가 이보다 오래되거나 오차가 이보다 크면 "GPS 약함" */
@@ -89,6 +96,10 @@ export class LivePipeline {
   private readonly gpsAccel = new GpsAccelEstimator();
   /** 바이크 기울기 (화면 표시용, 탈것과 상관없이 늘 구한다: 계산이 가볍다) */
   private readonly lean = new LeanEstimator();
+  /** 센서 기울기 + 계산 기울기 (leanFused 일 때만) */
+  private readonly leanFusion: LeanFusion | null;
+  private leanMotionDone = 0;
+  private leanParts: LeanParts | null = null;
   private readonly sensorG = new SensorGEstimator();
   private state: LiveState | null = null;
   private pos: LiveSnapshot['pos'] = null;
@@ -101,6 +112,7 @@ export class LivePipeline {
   constructor(opts: LivePipelineOpts) {
     this.motion = new LiveMotion50(opts.axisSigns);
     this.cal = new MountCalibrator(this.motion);
+    this.leanFusion = opts.leanFused ? new LeanFusion() : null;
     this.fusionOrigin = opts.course?.origin ?? null;
     this.setCourse(opts.course, opts.ref);
   }
@@ -145,6 +157,11 @@ export class LivePipeline {
     this.motion.push(m);
   }
 
+  /** 지금 자세를 기울기 0점으로 (바이크를 똑바로 세우고). 합치기가 꺼져 있거나 센서 값이 없으면 false */
+  zeroLean(): boolean {
+    return this.leanFusion?.zero() ?? false;
+  }
+
   tick(tNow: number): LiveSnapshot {
     const m = this.motion;
     // 1. 거치 보정: 들어온 모션 격자까지, GPS는 시각 순서대로 끼워 넣는다
@@ -158,6 +175,16 @@ export class LivePipeline {
     if (!motionActive) while (this.gq < this.gpsQueue.length) this.cal.pushGps(this.gpsQueue[this.gq++]!);
     this.gpsQueue.splice(0, this.gq);
     this.gq = 0;
+    // 1-1. 기울기 합치기: 폰이 느끼는 힘을 모션 격자대로 넣고, 거치 보정이 아는 축을 알려 준다
+    const lf = this.leanFusion;
+    if (lf) {
+      for (; this.leanMotionDone < m.n; this.leanMotionDone++) {
+        const k = this.leanMotionDone;
+        if (m.valid[k]) lf.pushMotion(m.t0 + k * m.dt, [m.fx[k]!, m.fy[k]!, m.fz[k]!]);
+      }
+      lf.setAxes({ fwd: this.cal.current?.fwd ?? null, stillUp: this.cal.stationaryUp()?.up ?? null });
+    }
+    let fed = false;
 
     // 2. 융합: 모션이 들어오는 동안은 모션이 있는 시각까지만 (없는 칸을 GPS만으로 메우지 않게)
     const target = motionActive ? Math.min(tNow, motionEnd!) : tNow;
@@ -168,6 +195,7 @@ export class LivePipeline {
         if (p) {
           this.stepT = p.t;
           this.feed(p);
+          fed = true;
         }
       }
       while (this.stepT !== null && this.stepT + STEP_MS <= target) {
@@ -175,7 +203,12 @@ export class LivePipeline {
         const p = this.runner.current()!;
         this.stepT = p.t;
         this.feed(p);
+        fed = true;
       }
+    }
+    // 위치가 없거나(실내·GPS 전) 융합이 멈춰 있어도 기울기는 센서로 (속도 0으로 본다)
+    if (lf && !fed && motionEnd !== null && (this.stepT === null || motionEnd - this.stepT > LEAN_STALE_MS)) {
+      this.leanParts = lf.update(motionEnd, { v: 0, yawRateLeft: null, physicsDeg: null });
     }
 
     // 3. 스냅숏
@@ -196,6 +229,7 @@ export class LivePipeline {
       },
       calibration: { state: this.cal.state, stillProgress, signsConfirmed: cal?.signsConfirmed ?? false, motionActive, progress: this.cal.progress() },
       ghost: this.ghost(),
+      lean: this.leanParts,
       path: this.path,
       pathFrom: this.pathFrom,
       pathDropped: this.pathDropped,
@@ -209,10 +243,12 @@ export class LivePipeline {
     let ax: number | null = null;
     let ay: number | null = null;
     const i = Math.round((p.t - m.t0) / m.dt);
+    let yawRateLeft: number | null = null;
     if (cal?.signsConfirmed && i >= 0 && i < m.n && m.valid[i]) {
       const c = toCar(cal, [m.fx[i]!, m.fy[i]!, m.fz[i]!], [m.wx[i]!, m.wy[i]!, m.wz[i]!]);
       ax = c.ax;
       ay = c.ay;
+      yawRateLeft = c.yawRate;
     }
     // 보정 전 임시 G (사용자 요청 "흔들면 움직이게"): 모션이 있으면 폰 센서 그대로(sensorG), 없으면 GPS 추정.
     // GPS 추정은 센서 쪽 부호 맞추기에도 쓰므로 늘 채워 둔다
@@ -231,6 +267,10 @@ export class LivePipeline {
     }
     const g = this.lastGps;
     const gpsOk = g !== null && p.t - g.tRecv <= GPS_OK_AGE_MS && g.hAcc <= GPS_OK_HACC_M;
+    const v = Math.max(0, p.v);
+    // 예전 계산(GPS 방향 1.5초 기울기)은 늘 구한다: 합치기를 끄면 이것이 화면 값, 켜면 자이로를 못 믿을 때의 계산 기울기
+    const calcLean = this.lean.push(p.t, v, p.psi);
+    if (this.leanFusion) this.leanParts = this.leanFusion.update(p.t, { v, yawRateLeft, physicsDeg: yawRateLeft === null ? calcLean : null });
     this.state = this.engine.push({
       t: p.t,
       x: d.x,
@@ -242,7 +282,7 @@ export class LivePipeline {
       gpsOk,
       gCalibrated: cal?.signsConfirmed ?? false,
       gEstimated: estimated,
-      leanDeg: this.lean.push(p.t, Math.max(0, p.v), p.psi),
+      leanDeg: this.leanParts ? this.leanParts.deg : calcLean,
     });
     this.pos = { x: d.x, y: d.y, psi: p.psi };
     this.markLap(this.state);
