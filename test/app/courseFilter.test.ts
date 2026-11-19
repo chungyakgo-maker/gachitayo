@@ -18,7 +18,7 @@ const ids = (r: Array<{ course: Course }>) => r.map((x) => x.course.id);
 
 describe('filterCourses', () => {
   it('chip labels in order', () => {
-    expect(FILTERS.map((f) => f.label)).toEqual(['전체', '기본 코스', '즐겨찾기', '내 코스', '해안 길', '산 길', '인기 도로']);
+    expect(FILTERS.map((f) => f.label)).toEqual(['전체', '기본 코스', '모두의 코스', '즐겨찾기', '내 코스', '해안 길', '산 길', '인기 도로']);
   });
   it('all, built-in, favorites, mine', () => {
     expect(ids(filterCourses(all, 'all', prefs, null))).toEqual(['hao', 'nam', 'mine-a', 'mine-b']);
