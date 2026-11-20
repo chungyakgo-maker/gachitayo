@@ -71,6 +71,23 @@ describe('재생 타임라인 (사양서 10.2: 시작할 때 전부 계산해 �
     expect(pick(f)).toEqual(out.get(last));
   });
 
+  it('G미터 최대 G 점도 그 시각까지의 값 (재생에서 뒤로 옮겨도, 2026-11-20)', async () => {
+    const tl = await buildReplayTimeline({ gps: first.gps, motion: first.motion, course: null, ref: null });
+    const ticks = [Math.round(tl.endMs / 300) * 100, Math.round((2 * tl.endMs) / 300) * 100, Math.floor(tl.endMs / 100) * 100];
+    const p = new LivePipeline({ course: null, ref: null });
+    const want = new Map<number, number[][]>();
+    let i = 0;
+    let j = 0;
+    for (let t = 0; t <= ticks.at(-1)!; t += 100) {
+      while (i < first.gps.length && first.gps[i]!.tRecv <= t) p.pushGps(first.gps[i++]!);
+      while (j < first.motion.length && first.motion[j]!.t <= t) p.pushMotion(first.motion[j++]!);
+      const s = p.tick(t);
+      if (ticks.includes(t)) want.set(t, (s.gPeaks ?? []).map((q) => [...q]));
+    }
+    for (const t of [...ticks].reverse()) expect((tl.frameAt(tl.indexAt(t)).gPeaks ?? []).map((q) => [...q])).toEqual(want.get(t));
+    expect(want.get(ticks[0]!)!.length).toBeLessThan(want.get(ticks[2]!)!.length);
+  });
+
   it('번호는 범위 안으로 자르고, 진행률은 늘어나기만 하다 1로 끝난다', async () => {
     const seen: number[] = [];
     const tl = await buildReplayTimeline({ gps: first.gps, motion: first.motion, course: null, ref: null }, { onProgress: (f) => seen.push(f), yieldEvery: 200 });

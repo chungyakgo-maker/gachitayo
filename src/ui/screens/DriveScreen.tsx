@@ -344,7 +344,7 @@ export function DriveView({ snap, gap: gapIn = null, front: frontIn = null, frie
               </div>
             ) : (
               <div className="dash-tile g-tile">
-                <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} max={settings.gMaxG} trail={frame.gTrail} estimated={st?.gEstimated ?? false} />
+                <GMeter gx={st?.gx ?? null} gy={st?.gy ?? null} max={settings.gMaxG} trail={frame.gTrail} estimated={st?.gEstimated ?? false} peaks={frame.gPeaks} />
               </div>
             )}
           </div>

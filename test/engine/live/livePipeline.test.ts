@@ -273,3 +273,37 @@ describe('기울기 합치기 (웹 빌드에서 시험, 2026-11-19 세영 "0에�
     expect(f[Math.floor(f.length * 0.95)]!).toBeLessThan(6);
   });
 });
+
+describe('G미터 최대 G 점 (2026-11-20 세영 "최대게이지만큼 선으로 이어봐")', () => {
+  const truth = simulateDrive(oval, base);
+  const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed: 94 });
+  const snaps = replay(new LivePipeline({ course: null, ref: null }), s.gps, s.motion, truth.t.at(-1)! * 1000);
+
+  it('보정 뒤 G로 방향마다 가장 센 G가 쌓인다 (오벌: 좌우 약 0.8 g, 제동·가속도 있음)', () => {
+    const last = snaps.at(-1)!.gPeaks!;
+    expect(last.length).toBeGreaterThan(10);
+    const mags = last.map(([gx, gy]) => Math.hypot(gx, gy));
+    expect(Math.max(...mags)).toBeGreaterThan(0.5);
+    expect(Math.max(...mags)).toBeLessThan(1.3);
+    // 왼쪽(오벌을 도는 쪽) 성분이 가장 크다
+    expect(Math.max(...last.map(([, gy]) => Math.abs(gy)))).toBeGreaterThan(0.5);
+  });
+
+  it('보정 전 임시 G(속 빈 점)는 넣지 않는다', () => {
+    const before = snaps.filter((x) => !x.calibration.signsConfirmed);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.some((x) => x.state?.gEstimated && x.state.gx !== null)).toBe(true);
+    expect(before.every((x) => (x.gPeaks ?? []).length === 0)).toBe(true);
+  });
+
+  it('쌓이기만 한다: 앞 시각의 점은 뒤 시각에도 그 방향에서 같거나 더 세다', () => {
+    const a = snaps[Math.floor(snaps.length / 2)]!.gPeaks!;
+    const b = snaps.at(-1)!.gPeaks!;
+    const dir = (p: readonly [number, number]) => Math.floor(((Math.atan2(p[0], -p[1]) + 2 * Math.PI) % (2 * Math.PI)) / ((2 * Math.PI) / 72));
+    for (const p of a) {
+      const q = b.find((x) => dir(x) === dir(p));
+      expect(q).toBeDefined();
+      expect(Math.hypot(...q!)).toBeGreaterThanOrEqual(Math.hypot(...p) - 1e-12);
+    }
+  });
+});

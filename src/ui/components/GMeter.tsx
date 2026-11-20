@@ -1,9 +1,10 @@
 // G미터: 원 안에서 움직이는 점 (사양서 8.4). 바깥 원 = 최대값(설정, 기본 2 g), 안쪽 눈금 원, 위가 제동, 왼쪽이 좌.
 // 글자 없이 칸을 꽉 채운다 (사용자 요청). 바깥 원 값만 작게, 보정 전 임시 G면 점이 속 빈 원.
 // 최근 2초 궤적을 다듬은 곡선으로, 오래된 것부터 옅게.
+// 최대 G 점(2026-11-20 시안): 방향마다 이번 주행에서 가장 센 G에 같은 크기 점, 이웃끼리 직선 — 약하면 파랑 점선, 세면 빨강 실선.
 // 대시보드 모드용 SVG (칸 크기에 맞춰 늘어난다). 지도 모드는 같은 모양을 캔버스로 그린다 (overlay/draw.ts drawGMeter)
 import { gLabel } from '../overlay/frame';
-import { G_MAX_DEFAULT, gRings, gToUnit, gTrailCurves, trailAlpha } from '../overlay/gmeter';
+import { G_MAX_DEFAULT, G_PEAK, gPeakShape, gPeakStyle, gRings, gToUnit, gTrailCurves, trailAlpha } from '../overlay/gmeter';
 
 export { gLabel };
 export interface GMeterProps {
@@ -17,17 +18,20 @@ export interface GMeterProps {
   trail?: ReadonlyArray<readonly [number, number]>;
   /** 보정 전 임시 G */
   estimated?: boolean;
+  /** 최대 G 점 [앞뒤, 좌우] (원을 도는 순서) */
+  peaks?: ReadonlyArray<readonly [number, number]>;
 }
 
 /** 좌표계 크기 (그려지는 크기는 감싼 칸에 맞춘다) */
 const S = 200;
 
-export function GMeter({ gx, gy, max = G_MAX_DEFAULT, trail, estimated = false }: GMeterProps) {
+export function GMeter({ gx, gy, max = G_MAX_DEFAULT, trail, estimated = false, peaks }: GMeterProps) {
   const c = S / 2;
   const dotR = 11;
   const R = c - dotR - 2;
   const rings = gRings(max);
   const curves = gTrailCurves(trail, max);
+  const peak = gPeakShape(peaks, max);
   const P = (u: readonly [number, number]) => `${(c + u[0] * R).toFixed(1)} ${(c + u[1] * R).toFixed(1)}`;
   const dot = gx !== null && gy !== null ? gToUnit(gx, gy, max) : null;
   const l = gLabel(gx, gy);
@@ -48,6 +52,25 @@ export function GMeter({ gx, gy, max = G_MAX_DEFAULT, trail, estimated = false }
       <text x={c + R * 0.6} y={c - R * 0.78} dominantBaseline="middle" fontSize={13} fill="#5E656D" fontFamily="IBM Plex Mono, monospace">
         {max}g
       </text>
+      {peak.segs.map((s, i) => {
+        // 바깥 원 반지름이 G_PEAK.refR(87)이라 굵기·점선을 그대로 쓴다
+        const st = gPeakStyle(s.g);
+        return (
+          <path
+            key={`p${i}`}
+            className="g-peak"
+            d={`M${P(s.from)}L${P(s.to)}`}
+            fill="none"
+            stroke={st.color}
+            strokeWidth={st.width}
+            strokeDasharray={st.dash ? st.dash.map((v) => v.toFixed(2)).join(' ') : undefined}
+            strokeLinecap="round"
+          />
+        );
+      })}
+      {peak.dots.map((d, i) => (
+        <circle key={`d${i}`} className="g-peak-dot" cx={c + d.at[0] * R} cy={c + d.at[1] * R} r={G_PEAK.dotR} fill={gPeakStyle(d.g).color} />
+      ))}
       {curves.map((b, i) => (
         <path
           key={i}
