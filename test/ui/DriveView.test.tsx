@@ -270,6 +270,24 @@ describe('주행 화면 (사양서 8.4, 시안)', () => {
     expect(screen.getByRole('img', { name: /\(최대 3g\)$/ })).toBeInTheDocument();
   });
 
+  it('대시보드 G미터에도 최대 G 점과 선 (2026-11-20): 센 쪽은 실선, 약한 쪽은 점선', () => {
+    const peaks = [
+      [0.1, 0],
+      [0, 0.85],
+      [-0.9, 0],
+    ] as const;
+    const r = render(<DriveView {...props({ mode: 'dashboard', snap: { ...snap(state({ gx: 0, gy: 0 })), gPeaks: peaks } })} />);
+    const segs = [...r.container.querySelectorAll('.g-peak')];
+    expect(segs.length).toBe(3);
+    expect(r.container.querySelectorAll('.g-peak-dot').length).toBe(3);
+    expect(segs.filter((x) => x.getAttribute('stroke-dasharray')).length).toBe(2);
+    expect(segs[1]!.getAttribute('stroke')).toBe('rgb(255, 40, 40)');
+    expect(segs[1]!.getAttribute('stroke-dasharray')).toBeNull();
+    // 궤적·지금 점이 위에 오도록 먼저 그린다
+    const all = [...r.container.querySelectorAll('svg.g-meter > *')];
+    expect(all.indexOf(r.container.querySelector('.g-peak')!)).toBeLessThan(all.indexOf(r.container.querySelector('.g-dot')!));
+  });
+
   it('대시보드 G 칸: 글자 없이 G미터만 (사용자 요청), 임시 G는 속 빈 점, 최대값 기본 2g', () => {
     const r = render(<DriveView {...props({ mode: 'dashboard', snap: snap(state({ gx: 0, gy: 0, gEstimated: true })) })} />);
     const tile = r.container.querySelector('.dash-tile.g-tile')!;

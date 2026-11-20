@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GTrailBuffer, gRings, gToUnit, gTrailCurves, smoothTrail, trailBeziers } from '../../../src/ui/overlay/gmeter';
+import { GTrailBuffer, gPeakShape, gPeakStyle, gRings, gToUnit, gTrailCurves, smoothTrail, trailBeziers } from '../../../src/ui/overlay/gmeter';
 
 describe('G미터 최대값과 궤적 (사용자 요청)', () => {
   it('눈금 원: 1.5 g는 0.5 g마다, 2·2.5·3 g는 1 g마다 + 최대값', () => {
@@ -40,5 +40,55 @@ describe('G미터 최대값과 궤적 (사용자 요청)', () => {
     expect(bz[3]!.to).toEqual(s[4]);
     expect(gTrailCurves([[0, 0]], 2)).toEqual([]);
     expect(gTrailCurves([[0, 0], [1, 0], [2, 0]], 2).length).toBe(2);
+  });
+});
+
+describe('최대 G 점 그리기 (2026-11-20 세영, 시안 docs/mock/2026-11-20-gpeaks.jpg)', () => {
+  it('색·선: 0.25 g 아래 파랑 점선(가늘게) → 보라 → 0.8 g 넘으면 진한 빨강 실선(굵게)', () => {
+    const weak = gPeakStyle(0.2);
+    const mid = gPeakStyle(0.5);
+    const firm = gPeakStyle(0.65);
+    const strong = gPeakStyle(0.9);
+    expect(weak.color).toBe('rgb(77, 163, 255)');
+    expect(strong.color).toBe('rgb(255, 40, 40)');
+    expect(gPeakStyle(3).color).toBe('rgb(255, 40, 40)');
+    expect(mid.color).not.toBe(weak.color);
+    expect(mid.color).not.toBe(strong.color);
+    expect(weak.dash).not.toBeNull();
+    expect(mid.dash).not.toBeNull();
+    expect(firm.dash).toBeNull();
+    expect(strong.dash).toBeNull();
+    expect(weak.width).toBeLessThan(mid.width);
+    expect(mid.width).toBeLessThan(strong.width);
+  });
+
+  it('모양: 점 3개 이상은 받은 순서(각도 순)대로 닫힌 직선, 2개는 선 하나, 1개는 점만. 바깥 원 밖은 둘레에', () => {
+    const pts = [
+      [0.3, 0],
+      [0, 0.6],
+      [-0.9, 0],
+    ] as const;
+    const s = gPeakShape(pts, 2);
+    expect(s.dots.map((d) => d.at)).toEqual(pts.map(([gx, gy]) => gToUnit(gx, gy, 2)));
+    expect(s.segs.length).toBe(3);
+    expect(s.segs[0]!.from).toEqual(s.dots[0]!.at);
+    expect(s.segs[2]!.to).toEqual(s.dots[0]!.at);
+    // 선 색은 양 끝 G의 평균으로
+    expect(s.segs[1]!.g).toBeCloseTo((0.6 + 0.9) / 2, 9);
+    expect(s.dots[2]!.g).toBeCloseTo(0.9, 9);
+    expect(gPeakShape(pts.slice(0, 2), 2).segs.length).toBe(1);
+    const one = gPeakShape(pts.slice(0, 1), 2);
+    expect(one.segs).toEqual([]);
+    expect(one.dots.length).toBe(1);
+    expect(gPeakShape(undefined, 2)).toEqual({ segs: [], dots: [] });
+    const big = gPeakShape(
+      [
+        [3, 0],
+        [0, 3],
+        [-3, 0],
+      ],
+      2,
+    );
+    for (const d of big.dots) expect(Math.hypot(...d.at)).toBeCloseTo(1, 9);
   });
 });

@@ -3,6 +3,7 @@
 // 기록기와 같은 샘플을 받는다. 화면은 tick(지금 시각)을 100 ms마다 불러 스냅숏을 그린다.
 import { GpsAccelEstimator } from '../derive/gpsAccel';
 import { LeanEstimator } from '../derive/lean';
+import { GPeaks, type GPeak } from '../derive/gPeaks';
 import { LeanFusion, type LeanParts } from '../derive/leanFusion';
 import { SensorGEstimator } from '../derive/sensorG';
 import { fromLocal, toLocal, type LatLon } from '../geo';
@@ -56,6 +57,8 @@ export interface LiveSnapshot {
   ghost: { x: number; y: number; s: number } | null;
   /** 합친 기울기와 그 나눔 (leanFused 일 때만, 위치가 없어도 나온다 — 기울기 시험 화면) */
   lean?: LeanParts | null;
+  /** G미터 최대 G 점 (방향 72칸마다 이번 주행에서 가장 센 G, 보정 뒤 G만 — gPeaks.ts). 바뀌지 않으면 같은 배열 */
+  gPeaks?: ReadonlyArray<GPeak>;
   /** 지나온 경로 (같은 좌표계, 3 m 간격) */
   path: ReadonlyArray<readonly [number, number]>;
   /** 이번 랩(또는 랩 밖 구간)이 시작된 path 위치. 코스 주행 지도는 여기부터 그린다 (사용자 요청: 코스 주행도 지나온 길) */
@@ -96,6 +99,7 @@ export class LivePipeline {
   private readonly gpsAccel = new GpsAccelEstimator();
   /** 바이크 기울기 (화면 표시용, 탈것과 상관없이 늘 구한다: 계산이 가볍다) */
   private readonly lean = new LeanEstimator();
+  private readonly peaks = new GPeaks();
   /** 센서 기울기 + 계산 기울기 (leanFused 일 때만) */
   private readonly leanFusion: LeanFusion | null;
   private leanMotionDone = 0;
@@ -230,6 +234,7 @@ export class LivePipeline {
       calibration: { state: this.cal.state, stillProgress, signsConfirmed: cal?.signsConfirmed ?? false, motionActive, progress: this.cal.progress() },
       ghost: this.ghost(),
       lean: this.leanParts,
+      gPeaks: this.peaks.points(),
       path: this.path,
       pathFrom: this.pathFrom,
       pathDropped: this.pathDropped,
@@ -284,6 +289,8 @@ export class LivePipeline {
       gEstimated: estimated,
       leanDeg: this.leanParts ? this.leanParts.deg : calcLean,
     });
+    // 최대 G 점: 보정 전 임시 G는 방향이 틀릴 수 있어 넣지 않는다(평균도 끊는다)
+    this.peaks.push(p.t, estimated ? null : this.state.gx, estimated ? null : this.state.gy);
     this.pos = { x: d.x, y: d.y, psi: p.psi };
     this.markLap(this.state);
     const last = this.path[this.path.length - 1];

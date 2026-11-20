@@ -182,6 +182,54 @@ describe('오버레이 그리기 (캔버스)', () => {
   });
 });
 
+describe('G미터 최대 G 점 (2026-11-20 세영 "밖으로 가면 빨간색으로 진하게, 안쪽이면 파랑색쪽으로 점선으로 찍고 연결")', () => {
+  // gPeaks 가 주는 원을 도는 순서 그대로 잇는다: 가속 → 왼쪽 → 제동 → 오른쪽 → (가속)
+  const peaks = [
+    [0.1, 0],
+    [0, 0.85],
+    [-0.9, 0],
+    [0, -0.15],
+  ] as const;
+
+  it('스냅숏의 최대 G 점을 화면 상태로 그대로 넘긴다', () => {
+    const snap = { t: 0, state: null, frame: 'session' as const, origin: null, utcOffsetMs: null, pos: null, gps: { ready: false, hAcc: null, ageMs: null }, calibration: { state: 'need_stationary' as const, stillProgress: 0, signsConfirmed: false, motionActive: false }, ghost: null, path: [], pathFrom: 0, pathDropped: 0, gPeaks: peaks };
+    expect(frameFromLive(snap, false, false).gPeaks).toBe(peaks);
+    expect(frameFromLive(null, false, false).gPeaks).toBeUndefined();
+  });
+
+  it('센 쪽(왼쪽 0.85 g ↔ 제동 0.9 g)은 빨강 실선, 약한 쪽(가속 0.1 g ↔ 오른쪽 0.15 g)은 파랑 점선, 점은 모두 같은 크기', () => {
+    const c = fakeCtx();
+    drawGTile(c.ctx, 170, 100, frame({ gPeaks: peaks }), th);
+    const segs = c.calls.filter((x) => x.op === 'stroke' && /^rgb\(/.test(String(x.strokeStyle)));
+    expect(segs.length).toBe(4);
+    const strong = segs[1]!; // 왼쪽 → 제동
+    expect(strong.strokeStyle).toBe('rgb(255, 40, 40)');
+    expect(strong.lineDash).toEqual([]);
+    const weak = segs[3]!; // 오른쪽 → 가속 (닫는 선)
+    expect(weak.strokeStyle).toBe('rgb(77, 163, 255)');
+    expect(weak.lineDash.length).toBe(2);
+    // 점: 같은 반지름 4개, 점선 없이
+    const dots: number[] = [];
+    c.calls.forEach((x, i) => {
+      const next = c.calls[i + 1];
+      if (x.op === 'arc' && next?.op === 'fill' && /^rgb\(/.test(String(next.fillStyle))) dots.push(x.args[2] as number);
+    });
+    expect(dots.length).toBe(4);
+    expect(new Set(dots).size).toBe(1);
+    // 궤적·지금 점보다 먼저 (아래에), 지금 점은 점선이 아니다
+    const lastPeak = Math.max(...c.calls.map((x, i) => (/^rgb\(/.test(String(x.op === 'fill' ? x.fillStyle : x.strokeStyle)) && (x.op === 'fill' || x.op === 'stroke') ? i : -1)));
+    const meDot = c.calls.findIndex((x) => x.op === 'fill' && x.fillStyle === th.fg);
+    expect(lastPeak).toBeLessThan(meDot);
+    expect(c.calls[meDot]!.lineDash).toEqual([]);
+  });
+
+  it('점이 없으면 아무것도 더 그리지 않는다', () => {
+    const c = fakeCtx();
+    drawGTile(c.ctx, 170, 100, frame({ gPeaks: [] }), th);
+    expect(c.calls.filter((x) => /^rgb\(/.test(String(x.op === 'fill' ? x.fillStyle : x.strokeStyle)) && (x.op === 'fill' || x.op === 'stroke')).length).toBe(0);
+  });
+});
+
 describe('상단 표시 값: 주행 거리·평균 속도 (사용자 요청 2026-11-18)', () => {
   it('주행 거리는 km 소수 한 자리, 평균 속도는 km/h. 아직 없으면 —', () => {
     expect(widgetValue('dist', frame({ distM: 23_440 }))).toMatchObject({ label: '주행 거리', value: '23.4', unit: 'km' });

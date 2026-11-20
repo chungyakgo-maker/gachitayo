@@ -1,7 +1,7 @@
 // 오버레이 그리기 (사양서 13.1 확장 지점, 5.1의 12번): "시각 t의 상태 → 캔버스".
 // 주행 화면 지도 모드가 쓰고, 나중에 영상에 입히기가 영상 프레임 위에 같은 함수를 부른다.
 // 크기·글꼴은 디자인 시안(styles.css)과 같게 맞췄다. 좌표는 CSS px (호출하는 쪽이 기기 배율을 맞춘다).
-import { G_MAX_DEFAULT, gRings, gToUnit, gTrailCurves, trailAlpha } from './gmeter';
+import { G_MAX_DEFAULT, G_PEAK, gPeakShape, gPeakStyle, gRings, gToUnit, gTrailCurves, trailAlpha, type GPoint } from './gmeter';
 import { formatLapTime } from '../format';
 import { gLabel, headline, type OverlayFrame, type Tone, type ValueTile } from './frame';
 import type { OverlayTheme } from './theme';
@@ -129,7 +129,7 @@ export function drawGMeter(
   gx: number | null,
   gy: number | null,
   th: OverlayTheme,
-  opts: { max?: number; trail?: ReadonlyArray<readonly [number, number]>; estimated?: boolean } = {},
+  opts: { max?: number; trail?: ReadonlyArray<readonly [number, number]>; estimated?: boolean; peaks?: ReadonlyArray<GPoint> } = {},
 ): void {
   const dotR = Math.max(5, size * 0.055);
   const R = size / 2 - dotR - 1.5;
@@ -158,6 +158,8 @@ export function drawGMeter(
   ctx.textBaseline = 'middle';
   setFont(ctx, 400, Math.max(8, Math.round(size * 0.07)), th.mono);
   text(ctx, `${max}g`, cx + R * 0.6, cy - R * 0.78, '#5E656D', 'left');
+  // 최대 G 점과 직선 (궤적·지금 점보다 아래에)
+  drawGPeaks(ctx, cx, cy, R, opts.peaks, max);
   // 최근 궤적: 다듬은 곡선, 오래된 것부터 옅게
   const curves = gTrailCurves(opts.trail, max);
   ctx.lineCap = 'round';
@@ -190,7 +192,34 @@ export function drawGMeter(
 export function drawGTile(ctx: Ctx, w: number, h: number, f: OverlayFrame, th: OverlayTheme, opts: { panel?: boolean } = {}): void {
   if (opts.panel) drawPanel(ctx, w, h, th, 'none', 16);
   const size = Math.min(w, h) - 6;
-  drawGMeter(ctx, w / 2, h / 2, size, f.gx, f.gy, th, { max: f.gMax, trail: f.gTrail, estimated: f.gEstimated });
+  drawGMeter(ctx, w / 2, h / 2, size, f.gx, f.gy, th, { max: f.gMax, trail: f.gTrail, estimated: f.gEstimated, peaks: f.gPeaks });
+}
+
+/** 최대 G 점 (2026-11-20 시안): 이웃한 점끼리 직선 — 약한 쪽 파랑 점선, 센 쪽 빨강 실선. 점은 모두 같은 크기.
+ *  굵기·점선은 대시보드 G미터(바깥 원 87) 기준이라 칸 크기에 맞춰 줄인다 (너무 얇아져 안 보이지 않게 아래 한도) */
+function drawGPeaks(ctx: Ctx, cx: number, cy: number, R: number, peaks: ReadonlyArray<GPoint> | undefined, max: number): void {
+  const shape = gPeakShape(peaks, max);
+  if (shape.dots.length === 0) return;
+  const k = R / G_PEAK.refR;
+  ctx.lineCap = 'round';
+  for (const s of shape.segs) {
+    const st = gPeakStyle(s.g);
+    ctx.strokeStyle = st.color;
+    ctx.lineWidth = Math.max(0.75, st.width * k);
+    ctx.setLineDash(st.dash ? st.dash.map((v) => Math.max(1, v * k)) : []);
+    ctx.beginPath();
+    ctx.moveTo(cx + s.from[0] * R, cy + s.from[1] * R);
+    ctx.lineTo(cx + s.to[0] * R, cy + s.to[1] * R);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const r = Math.max(1, G_PEAK.dotR * k);
+  for (const d of shape.dots) {
+    ctx.fillStyle = gPeakStyle(d.g).color;
+    ctx.beginPath();
+    ctx.arc(cx + d.at[0] * R, cy + d.at[1] * R, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 export const gMeterLabel = (f: Pick<OverlayFrame, 'gx' | 'gy' | 'gEstimated' | 'gMax'>) => {

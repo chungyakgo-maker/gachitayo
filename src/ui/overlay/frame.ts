@@ -42,6 +42,8 @@ export interface OverlayFrame {
   maxLeanRightDeg?: number;
   /** 최근 G 궤적 [앞뒤 g, 좌우 g] (오래된 것부터, 마지막이 지금) */
   gTrail?: ReadonlyArray<readonly [number, number]>;
+  /** 최대 G 점 [앞뒤, 좌우] (방향마다 이번 주행에서 가장 센 G, 원을 도는 순서 — engine/derive/gPeaks.ts) */
+  gPeaks?: ReadonlyArray<readonly [number, number]>;
   currentSector: number | null;
   sectorDeltas: ReadonlyArray<number | null>;
   /** 코스 원점 기준 평면 m. psi는 x축에서 반시계 라디안 */
@@ -92,6 +94,7 @@ export function frameFromLive(snap: LiveSnapshot | null, hasCourse: boolean, has
     gx: st?.gx ?? null,
     gy: st?.gy ?? null,
     gEstimated: st?.gEstimated ?? false,
+    gPeaks: snap?.gPeaks,
     leanDeg: st?.leanDeg ?? null,
     maxLeanLeftDeg: st?.maxLeanLeftDeg ?? 0,
     maxLeanRightDeg: st?.maxLeanRightDeg ?? 0,
