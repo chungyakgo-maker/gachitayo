@@ -3747,3 +3747,43 @@ a.team-item {
   color: var(--fg-dim);
   font-size: 16px;
 }
+
+/* ── 아이폰 앱 1.0.2~ 아래 탭 유리 알약 (2026-11-20 시안 docs/mock/2026-11-20-native-tabs.jpg, app/nativeTabs.ts) ──
+   앱(ios/App/App/NativeTabBar.swift)이 html 에 native-tabs 를 붙이면 알약은 아이폰 부품이 그리고, 사이트 탭은 투명하게 자리만 남긴다.
+   자리 높이 = 알약 62 + 아래 여백 max(10, 아래 안전 여백 − 18) + 위 8 (지도 위 단추가 알약에 붙지 않게) — 셈을 바꾸면 Swift 쪽도 같이.
+   메인은 지도가 알약 밑까지(원래 얹는 모양), 목록 화면은 내용이 유리 너머로 비치고 맨 아래만 그만큼 띄워 끝까지 올려 볼 수 있게 */
+:root {
+  --native-tab-h: calc(62px + max(10px, var(--safe-b) - 18px) + 8px);
+}
+
+.tabbed.native {
+  position: relative;
+}
+
+/* 맨 아래 띄우기는 빈 조각으로 (스크롤하는 flex 칸의 아래 padding 은 아이폰 웹 화면에서 무시될 때가 있다) */
+.tabbed.native:not(.overlay) .tabbed-body::after {
+  content: '';
+  flex: none;
+  height: var(--native-tab-h);
+}
+
+.tabbed.native .tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  min-height: 0;
+  height: var(--native-tab-h);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* 사이트 탭 단추는 보이지도 눌리지도 않게 (알약 옆 빈 곳을 눌러도 탭이 바뀌지 않게). 탭 자리는 남아 "덮였는지" 확인에 쓴다 */
+.tabbed.native .tabbar a {
+  opacity: 0;
+  pointer-events: none;
+}

@@ -30,7 +30,7 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(plist).not.toMatch(/NSBluetooth/);
   });
 
-  it('Codemagic: 테스트 작업(위치 공유 켬, 1.1)과 정식 작업(위치 공유·간격 끔, 1.0.1 — 2026-11-19 세영 "이 버전으로 심사") 둘 (설계 2026-11-18 official-build, 세영 "정식·테스트 나눠야")', () => {
+  it('Codemagic: 테스트 작업(위치 공유 켬, 1.1)과 정식 작업(위치 공유·간격 끔, 1.0.2 — 1.0.1 은 release-1.0.1 갈래, 2026-11-20 세영 "1.0.2에 넣게") 둘 (설계 2026-11-18 official-build, 세영 "정식·테스트 나눠야")', () => {
     const y = readFileSync(new URL('codemagic.yaml', root), 'utf8');
     const block = (id: string) => {
       const i = y.indexOf(`\n  ${id}:`);
@@ -48,9 +48,31 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(release).toMatch(/name: 디고 아이폰 정식/);
     expect(release).toMatch(/VITE_LOCATION_SHARING: ['"]?off/);
     expect(release).toMatch(/VITE_LIVE_GAP: ['"]?off/);
-    expect(release).toMatch(/MARKETING_VERSION=1\.0\.1"/);
+    expect(release).toMatch(/MARKETING_VERSION=1\.0\.2"/);
     expect(release).toMatch(/VITE_API_URL: https:\/\/gachitayo-api\.chungyakgo\.workers\.dev/);
     expect(release).toMatch(/bundle_identifier: kr\.dgo\.app/);
+  });
+
+  it('아래 탭 유리 알약 (1.0.2, 2026-11-20): NativeTabBar.swift 가 앱에 묶이고, 플러그인 등록·html 표시(native-tabs)를 한다', () => {
+    const pbx = readFileSync(new URL('ios/App/App.xcodeproj/project.pbxproj', root), 'utf8');
+    expect(pbx).toMatch(/\/\* NativeTabBar\.swift in Sources \*\/ = \{isa = PBXBuildFile/);
+    expect(pbx).toMatch(/\/\* NativeTabBar\.swift \*\/ = \{isa = PBXFileReference[^}]*path = NativeTabBar\.swift/);
+    const sources = pbx.slice(pbx.indexOf('Begin PBXSourcesBuildPhase'), pbx.indexOf('End PBXSourcesBuildPhase'));
+    expect(sources).toMatch(/NativeTabBar\.swift in Sources/);
+    const vc = readFileSync(new URL('ios/App/App/MainViewController.swift', root), 'utf8');
+    expect(vc).toMatch(/registerPluginInstance\(DgoTabBarPlugin\(\)\)/);
+    expect(vc).toMatch(/classList\.add\('native-tabs'\)/);
+    expect(vc).toMatch(/nativeTabs\.attach\(to: view, page: webView\)/);
+    const bar = readFileSync(new URL('ios/App/App/NativeTabBar.swift', root), 'utf8');
+    // 사이트와 같은 이름·탭 경로·크기 (src/app/nativeTabs.ts, styles.css --native-tab-h)
+    expect(bar).toMatch(/jsName = "DgoTabBar"/);
+    expect(bar).toMatch(/dgo:native-tab/);
+    for (const path of ['"/"', '"/courses"', '"/history"', '"/settings"']) expect(bar).toContain(path);
+    expect(bar).toMatch(/cellW: CGFloat = 70/);
+    expect(bar).toMatch(/cellH: CGFloat = 54/);
+    expect(bar).toMatch(/max\(10, host\.safeAreaInsets\.bottom - 18\)/);
+    // 새 iOS 이름(리퀴드 글래스)은 빌드 도구가 알 때만
+    expect(bar).toMatch(/#if compiler\(>=6\.2\)[\s\S]*UIGlassEffect/);
   });
 
   it('흔들어서 실행 취소를 끈다 (2026-11-18 실차: 주행 중 진동에 "Undo 입력" 창이 떴다)', () => {
