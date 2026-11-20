@@ -196,8 +196,9 @@ export function drawGTile(ctx: Ctx, w: number, h: number, f: OverlayFrame, th: O
 }
 
 /** 최대 G 점 (2026-11-20 시안): 이웃한 점끼리 직선 — 약한 쪽 파랑 점선, 센 쪽 빨강 실선. 점은 모두 같은 크기.
- *  굵기·점선은 대시보드 G미터(바깥 원 87) 기준이라 칸 크기에 맞춰 줄인다 (너무 얇아져 안 보이지 않게 아래 한도) */
-function drawGPeaks(ctx: Ctx, cx: number, cy: number, R: number, peaks: ReadonlyArray<GPoint> | undefined, max: number): void {
+ *  굵기·점선은 대시보드 G미터(바깥 원 87) 기준이라 칸 크기에 맞춰 줄인다 (너무 얇아져 안 보이지 않게 아래 한도).
+ *  (cx, cy) 가운데, R = 바깥 원(최대값) 반지름. 분석 G 다이어그램도 이것을 쓴다 */
+export function drawGPeaks(ctx: Ctx, cx: number, cy: number, R: number, peaks: ReadonlyArray<GPoint> | undefined, max: number): void {
   const shape = gPeakShape(peaks, max);
   if (shape.dots.length === 0) return;
   const k = R / G_PEAK.refR;
