@@ -74,3 +74,18 @@ export class GPeaks {
     this.dirty = false;
   }
 }
+
+const GRAVITY = 9.80665;
+
+/** 저장된 기록(처리된 궤적, 10 Hz · m/s²)의 한 랩에서 방향별 최대 G — 분석 G 다이어그램 (2026-11-20 시안 docs/mock/2026-11-20-gpeaks-analysis.jpg).
+ *  주행 화면과 같은 셈(72칸 · 0.3초 평균). G 가 없는 칸(보정 전)은 평균을 끊는다 */
+export function lapGPeaks(p: { n: number; t: ReadonlyArray<number>; lapNo: ReadonlyArray<number>; ax: ReadonlyArray<number | null>; ay: ReadonlyArray<number | null> }, lapNo: number): ReadonlyArray<GPeak> {
+  const g = new GPeaks();
+  for (let k = 0; k < p.n; k++) {
+    if (p.lapNo[k] !== lapNo) continue;
+    const ax = p.ax[k];
+    const ay = p.ay[k];
+    g.push(p.t[k]!, ax === null || ax === undefined ? null : ax / GRAVITY, ay === null || ay === undefined ? null : ay / GRAVITY);
+  }
+  return g.points();
+}

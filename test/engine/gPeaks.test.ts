@@ -1,7 +1,7 @@
 // G미터 최대 G 점 (2026-11-20 세영 "최대게이지만큼 선으로 이어봐" → 시안 docs/mock/2026-11-20-gpeaks.jpg):
 // 방향 72칸(5°)마다 이번 주행에서 가장 센 G(0.3초 평균)를 기억하고, 각도 순서대로 내준다
 import { describe, expect, it } from 'vitest';
-import { GPeaks } from '../../src/engine/derive/gPeaks';
+import { GPeaks, lapGPeaks } from '../../src/engine/derive/gPeaks';
 
 /** t0부터 20 ms마다 같은 G를 ms 동안 넣는다 */
 function hold(p: GPeaks, t0: number, ms: number, gx: number | null, gy: number | null): number {
@@ -119,5 +119,41 @@ describe('그 밖', () => {
     hold(p, 5000, 600, -0.9, 0);
     p.push(100, 0, 0.4);
     expect(p.points()).toEqual([]);
+  });
+});
+
+describe('저장된 기록의 한 랩에서 (분석 G 다이어그램, 2026-11-20 시안 docs/mock/2026-11-20-gpeaks-analysis.jpg)', () => {
+  const MS2 = 9.80665;
+  // 10 Hz, ax·ay 는 m/s² (처리된 궤적)
+  const track = (rows: Array<[lap: number, ax: number | null, ay: number | null]>) => ({
+    n: rows.length,
+    t: rows.map((_, i) => i * 100),
+    lapNo: rows.map((r) => r[0]),
+    ax: rows.map((r) => r[1]),
+    ay: rows.map((r) => r[2]),
+  });
+
+  it('그 랩의 G만, g 단위로 (m/s² ÷ 중력)', () => {
+    const rows: Array<[number, number | null, number | null]> = [];
+    for (let i = 0; i < 10; i++) rows.push([1, -0.8 * MS2, 0]); // 랩 1: 제동 0.8 g
+    for (let i = 0; i < 10; i++) rows.push([2, 0, 0.6 * MS2]); // 랩 2: 왼쪽 0.6 g
+    const p = track(rows);
+    const one = lapGPeaks(p, 1);
+    expect(one.length).toBe(1);
+    expect(one[0]![0]).toBeCloseTo(-0.8, 6);
+    const two = lapGPeaks(p, 2);
+    expect(two.length).toBe(1);
+    expect(two[0]![1]).toBeCloseTo(0.6, 6);
+    expect(lapGPeaks(p, 3)).toEqual([]);
+  });
+
+  it('보정 전(G 없음, null)은 평균을 끊는다', () => {
+    const rows: Array<[number, number | null, number | null]> = [];
+    for (let i = 0; i < 5; i++) rows.push([1, -1 * MS2, 0]);
+    rows.push([1, null, null]);
+    for (let i = 0; i < 5; i++) rows.push([1, 0, 0.3 * MS2]);
+    const pts = lapGPeaks(track(rows), 1);
+    expect(pts.length).toBe(2);
+    expect(Math.max(...pts.map(([gx, gy]) => Math.hypot(gx, gy)))).toBeCloseTo(1, 6);
   });
 });
