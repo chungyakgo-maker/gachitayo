@@ -135,7 +135,8 @@ describe('공개·고치기·내리기', () => {
     await shared.publishCourse('c1', '');
     const sent = calls.find((x) => x.method === 'POST' && x.path === '/api/shared')!.body as { line: unknown[] };
     expect(sent.line.length).toBeLessThanOrEqual(5000);
-  });
+    // 30 km · 3만 점을 줄이느라 느린 기계에서 5초를 살짝 넘는다 (2026-11-26 전체 시험에서 5.0~5.5초)
+  }, 20_000);
 
   it('기본 코스·받은 코스는 공개하지 않는다', async () => {
     const { rec, shared } = await fresh();

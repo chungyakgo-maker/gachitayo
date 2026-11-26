@@ -1,4 +1,4 @@
-// 코스 탭 (사양서 8.7): 코스 목록(내 코스, 기본 코스) → 코스 상세. 지도에서 새 코스, GPX 불러오기(코스로 또는 주행 기록으로).
+// 코스 탭 (사양서 8.7): 코스 목록(내 코스, 기본 코스) → 코스 상세. 코스 만들기(출발지·도착지 또는 지도에서 직접), GPX 불러오기(코스로 또는 주행 기록으로).
 import { useEffect, useRef, useState } from 'react';
 import { importGpx } from '../../app/courses';
 import { builtinInfo } from '../../courses/builtin';
@@ -75,7 +75,7 @@ export function CoursesScreen() {
         />
         <div className="button-pair">
           <a className="btn" href="#/course-new" style={{ textAlign: 'center', textDecoration: 'none' }}>
-            지도에서 새 코스
+            코스 만들기
           </a>
           <button type="button" className="btn" onClick={() => file.current?.click()}>
             GPX 불러오기

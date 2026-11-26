@@ -1,4 +1,4 @@
-// 코스 관리 (사양서 8.7, M10): 이름 바꾸기, 출발선·도착선 옮기기, 코스 다듬기, 지도에서 새 코스, GPX 불러오기·내보내기.
+// 코스 관리 (사양서 8.7, M10): 이름 바꾸기, 출발선·도착선 옮기기, 코스 다듬기, 코스 만들기(출발지·도착지 길찾기 / 지도에서 직접), GPX 불러오기·내보내기.
 // 선을 옮기거나 다듬으면 version +1이고 이 코스의 내 기록을 모두 원본에서 다시 계산한다 (질문 5 결정).
 // 원본을 정리한 기록(최근 30개 밖)은 다시 계산하지 않고 건너뛴다 (기록은 폰에만).
 import { BUILTIN_REV, builtinCourse, builtinInfo, missingBuiltins, renamedBuiltins } from '../courses/builtin';
@@ -268,6 +268,20 @@ export async function createMapCourse(opts: { name: string; kind: CourseKind; st
   };
   await saveCourseRecord(c);
   return c;
+}
+
+/** 코스 만들기 (2026-11-26 세영 "출발지,목적지를 지도선택+검색으로", 시안 docs/mock/2026-11-26-course-create.jpg):
+ *  출발지 → 도착지 길찾기 선을 그대로 코스 선으로 (편도). 출발·도착선은 선 처음·끝의 도로 방향(GPX 코스와 같은 셈), 폭은 설정값 */
+export async function createRouteCourse(opts: { name: string; from: string; to: string; route: { points: ReadonlyArray<readonly [number, number]> } }): Promise<Course> {
+  if (opts.route.points.length < 2) throw new Error('길을 찾지 못해 코스를 만들 수 없어요');
+  await assertCourseRoom(getDriveRepo());
+  const name = (opts.name.trim() || `${opts.from} → ${opts.to}`).slice(0, 40);
+  const points = opts.route.points.map(([lat, lon]) => ({ lat, lon, ele: null, time: null, speed: null }));
+  const c = courseFromGpx({ name, creator: 'dgo-route', points, hasTime: false, source: 'trk', waypoints: [] }, { id: crypto.randomUUID(), name });
+  const w = getSettings().gateWidthM;
+  const course: Course = { ...c, kind: 'point_to_point', source: 'map', startGate: { ...c.startGate, widthM: w }, finishGate: { ...c.finishGate, widthM: w } };
+  await saveCourseRecord(course);
+  return course;
 }
 
 export type GpxImport = { kind: 'course'; course: Course } | { kind: 'session'; sessionId: string };

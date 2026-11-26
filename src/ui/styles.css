@@ -3787,3 +3787,40 @@ a.team-item {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ── 코스 만들기: 출발지·도착지 칸 (2026-11-26 시안 docs/mock/2026-11-26-course-create.jpg) ── */
+.spot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.spot-chosen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  color: var(--fg);
+  text-align: left;
+}
+
+.spot-chosen strong {
+  display: block;
+  font-size: 15px;
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+}
+
+.search-row .text-input {
+  flex: 1;
+  min-width: 0;
+}
