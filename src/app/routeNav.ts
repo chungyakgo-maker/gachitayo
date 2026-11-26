@@ -80,6 +80,16 @@ async function requestRoute(from: LatLon, to: LatLon, headingDeg?: number, alt =
   return apiFetch<RouteData>('POST', '/api/route', { token: auth.token, body, signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) });
 }
 
+/** 코스 만들기 (2026-11-26): 출발지 → 도착지 길찾기 (탈것이 바이크면 바이크 길). 실패하면 화면에 보일 글로 던진다 */
+export async function findRouteBetween(from: LatLon, to: LatLon, alt = 0): Promise<RouteData> {
+  if (!online()) throw new Error(NET_ERROR);
+  try {
+    return await requestRoute(from, to, undefined, alt);
+  } catch (e) {
+    throw new Error(errText(e));
+  }
+}
+
 /** 장소 검색 결과 (네이버 지역 검색, 서버 /api/places) */
 export interface Place {
   name: string;

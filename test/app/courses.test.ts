@@ -8,7 +8,7 @@ import { BUILTIN_COURSES } from '../../src/courses/builtin';
 
 vi.mock('../../src/app/drive', () => ({ loadCourses: vi.fn(async () => []), processSession: vi.fn(async () => null) }));
 
-const { createMapCourse, deleteCourse, importGpx, makeReverseCourse, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses, upgradeBuiltinCourses } = await import('../../src/app/courses');
+const { createMapCourse, createRouteCourse, deleteCourse, importGpx, makeReverseCourse, moveCourseGate, recomputeCourse, renameCourse, sectorMarks, seedBuiltinCourses, upgradeBuiltinCourses } = await import('../../src/app/courses');
 const { builtinCourse } = await import('../../src/courses/builtin');
 const { BUILTIN_POINTS } = await import('../../src/courses/builtinData');
 const rec = await import('../../src/app/recording');
@@ -138,6 +138,24 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     expect(c.startGate.widthM).toBe(30);
     await expect(createMapCourse({ name: 'x', kind: 'point_to_point', start: { at, toward: { lat: 37.501, lon: 127 } } })).rejects.toThrow('도착선');
     await expect(createMapCourse({ name: 'x', kind: 'loop', start: { at, toward: at } })).rejects.toThrow('진행 방향');
+  });
+
+  it('코스 만들기 (출발지·도착지 길찾기, 2026-11-26): 길찾기 선이 바로 코스 선, 편도, 게이트 폭은 설정값, 이름은 비우면 출발지 → 도착지', async () => {
+    // 북쪽으로 1 km 가다 동쪽으로 꺾는 길 (20 m 간격)
+    const points: Array<[number, number]> = [];
+    for (let i = 0; i <= 50; i++) points.push([37.5 + (i * 20) / 110540, 127]);
+    for (let i = 1; i <= 50; i++) points.push([37.5 + 1000 / 110540, 127 + (i * 20) / (111320 * Math.cos((37.5 * Math.PI) / 180))]);
+    const route = { distanceM: 2000, durationS: 150, points, destName: null };
+    const c = await createRouteCourse({ name: '', from: '작은도시미', to: '지도에서 고른 곳', route });
+    expect(c).toMatchObject({ name: '작은도시미 → 지도에서 고른 곳', kind: 'point_to_point', source: 'map', version: 1 });
+    expect(c.centerline!.length).toBeGreaterThan(50);
+    expect(Math.abs(c.lengthM! - 2000)).toBeLessThan(100);
+    expect(c.startGate.widthM).toBe(30);
+    expect(c.startGate.bearingDeg).toBeLessThan(20); // 북쪽으로 출발
+    expect(Math.abs(c.finishGate.bearingDeg - 90)).toBeLessThan(20); // 동쪽으로 도착
+    expect((await rec.getDriveRepo().listCourses()).some((x) => x.id === c.id)).toBe(true);
+    expect((await createRouteCourse({ name: '  가락재  ', from: 'a', to: 'b', route })).name).toBe('가락재');
+    await expect(createRouteCourse({ name: 'x', from: 'a', to: 'b', route: { ...route, points: points.slice(0, 1) } })).rejects.toThrow('길');
   });
 
   it('GPX 불러오기: 코스로 등록 또는 주행 기록으로 (GPS만, 처리까지)', async () => {
