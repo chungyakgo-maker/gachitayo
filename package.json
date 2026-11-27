@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "courses": "node scripts/builtin-courses.mjs",
+    "build": "node scripts/builtin-courses.mjs && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.pure.json && tsc -p tsconfig.node.json && tsc -p tsconfig.report.json",
     "test": "vitest run",
-    "build:app": "vite build --mode app --outDir dist-app",
+    "build:app": "node scripts/builtin-courses.mjs && vite build --mode app --outDir dist-app",
     "cap:ios": "npm run build:app && cap sync ios"
   },
   "dependencies": {

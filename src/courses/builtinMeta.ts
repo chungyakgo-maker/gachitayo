@@ -3,6 +3,8 @@
 // 웹·앱은 열 때 서버 목록을 받아 쓴다 (2026-11-27 세영 "코스 추가될 때마다 앱 배포 다시 안 하는 방향으로 … 웹 앱 통일").
 // 앱에도 같이 묶어 두어 통신이 없을 때(처음 설치 직후 산속 등) 쓴다. 다른 파일을 불러오지 않는다 (서버도 이 파일을 묶는다).
 // 코스 추가: 아래 목록에 한 줄 + builtinData.ts 에 점 → main 배포. 선 고침: 점을 바꾸고 rev +1.
+// 세영이 직접 올리는 코스는 courses/ 폴더 (GPX + 정보.txt, courses/README.md) → 빌드 때 builtinUser.gen.ts 로 만들어 맨 뒤에 붙는다.
+import { USER_BUILTINS } from './builtinUser.gen';
 
 export interface BuiltinCourse {
   key: string;
@@ -19,8 +21,8 @@ export interface BuiltinCourse {
   rev?: number;
 }
 
-/** 목록에 보이는 순서 */
-export const BUNDLED_BUILTINS: readonly BuiltinCourse[] = [
+/** 목록에 보이는 순서 (코드에 적은 코스) */
+export const HAND_BUILTINS: readonly BuiltinCourse[] = [
   { key: 'baehuryeong', name: '배후령', route: '춘천 → 화천' },
   { key: 'misiryeong-old', name: '미시령 옛길', route: '인제 → 고성' },
   { key: 'manhangjae', name: '만항재', route: '태백 → 만항재 쉼터' },
@@ -80,3 +82,5 @@ export const BUNDLED_BUILTINS: readonly BuiltinCourse[] = [
   },
 ];
 
+/** 기본 코스 전체: 코드에 적은 코스 + courses/ 폴더 코스 */
+export const BUNDLED_BUILTINS: readonly BuiltinCourse[] = [...HAND_BUILTINS, ...USER_BUILTINS];
