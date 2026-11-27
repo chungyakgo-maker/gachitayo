@@ -96,6 +96,9 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+      # 2026-11-27: 올린 묶음을 바로 찾지 못해("No artifacts named github-pages") 연달아 실패 — GitHub 쪽 반영을 잠깐 기다린다
+      - name: 올린 묶음 반영 기다리기
+        run: sleep 30
       - id: deployment
         uses: actions/deploy-pages@v5
 
