@@ -9,6 +9,7 @@ import { serverConfig } from '../server/config';
 import { gunzipJson } from '../storage/gzip';
 import { readRawFile } from '../storage/rawFile';
 import { BUILTIN_COURSES } from '../courses/builtin';
+import { builtinCatalog } from '../courses/catalog';
 import type { Course, CourseKind, CourseSource, Gate } from '../types/course';
 import type { DeviceInfo, SessionRecord } from '../types/session';
 import { getAuth } from './account';
@@ -93,7 +94,7 @@ function distM(a: { lat: number; lon: number }, b: { lat: number; lon: number })
 function matchBuiltin(sc: ServerCourse, local: Course[]): Course | null {
   const builtins = local.filter((c) => c.builtin);
   if (sc.builtin) return builtins.find((c) => c.builtin === sc.builtin) ?? null;
-  const names = new Set(BUILTIN_COURSES.map((b) => b.name));
+  const names = new Set([...BUILTIN_COURSES, ...builtinCatalog()].map((b) => b.name));
   return builtins.find((c) => (c.name === sc.name || names.has(sc.name)) && distM(c.startGate, sc.start_gate) <= SAME_START_M) ?? null;
 }
 
