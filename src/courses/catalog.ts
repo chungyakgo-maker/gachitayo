@@ -4,6 +4,9 @@
 import { BUNDLED_BUILTINS, type BuiltinCourse } from './builtinMeta';
 
 const KEY = 'gachitayo.builtinCatalog.v1';
+/** 이 폴더는 브라우저 밖(서버·시험)에서도 묶이므로 localStorage 를 이름으로 바로 쓰지 않는다 */
+type Store = { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void };
+const store = (): Store | undefined => (globalThis as { localStorage?: Store }).localStorage;
 const TAGS = new Set(['circuit', 'coast', 'mountain']);
 
 const strs = (x: unknown): x is string[] => Array.isArray(x) && x.every((s) => typeof s === 'string');
@@ -29,7 +32,7 @@ export function parseCatalog(x: unknown): BuiltinCourse[] | null {
 
 function loadCached(): BuiltinCourse[] | null {
   try {
-    return parseCatalog(JSON.parse(localStorage.getItem(KEY) ?? 'null'));
+    return parseCatalog(JSON.parse(store()?.getItem(KEY) ?? 'null'));
   } catch {
     return null;
   }
@@ -54,7 +57,7 @@ export function setBuiltinCatalog(next: readonly BuiltinCourse[]): boolean {
   list = next;
   byKey = index(next);
   try {
-    localStorage.setItem(KEY, s);
+    store()?.setItem(KEY, s);
   } catch {
     // 저장할 수 없어도 이번 실행 동안은 쓴다
   }
@@ -66,7 +69,7 @@ export function resetBuiltinCatalog(): void {
   list = BUNDLED_BUILTINS;
   byKey = index(list);
   try {
-    localStorage.removeItem(KEY);
+    store()?.removeItem(KEY);
   } catch {
     // 없음
   }
