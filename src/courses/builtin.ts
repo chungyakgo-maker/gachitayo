@@ -11,9 +11,6 @@ export type { BuiltinCourse } from './builtinMeta';
 /** 앱에 묶인 목록 (시험·되살리기 이름 비교용). 화면은 지금 목록(catalog — 서버에서 받은 것)을 쓴다 */
 export const BUILTIN_COURSES: readonly BuiltinCourse[] = BUNDLED_BUILTINS;
 
-/** 예전 방식의 선 고침 차례 (앱 전체에 하나). 이제는 코스마다 rev (builtinMeta) — 예전 폰이 한 번 지나가도록 남긴다 */
-export const BUILTIN_REV = 3;
-
 export function builtinInfo(c: Course): BuiltinCourse | null {
   return catalogEntry(c.builtin) ?? null;
 }

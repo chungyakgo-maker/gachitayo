@@ -1,7 +1,11 @@
 // 코스 관리 (사양서 8.7, M10): 이름 바꾸기, 출발선·도착선 옮기기, 코스 다듬기, 코스 만들기(출발지·도착지 길찾기 / 지도에서 직접), GPX 불러오기·내보내기.
 // 선을 옮기거나 다듬으면 version +1이고 이 코스의 내 기록을 모두 원본에서 다시 계산한다 (질문 5 결정).
 // 원본을 정리한 기록(최근 30개 밖)은 다시 계산하지 않고 건너뛴다 (기록은 폰에만).
-import { BUILTIN_REV, builtinCourse, builtinInfo, missingBuiltins, renamedBuiltins } from '../courses/builtin';
+import { builtinCourse, builtinInfo, missingBuiltins, renamedBuiltins, type BuiltinCourse } from '../courses/builtin';
+import { BUNDLED_BUILTINS } from '../courses/builtinMeta';
+import { catalogRev, parseCatalog, setBuiltinCatalog } from '../courses/catalog';
+import { apiFetch } from '../server/api';
+import { accountEnabled } from '../server/config';
 import { refineCourse, moveGate, reverseCourse, reverseName, sameCourse } from '../engine/course/edit';
 import { gateFromPoint } from '../engine/course/geometry';
 import { fromLocal, toLocal, type LatLon } from '../engine/geo';
@@ -23,40 +27,56 @@ async function saveCourseRecord(c: Course): Promise<void> {
 
 let seeding: Promise<void> | undefined;
 
-const REV_KEY = 'gachitayo.builtinRev';
-function storedRev(): number {
-  try {
-    return Number(localStorage.getItem(REV_KEY) ?? 0) || 0;
-  } catch {
-    return 0;
-  }
-}
-function storeRev(): void {
-  try {
-    localStorage.setItem(REV_KEY, String(BUILTIN_REV));
-  } catch {
-    // 저장할 수 없으면 다음 시작 때 다시 확인 (바꿀 것이 없으면 그대로)
-  }
-}
-
 const sameGate = (a: Course['startGate'], b: Course['startGate']) =>
   Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lon - b.lon) < 1e-6 && Math.abs(((a.bearingDeg - b.bearingDeg + 540) % 360) - 180) < 0.5;
 
+/** 기본 코스 경로 점: 앱에 묶인 점이 목록과 같은 고침이면 그것(통신 없이), 아니면 서버에서. 못 구하면 null (다음에 다시) */
+async function builtinPoints(b: BuiltinCourse): Promise<readonly number[] | null> {
+  const bundled = BUNDLED_BUILTINS.find((x) => x.key === b.key);
+  if (bundled && catalogRev(bundled) === catalogRev(b)) {
+    const { BUILTIN_POINTS } = await import('../courses/builtinData');
+    const pts = BUILTIN_POINTS[b.key];
+    if (pts) return pts;
+  }
+  if (!accountEnabled()) return null;
+  try {
+    const r = await apiFetch<{ key: string; rev: number; points: unknown }>('GET', `/api/builtin-courses/${encodeURIComponent(b.key)}`);
+    const pts = r.points;
+    if (r.key !== b.key || r.rev !== catalogRev(b) || !Array.isArray(pts) || pts.length < 4 || !pts.every((v) => typeof v === 'number' && Number.isFinite(v))) return null;
+    return pts as number[];
+  } catch {
+    return null;
+  }
+}
+
 /**
- * 기본 코스 선 고침 (사용자 요청 "북악 출발선 고쳐"): 폰에 예전 선으로 들어 있는 기본 코스를 지금 선으로 바꾼다.
- * 이름·번호는 그대로, 버전 +1, 그 코스의 기록은 다시 계산한다(서버에 올린 기록이 있으면 코스도 다시 올린다).
- * 사용자가 선을 옮기거나 다듬은 코스(버전 2 이상)는 그대로 둔다. 바꾼 코스 번호를 돌려준다
+ * 기본 코스 선 고침 (사용자 요청 "북악 출발선 고쳐", 2026-11-27 코스마다 rev — 서버 목록): 폰에 든 기본 코스 중
+ * 목록의 고침(rev)보다 예전인 것을 지금 선으로 바꾼다. 이름·번호는 그대로, 버전 +1, 그 코스의 기록은 다시 계산한다.
+ * 사용자가 선을 옮기거나 다듬은 코스는 그대로 둔다. 바꾼 코스 번호를 돌려준다.
+ * 예전 앱이 넣은 코스(builtinRev 없음)는 처음 한 번 선을 견줘: 같으면 지금 고침으로 적어 두고, 다르면 버전 1(손대지 않음)만 바꾼다
  */
 export async function upgradeBuiltinCourses(): Promise<string[]> {
   const drive = getDriveRepo();
-  const { BUILTIN_POINTS } = await import('../courses/builtinData');
   const changed: string[] = [];
   for (const c of await drive.listCourses()) {
     const b = builtinInfo(c);
-    const pts = b ? BUILTIN_POINTS[b.key] : undefined;
-    if (!b || !pts || c.version !== 1) continue;
+    if (!b) continue;
+    const rev = catalogRev(b);
+    if (c.builtinRev !== undefined && (c.builtinRev >= rev || c.version !== c.builtinBase)) continue;
+    const pts = await builtinPoints(b);
+    if (!pts) continue;
     const fresh = builtinCourse(b, pts, { id: c.id, gateWidthM: c.startGate.widthM });
-    if (sameGate(c.startGate, fresh.startGate) && sameGate(c.finishGate, fresh.finishGate) && Math.abs((c.lengthM ?? 0) - (fresh.lengthM ?? 0)) < 0.5) continue;
+    const same = sameGate(c.startGate, fresh.startGate) && sameGate(c.finishGate, fresh.finishGate) && Math.abs((c.lengthM ?? 0) - (fresh.lengthM ?? 0)) < 0.5;
+    if (same) {
+      await drive.putCourse({ ...c, builtinRev: rev, builtinBase: c.version });
+      continue;
+    }
+    if (c.builtinRev === undefined && c.version !== 1) {
+      // 예전 앱에서 사용자가 고친 코스: 앞으로도 덮지 않게 표시만 (builtinBase 0 은 어떤 version 과도 다르다)
+      await drive.putCourse({ ...c, builtinRev: rev, builtinBase: 0 });
+      continue;
+    }
+    const version = c.version + 1;
     await drive.putCourse({
       ...c,
       kind: fresh.kind,
@@ -66,7 +86,9 @@ export async function upgradeBuiltinCourses(): Promise<string[]> {
       centerline: fresh.centerline,
       lengthM: fresh.lengthM,
       sectorBoundsM: fresh.sectorBoundsM,
-      version: c.version + 1,
+      version,
+      builtinRev: rev,
+      builtinBase: version,
     });
     changed.push(c.id);
   }
@@ -83,33 +105,49 @@ export async function upgradeBuiltinCourses(): Promise<string[]> {
   return changed;
 }
 
-/** 기본 코스(사양서 7.5)가 이 폰의 코스 목록에 없으면 넣는다. 앱 시작 때 한 번.
- *  서버로 따로 올리지 않는다 (공유·별점은 앱 출시 뒤 계획). 그 코스로 달린 기록을 올릴 때만 다른 코스처럼 내 코스로 함께 간다 */
+/** 지금 목록대로: 이름 바꾸기 · 선 고치기 · 없는 코스 넣기 */
+async function syncBuiltins(): Promise<void> {
+  const drive = getDriveRepo();
+  const have = await drive.listCourses();
+  // 기본 이름이 바뀐 코스 (폰에서만. 서버에는 그 코스로 달린 기록을 올릴 때 새 이름이 간다)
+  const renamed = renamedBuiltins(have);
+  for (const c of renamed) await drive.putCourse(c);
+  await upgradeBuiltinCourses();
+  const gateWidthM = getSettings().gateWidthM;
+  let added = 0;
+  for (const b of missingBuiltins(have)) {
+    const pts = await builtinPoints(b);
+    if (!pts) continue; // 통신이 없어 점을 못 받은 새 코스는 다음에
+    await drive.putCourse({ ...builtinCourse(b, pts, { id: crypto.randomUUID(), gateWidthM }), builtinRev: catalogRev(b), builtinBase: 1 });
+    added++;
+  }
+  if (added || renamed.length) await loadCourses();
+}
+
+/** 서버의 기본 코스 목록 (없거나 못 받으면 null) */
+async function fetchCatalog(): Promise<BuiltinCourse[] | null> {
+  if (!accountEnabled()) return null;
+  try {
+    return parseCatalog(await apiFetch<unknown>('GET', '/api/builtin-courses'));
+  } catch {
+    return null;
+  }
+}
+
+/** 기본 코스(사양서 7.5)를 이 폰의 코스 목록에 넣고 고친다. 앱 시작 때 한 번.
+ *  먼저 이 폰의 목록(받아 둔 것, 없으면 앱에 묶인 것)으로, 다음에 서버 목록을 받아 바뀌었으면 한 번 더
+ *  (2026-11-27 세영 "코스 추가될 때마다 앱 배포 다시 안 하는 방향으로 … 웹 앱 통일").
+ *  서버로 따로 올리지 않는다. 그 코스로 달린 기록을 올릴 때만 다른 코스처럼 내 코스로 함께 간다.
+ *  서버 목록에서 빠진 코스는 폰에서 지우지 않는다 (기록이 그 코스를 가리킨다) */
 export function seedBuiltinCourses(): Promise<void> {
   seeding ??= (async () => {
     try {
-      const drive = getDriveRepo();
-      const have = await drive.listCourses();
-      // 기본 이름이 바뀐 코스 (폰에서만. 서버에는 그 코스로 달린 기록을 올릴 때 새 이름이 간다)
-      const renamed = renamedBuiltins(have);
-      for (const c of renamed) await drive.putCourse(c);
-      // 기본 코스 선 고침: 차례가 바뀐 뒤 처음 한 번 (경로 점 파일은 이때만 불러온다)
-      if (storedRev() < BUILTIN_REV) {
-        await upgradeBuiltinCourses();
-        storeRev();
+      await syncBuiltins();
+      const remote = await fetchCatalog();
+      if (remote && setBuiltinCatalog(remote)) {
+        await syncBuiltins();
+        await loadCourses();
       }
-      const missing = missingBuiltins(have);
-      if (missing.length === 0) {
-        if (renamed.length) await loadCourses();
-        return;
-      }
-      const { BUILTIN_POINTS } = await import('../courses/builtinData');
-      const gateWidthM = getSettings().gateWidthM;
-      for (const b of missing) {
-        const pts = BUILTIN_POINTS[b.key];
-        if (pts) await drive.putCourse(builtinCourse(b, pts, { id: crypto.randomUUID(), gateWidthM }));
-      }
-      await loadCourses();
     } catch {
       seeding = undefined; // 다음에 다시
     }

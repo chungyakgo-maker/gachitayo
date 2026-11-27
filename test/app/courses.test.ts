@@ -54,7 +54,8 @@ describe('코스 관리 (사양서 8.7, M10)', () => {
     expect(got.startGate.bearingDeg).toBeCloseTo(fresh.startGate.bearingDeg, 3);
     expect(got.startGate.widthM).toBe(25);
     expect((await import('../../src/app/drive')).processSession).toHaveBeenCalledWith(sid);
-    expect(await drive.getCourse(movedByUser.id)).toEqual(movedByUser);
+    // 사용자가 옮긴 코스는 선·버전 그대로 (앞으로도 덮지 않게 표시만)
+    expect(await drive.getCourse(movedByUser.id)).toEqual({ ...movedByUser, builtinRev: 1, builtinBase: 0 });
     // 다시 해도 바꿀 것이 없다
     expect(await upgradeBuiltinCourses()).toEqual([]);
   });
