@@ -26,8 +26,9 @@ describe('코스 탭: 내 코스 + 기본 코스 (사양서 7.5, 8.7)', () => {
     expect(rows.every((r) => r.querySelector('.course-thumb svg path'))).toBe(true);
     // 기본 코스는 처음에 산 길 (사용자 결정 "와인딩 없애, 산길로"), 출처 라벨 "기본 코스"가 앞에 (2026-11-27 색 라벨)
     expect(rows[0]!.textContent).toContain('배후령편도 · 8.5km춘천 → 화천기본 코스산 길내 베스트8:32.345');
-    // 인제 스피디움은 처음부터 서킷
-    expect(rows[rows.length - 1]!.textContent).toContain('인제 스피디움랩 · 3.9km인제 기린면 · 서킷 한 바퀴기본 코스서킷');
+    // 서킷 기본 코스는 처음부터 서킷
+    expect(rows[rows.length - 4]!.textContent).toContain('인제 스피디움랩 · 3.9km강원 인제 · 서킷 한 바퀴기본 코스서킷');
+    expect(rows[rows.length - 1]!.textContent).toContain('태백 스피드웨이랩 · 2.3km강원 태백 · 서킷 한 바퀴기본 코스서킷');
     expect(rows[1]!.textContent).toContain('미시령 옛길');
     expect(rows[2]!.textContent).toContain('태백 → 만항재 쉼터');
     expect(rows[3]!.textContent).toContain('말티재편도 · 2.1km보은 → 말티재 전망대');
