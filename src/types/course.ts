@@ -31,6 +31,10 @@ export interface Course {
   version: number;
   /** 기본 코스 키 (앱에 들어 있는 코스, courses/builtin). 폰에만 두고 서버 행에는 없다 */
   builtin?: string;
+  /** 기본 코스: 이 폰의 선이 기본 코스 목록의 몇 번째 고침(rev)인지 (2026-11-27, 서버 목록). 없으면 예전 앱이 넣은 코스 */
+  builtinRev?: number;
+  /** 기본 코스: 그 고침을 넣었을 때의 version. 지금 version 과 다르면 사용자가 선을 고친 것 → 다음 고침도 덮지 않는다 */
+  builtinBase?: number;
   /** 모두의 코스에서 받은 코스: 공개 번호와 올린 사람 닉네임 (설계 2부) */
   shared?: { id: string; by: string };
   /** 내가 모두의 코스로 공개한 코스: 공개 번호 */

@@ -17,6 +17,7 @@ export const KEEP_ON_ACCOUNT_DELETE: readonly string[] = [
   'gachitayo.helpNudge.v1',
   'gachitayo.driveZoom.v',
   'gachitayo.builtinRev',
+  'gachitayo.builtinCatalog.v1',
   'gachitayo.lineMap.v1',
   'gachitayo.recentDest.v1',
   'gachitayo.locationGranted',
