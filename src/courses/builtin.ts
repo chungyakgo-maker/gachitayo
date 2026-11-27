@@ -36,13 +36,14 @@ export const BUILTIN_COURSES: readonly BuiltinCourse[] = [
   { key: 'sukam-bukpyeong', name: '숙암리–북평리', route: '정선 북평면 숙암리 → 북평리' },
   // 사용자가 준 카카오맵 GPX (2026-11-26). 이름은 사용자가 정함
   { key: 'garakjae-neuratjae', name: '가락재+느랏재', route: '작은도시미 → 춘천 동면 감정리' },
-  // 사용자가 준 서킷 GPX (2026-11-27, On The Go Map · OSM 도로 선을 트랙 가운데로). 첫 기본 랩 코스: 출발점 = 첫 점, 한 바퀴
+  // 사용자가 준 서킷 GPX (2026-11-27, GPX Hub 로 트랙 가운데를 다시 딴 인제스피디움.gpx — 처음 넣은 OSM 선을 바꿈). 첫 기본 랩 코스: 출발점 = 첫 점, 한 바퀴
   { key: 'inje-speedium', name: '인제 스피디움', route: '인제 기린면 · 서킷 한 바퀴' },
 ];
 
 /** 기본 코스 선 고침 차례. 폰에 기록한 차례보다 크면 앱 시작 때 한 번, 예전 선으로 들어 있는 기본 코스를 새 선으로 바꾼다.
- *  2: 카카오맵 경로 끝 진입로를 건너뛰고 출발·도착선을 도로 방향으로 (사용자 요청 "북악 출발선 고쳐") */
-export const BUILTIN_REV = 2;
+ *  2: 카카오맵 경로 끝 진입로를 건너뛰고 출발·도착선을 도로 방향으로 (사용자 요청 "북악 출발선 고쳐")
+ *  3: 인제 스피디움 선을 세영이 다시 딴 GPX 로 (2026-11-27 "지금 준 인제스피디움.gpx로 대체") */
+export const BUILTIN_REV = 3;
 
 const byKey = new Map(BUILTIN_COURSES.map((b, i) => [b.key, { ...b, rank: i }]));
 

@@ -551,7 +551,9 @@ export async function startReplay(src: ReplaySource, speed: number): Promise<voi
       label = '가상 친구 따라가기';
     } else if (src.kind === 'course') {
       const sim = await import('../sim');
-      const d = sim.simulateCourseDrive(src.course);
+      // 서킷 분류 코스는 최고 200 km/h (2026-11-27 세영)
+      const { tagsOf } = await import('./coursePrefs');
+      const d = sim.simulateCourseDrive(src.course, 11, { circuit: tagsOf(src.course).includes('circuit') });
       gps = d.gps;
       motion = d.motion;
       course = src.course;

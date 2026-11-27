@@ -39,7 +39,7 @@ describe('기본 코스 (사양서 7.5)', () => {
 
   it('길이는 카카오맵 경로 길이와 같다 (±3%)', () => {
     const km = built.map((c) => c.lengthM! / 1000);
-    [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86, 25.06, 49.86, 7.73, 4.81, 6.7, 3.57, 7.53, 8.11, 22.14, 3.94].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
+    [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86, 25.06, 49.86, 7.73, 4.81, 6.7, 3.57, 7.53, 8.11, 22.14, 3.93].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
   });
 
   it('기본 이름이 바뀌면(가평 복장리–상천리 → 로코갤러리) 폰에 예전 이름으로 있는 것만 바꾼다. 직접 바꾼 이름은 그대로', () => {
@@ -94,9 +94,9 @@ describe('기본 코스 (사양서 7.5)', () => {
       '정선 북평면 숙암리 → 북평리',
       '작은도시미 → 춘천 동면 감정리',
     ]);
-    // 2026-11-27 인제 스피디움: 한 바퀴라 출발선 = 도착선, 메인 직선 첫 점에서 북쪽(달리는 방향)을 본다
+    // 2026-11-27 인제 스피디움(세영이 다시 딴 GPX): 한 바퀴라 출발선 = 도착선, 메인 직선 첫 점에서 북쪽(달리는 방향)을 본다
     const inje = gate('inje-speedium');
-    expect(near(inje.startGate, 38.00265, 128.2914)).toBeLessThan(10);
+    expect(near(inje.startGate, 38.000595, 128.29135)).toBeLessThan(10);
     expect(inje.finishGate).toEqual(inje.startGate);
     expect(Math.min(inje.startGate.bearingDeg, 360 - inje.startGate.bearingDeg)).toBeLessThan(10);
     for (const c of built) expect([c.startGate.widthM, c.finishGate.widthM]).toEqual([30, 30]);
