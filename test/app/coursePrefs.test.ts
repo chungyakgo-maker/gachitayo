@@ -69,6 +69,16 @@ describe('coursePrefs', () => {
     expect(p.tagsOf(builtin)).toEqual(['coast']);
   });
 
+  it('circuit built-ins start as circuits (인제 스피디움), and can be changed like any tag', async () => {
+    const p = await load();
+    const inje = { ...builtin, builtin: 'inje-speedium' };
+    expect(p.tagsOf(inje)).toEqual(['circuit']);
+    p.setTag(mine, 'circuit', true);
+    expect(p.tagsOf(mine)).toEqual(['circuit']);
+    p.setTag(mine, 'mountain', true);
+    expect(p.tagsOf(mine)).toEqual(['circuit', 'mountain']);
+  });
+
   it('favorite toggles and persists on the phone only (never calls the server)', async () => {
     const p = await load();
     p.toggleFavorite(mine);

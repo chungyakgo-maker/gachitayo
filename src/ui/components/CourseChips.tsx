@@ -1,6 +1,6 @@
 // 코스 분류 칩 (설계 docs/superpowers/specs/2026-11-16-course-browse-design.md): 메인 지도·코스 목록이 같이 쓴다.
 // 인기 도로를 고르면 둘째 줄에 기간 (사용자 요청 "최근30일, 최근7일, 전체기간, 계절, 실시간")
-import { FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from '../../app/courseFilter';
+import { FILTER_DOT, FILTERS, PERIODS, type CourseFilter, type PopularPeriod } from '../../app/courseFilter';
 
 const SORTS: Array<{ id: 'near' | 'adds' | 'new'; label: string }> = [
   { id: 'near', label: '가까운 순' },
@@ -29,6 +29,7 @@ export function CourseChips({
       <div className="browse-chips" role="group" aria-label="코스 분류">
         {FILTERS.map((f) => (
           <button key={f.id} type="button" className="browse-chip" aria-pressed={filter === f.id} onClick={() => onFilter(f.id)}>
+            {FILTER_DOT[f.id] && <span className={`chip-dot ${FILTER_DOT[f.id]}`} aria-hidden="true" />}
             {f.id === 'fav' && (
               <span className="fav" aria-hidden="true">
                 ★

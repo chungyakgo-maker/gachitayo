@@ -19,7 +19,8 @@ export function sharedLine(s: Pick<SharedSummary, 'kind' | 'lengthM' | 'region'>
   return [s.kind === 'loop' ? '랩' : '편도', formatLength(s.lengthM), s.region].filter(Boolean).join(' · ');
 }
 
-export function SharedCourseList({ sort }: { sort: SharedSort }) {
+/** query: 코스 탭 검색창 글 (2026-11-27 세영 "코스 검색창") — 이름·지역·올린 사람에서 찾는다 */
+export function SharedCourseList({ sort, query = '' }: { sort: SharedSort; query?: string }) {
   const [list, setList] = useState<SharedSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { fix } = useLocationPreview(sort === 'near');
@@ -33,9 +34,15 @@ export function SharedCourseList({ sort }: { sort: SharedSort }) {
       alive = false;
     };
   }, []);
-  const sorted = useMemo(() => (list ? sortShared(list, sort, fix ? { lat: fix.lat, lon: fix.lon } : null) : null), [list, sort, fix]);
+  const sorted = useMemo(() => {
+    if (!list) return null;
+    const q = query.toLowerCase().replace(/\s+/g, '');
+    const hit = q ? list.filter((s) => [s.name, s.region, s.by].some((x) => x.toLowerCase().replace(/\s+/g, '').includes(q))) : list;
+    return sortShared(hit, sort, fix ? { lat: fix.lat, lon: fix.lon } : null);
+  }, [list, sort, fix, query]);
   if (error) return <div className="notice warn">{error}</div>;
   if (!sorted) return <span className="sub">불러오는 중…</span>;
+  if (sorted.length === 0 && query.trim()) return <span className="sub">찾는 코스가 없어요</span>;
   if (sorted.length === 0) return <span className="sub">아직 공개된 코스가 없어요. 내 코스 상세에서 "모두에게 공개"로 올릴 수 있어요.</span>;
   return (
     <ul className="rows" aria-label="모두의 코스">

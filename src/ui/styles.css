@@ -3158,6 +3158,75 @@ button.map-gps:active {
   color: #c9ced4;
 }
 
+/* 분류별 색 라벨 (2026-11-27 세영 "코스별 컬러라벨을 다르게", 시안 docs/mock/2026-11-27-course-search.jpg):
+   글자는 --lab, 바탕은 같은 색 옅게(--lab-bg), 칩 앞 점(.chip-dot)도 같은 색. 앱이 iOS 15부터라 color-mix 대신 바탕을 따로 적는다 */
+.src-builtin { --lab: #aacae6; --lab-bg: rgba(170, 202, 230, 0.16); }
+.src-mine { --lab: #d9dde2; --lab-bg: rgba(255, 255, 255, 0.1); }
+.src-shared { --lab: #4fd1c5; --lab-bg: rgba(79, 209, 197, 0.16); }
+.tag-circuit { --lab: #ff6b6b; --lab-bg: rgba(255, 90, 90, 0.18); }
+.tag-coast { --lab: #5aaeff; --lab-bg: rgba(77, 163, 255, 0.18); }
+.tag-mountain { --lab: #5fd38d; --lab-bg: rgba(80, 200, 120, 0.16); }
+
+.course-tag[class*='src-'],
+.course-tag[class*='tag-'] {
+  color: var(--lab);
+  background: var(--lab-bg);
+}
+
+.chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lab);
+  flex: none;
+}
+
+.browse-chip[aria-pressed='true'] .chip-dot {
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35);
+}
+
+/* 코스 탭 검색창 (2026-11-27 세영 "코스리스트에 코스 검색창") */
+.course-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 6px 0 14px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+}
+
+.course-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 16px;
+}
+
+.course-search input::placeholder {
+  color: var(--fg-dim);
+}
+
+.course-search-icon {
+  color: var(--fg-dim);
+  font-size: 20px;
+}
+
+.course-search-clear {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: none;
+  color: var(--fg-dim);
+  font-size: 14px;
+}
+
 .course-tag.hot {
   background: rgba(255, 178, 36, 0.18);
   color: #ffd27a;

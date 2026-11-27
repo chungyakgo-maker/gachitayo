@@ -1,12 +1,17 @@
 // 즐겨찾기·분류 (설계 docs/superpowers/specs/2026-11-16-course-browse-design.md, 사용자 요청 "코스에 즐겨찾기", "분류는 코스마다 직접 고르기"):
 // 폰(localStorage)에만 둔다 (기록은 폰에만 2026-11-18: 서버 /api/prefs 와 맞추지 않는다, 폰을 바꿀 땐 백업 파일로). 열쇠는 기본 코스 "b:{key}"(폰을 바꿔도 같다), 내 코스 id.
-// 분류는 해안 길(coast)·산 길(mountain). 기본 코스는 따로 정하지 않았으면 산 길 (사용자 결정 "와인딩 없애, 산길로").
+// 분류는 서킷(circuit)·해안 길(coast)·산 길(mountain). 기본 코스는 따로 정하지 않았으면 산 길 (사용자 결정 "와인딩 없애, 산길로"),
+// 서킷 기본 코스는 서킷 (2026-11-27 세영 "코스 리스트에 서킷 카테고리 추가").
 import { useSyncExternalStore } from 'react';
 import type { Course } from '../types/course';
 
-export type CourseTag = 'coast' | 'mountain';
-export const TAG_LABEL: Record<CourseTag, string> = { coast: '해안 길', mountain: '산 길' };
-export const TAGS: CourseTag[] = ['coast', 'mountain'];
+export type CourseTag = 'circuit' | 'coast' | 'mountain';
+export const TAG_LABEL: Record<CourseTag, string> = { circuit: '서킷', coast: '해안 길', mountain: '산 길' };
+/** 라벨·칩 순서 */
+export const TAGS: CourseTag[] = ['circuit', 'coast', 'mountain'];
+
+/** 산 길이 아닌 기본 코스의 처음 분류 (키 → 분류). 기본 코스 목록(courses/builtin.ts)을 여기서 불러오지 않으려고 따로 둔다 */
+const BUILTIN_TAGS: Record<string, CourseTag[]> = { 'inje-speedium': ['circuit'] };
 
 export interface CoursePrefs {
   favorites: string[];
@@ -77,7 +82,7 @@ export function toggleFavorite(c: Pick<Course, 'id' | 'builtin' | 'shared'>): vo
 export function tagsOf(c: Pick<Course, 'id' | 'builtin' | 'shared'>, p: CoursePrefs = prefs): CourseTag[] {
   const t = p.tags[prefKey(c)];
   if (t) return t;
-  return c.builtin ? ['mountain'] : [];
+  return c.builtin ? (BUILTIN_TAGS[c.builtin] ?? ['mountain']) : [];
 }
 
 export function setTag(c: Pick<Course, 'id' | 'builtin' | 'shared'>, tag: CourseTag, on: boolean): void {
