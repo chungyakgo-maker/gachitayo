@@ -73,6 +73,7 @@ describe('coursePrefs', () => {
     const p = await load();
     const inje = { ...builtin, builtin: 'inje-speedium' };
     expect(p.tagsOf(inje)).toEqual(['circuit']);
+    expect(p.tagsOf({ ...builtin, builtin: 'taebaek-speedway' })).toEqual(['circuit']);
     p.setTag(mine, 'circuit', true);
     expect(p.tagsOf(mine)).toEqual(['circuit']);
     p.setTag(mine, 'mountain', true);

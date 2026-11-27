@@ -2,6 +2,7 @@
 // 코스 다듬기, GPX 내보내기, 코스 지우기(내 코스만), 출발점·도착점을 내비 앱으로 열기. 선을 옮기거나 다듬으면 버전이 올라가고 이 코스의 기록을 원본에서 다시 계산한다.
 import { useEffect, useMemo, useState } from 'react';
 import { isFavorite, setTag, TAG_LABEL, TAGS, tagsOf, toggleFavorite, useCoursePrefs } from '../../app/coursePrefs';
+import { builtinInfo } from '../../courses/builtin';
 import { courseGpxFile, deleteCourse, makeReverseCourse, moveCourseGate, recomputeCourse, refineCourseFromLaps, renameCourse, sectorMarks, sessionsOfCourse, validLapCount } from '../../app/courses';
 import { loadCourses, prepareWithCourse, startCoursePreview, useDrive } from '../../app/drive';
 import { config } from '../../engine/config';
@@ -164,6 +165,14 @@ export function CourseDetailScreen({ courseId }: { courseId: string }) {
         {course.kind === 'loop' ? '랩' : '편도'} · {formatLength(course.lengthM)} · 버전 {course.version} · {course.builtin ? '기본 코스' : SOURCE[course.source]}
         {best[course.id] != null ? ` · 내 베스트 ${formatLapTime(best[course.id]!, 3)}` : ''} · 기록 {counts.sessions}개
       </span>
+      {/* 서킷 기본 코스 설명 (2026-11-27 세영 "설명 각각 넣어") */}
+      {builtinInfo(course)?.desc && (
+        <ul className="course-desc" aria-label="코스 설명">
+          {builtinInfo(course)!.desc!.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
 
       <CourseBrowseControls course={course} />
       <PickMap

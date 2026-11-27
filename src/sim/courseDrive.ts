@@ -27,6 +27,15 @@ export const COURSE_SIM = {
   smoothM: 15,
 } as const;
 
+/** 서킷 코스 가상 차 (2026-11-27 세영 "서킷 모의주행은 최대 속도는 200km까지"): 최고 200 km/h.
+ *  커브·가속·제동도 서킷답게 (옆 0.3 g 그대로면 코너에서 너무 느려 200 근처까지 못 간다) */
+export const CIRCUIT_SIM = {
+  vMax: 200 / 3.6,
+  aLatMax: 1.0 * G,
+  aAccel: 4,
+  aBrake: 8,
+} as const;
+
 type XY = [number, number];
 
 /** 게이트 방향(나침반 각, 북쪽 0° 시계 방향)으로 d m 간 점. 평면 좌표는 x 동쪽, y 북쪽 */
@@ -80,7 +89,8 @@ function trimAround(pts: XY[], g: XY, skip: number, fromEnd: boolean): XY[] {
   return pts.slice(k);
 }
 
-export function simulateCourseDrive(course: Course, seed = 11): { gps: GpsSample[]; motion: RawMotionSample[]; durationMs: number } {
+/** circuit: 서킷 분류 코스면 서킷 가상 차(CIRCUIT_SIM)로 달린다 */
+export function simulateCourseDrive(course: Course, seed = 11, opts: { circuit?: boolean } = {}): { gps: GpsSample[]; motion: RawMotionSample[]; durationMs: number } {
   const cl = course.centerline;
   if (!cl || cl.length < 2) throw new Error('코스 선이 없어 모의주행을 할 수 없어요');
   const pts: XY[] = cl.map(([lat, lon]) => {
@@ -119,10 +129,7 @@ export function simulateCourseDrive(course: Course, seed = 11): { gps: GpsSample
     laps: 1,
     startStopS: COURSE_SIM.startStopS,
     endStopS: COURSE_SIM.endStopS,
-    vMax: COURSE_SIM.vMax,
-    aLatMax: COURSE_SIM.aLatMax,
-    aAccel: COURSE_SIM.aAccel,
-    aBrake: COURSE_SIM.aBrake,
+    ...(opts.circuit ? CIRCUIT_SIM : { vMax: COURSE_SIM.vMax, aLatMax: COURSE_SIM.aLatMax, aAccel: COURSE_SIM.aAccel, aBrake: COURSE_SIM.aBrake }),
   });
   const s = synthesizeSensors(truth, { ...defaultSensorOpts, seed, origin: course.origin });
   return { gps: s.gps, motion: s.motion, durationMs: truth.t[truth.t.length - 1]! * 1000 };

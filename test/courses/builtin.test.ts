@@ -3,10 +3,11 @@ import { BUILTIN_COURSES, builtinCourse, builtinInfo, missingBuiltins, renamedBu
 import { BUILTIN_POINTS } from '../../src/courses/builtinData';
 import type { Course } from '../../src/types/course';
 
+const CIRCUITS = ['inje-speedium', 'yeongam-kic-full', 'yeongam-kic-national', 'taebaek-speedway'];
 const built = BUILTIN_COURSES.map((b) => builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: crypto.randomUUID(), gateWidthM: 30 }));
 
 describe('기본 코스 (사양서 7.5)', () => {
-  it('사용자가 준 GPX 열아홉 개: 카카오맵 열여덟 개는 편도, 인제 스피디움은 한 바퀴(랩)', () => {
+  it('사용자가 준 GPX 스물두 개: 카카오맵 열여덟 개는 편도, 서킷 넷은 한 바퀴(랩)', () => {
     expect(BUILTIN_COURSES.map((b) => b.name)).toEqual([
       '배후령',
       '미시령 옛길',
@@ -27,19 +28,24 @@ describe('기본 코스 (사양서 7.5)', () => {
       '숙암리–북평리',
       '가락재+느랏재',
       '인제 스피디움',
+      '영암 KIC 풀코스',
+      '영암 KIC 상설코스',
+      '태백 스피드웨이',
     ]);
-    for (const b of BUILTIN_COURSES) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(200);
+    for (const b of BUILTIN_COURSES) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(190);
     // 서킷은 랩 코스, 나머지는 편도
-    expect(built.filter((c) => c.kind === 'loop').map((c) => c.builtin)).toEqual(['inje-speedium']);
+    expect(built.filter((c) => c.kind === 'loop').map((c) => c.builtin)).toEqual(CIRCUITS);
     expect(new Set(BUILTIN_COURSES.map((b) => b.key)).size).toBe(BUILTIN_COURSES.length);
-    expect(new Set(built.filter((c) => c.builtin !== 'inje-speedium').map((c) => c.kind))).toEqual(new Set(['point_to_point']));
+    expect(new Set(built.filter((c) => !CIRCUITS.includes(c.builtin!)).map((c) => c.kind))).toEqual(new Set(['point_to_point']));
+    // 서킷은 설명이 있다 (2026-11-27 세영 "설명 각각 넣어")
+    expect(BUILTIN_COURSES.filter((b) => b.desc).map((b) => b.key)).toEqual(CIRCUITS);
     expect(new Set(built.map((c) => c.source))).toEqual(new Set(['gpx']));
     expect(built.map((c) => c.builtin)).toEqual(BUILTIN_COURSES.map((b) => b.key));
   });
 
   it('길이는 카카오맵 경로 길이와 같다 (±3%)', () => {
     const km = built.map((c) => c.lengthM! / 1000);
-    [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86, 25.06, 49.86, 7.73, 4.81, 6.7, 3.57, 7.53, 8.11, 22.14, 3.94].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
+    [8.48, 10.09, 10.69, 2.1, 16.97, 6.48, 3.29, 7.19, 3.86, 25.06, 49.86, 7.73, 4.81, 6.7, 3.57, 7.53, 8.11, 22.14, 3.92, 5.56, 3.0, 2.29].forEach((want, i) => expect(Math.abs(km[i]! - want) / want).toBeLessThan(0.03));
   });
 
   it('기본 이름이 바뀌면(가평 복장리–상천리 → 로코갤러리) 폰에 예전 이름으로 있는 것만 바꾼다. 직접 바꾼 이름은 그대로', () => {
@@ -94,11 +100,16 @@ describe('기본 코스 (사양서 7.5)', () => {
       '정선 북평면 숙암리 → 북평리',
       '작은도시미 → 춘천 동면 감정리',
     ]);
-    // 2026-11-27 인제 스피디움: 한 바퀴라 출발선 = 도착선, 메인 직선 첫 점에서 북쪽(달리는 방향)을 본다
+    // 2026-11-27 인제 스피디움(세영이 다시 딴 GPX): 한 바퀴라 출발선 = 도착선, 메인 직선 첫 점에서 북쪽(달리는 방향)을 본다
     const inje = gate('inje-speedium');
-    expect(near(inje.startGate, 38.00265, 128.2914)).toBeLessThan(10);
+    expect(near(inje.startGate, 38.000595, 128.29135)).toBeLessThan(10);
     expect(inje.finishGate).toEqual(inje.startGate);
     expect(Math.min(inje.startGate.bearingDeg, 360 - inje.startGate.bearingDeg)).toBeLessThan(10);
+    // 영암·태백도 첫 점이 출발선 = 도착선
+    for (const [key, lat, lon] of [['yeongam-kic-full', 34.731358, 126.416155], ['yeongam-kic-national', 34.738539, 126.413191], ['taebaek-speedway', 37.082765, 129.018244]] as const) {
+      expect(near(gate(key).startGate, lat, lon)).toBeLessThan(10);
+      expect(gate(key).finishGate).toEqual(gate(key).startGate);
+    }
     for (const c of built) expect([c.startGate.widthM, c.finishGate.widthM]).toEqual([30, 30]);
   });
 
@@ -107,7 +118,7 @@ describe('기본 코스 (사양서 7.5)', () => {
     expect(missingBuiltins([mine]).map((b) => b.key)).toEqual(BUILTIN_COURSES.map((b) => b.key));
     // 나중에 추가된 기본 코스만 더 넣는다
     expect(missingBuiltins([mine, ...built.slice(0, 5)]).map((b) => b.key)).toEqual(BUILTIN_COURSES.slice(5).map((b) => b.key));
-    expect(missingBuiltins([mine, ...built.slice(0, 11)]).map((b) => b.key)).toEqual(['gunwi-namsan-chilgok-giseong', 'chilgok-yeonho-deoksan', 'hambaek-mungok', 'maebongsan-baramui-eondeok', 'jeoksangsan-observatory', 'sukam-bukpyeong', 'garakjae-neuratjae', 'inje-speedium']);
+    expect(missingBuiltins([mine, ...built.slice(0, 11)]).map((b) => b.key)).toEqual(['gunwi-namsan-chilgok-giseong', 'chilgok-yeonho-deoksan', 'hambaek-mungok', 'maebongsan-baramui-eondeok', 'jeoksangsan-observatory', 'sukam-bukpyeong', 'garakjae-neuratjae', ...CIRCUITS]);
     const sorted = sortCourses([built[2]!, built[4]!, built[0]!, mine, built[1]!, built[3]!]);
     expect(sorted.map((c) => c.name)).toEqual(['내 코스', '배후령', '미시령 옛길', '만항재', '말티재', '구룡령']);
     expect(builtinInfo(built[1]!)?.route).toBe('인제 → 고성');

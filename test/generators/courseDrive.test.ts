@@ -79,6 +79,35 @@ describe('모의주행 가상 코스 (사양서 10.2)', () => {
     expect([...laps]).toEqual([1]);
   });
 
+  it('서킷 코스(인제 스피디움): 최고 200 km/h까지 달리고, 한 바퀴 랩 1만 끝난다 (2026-11-27 세영 "서킷 모의주행은 최대 속도는 200km까지")', () => {
+    const b = BUILTIN_COURSES.find((x) => x.key === 'inje-speedium')!;
+    const course = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'inje', gateWidthM: 30 });
+    const sim = simulateCourseDrive(course, 11, { circuit: true });
+    const states = run(course, sim.gps, sim.motion);
+    const laps = new Set(states.map((s) => s.lastLap?.lapNo).filter((n) => n !== undefined));
+    expect([...laps]).toEqual([1]);
+    const top = Math.max(...states.map((s) => s.speedKmh));
+    expect(top).toBeLessThanOrEqual(202);
+    expect(top).toBeGreaterThan(150);
+    // 서킷이 아니면 예전처럼 80 km/h
+    const slow = run(course, ...(Object.values(simulateCourseDrive(course)).slice(0, 2) as [GpsSample[], RawMotionSample[]]));
+    expect(Math.max(...slow.map((s) => s.speedKmh))).toBeLessThanOrEqual(82);
+  });
+
+  it('서킷 기본 코스 넷 모두: 서킷 가상 차로 한 바퀴 랩 1만 끝나고 200 km/h를 넘지 않는다', () => {
+    const bad: string[] = [];
+    for (const key of ['inje-speedium', 'yeongam-kic-full', 'yeongam-kic-national', 'taebaek-speedway']) {
+      const b = BUILTIN_COURSES.find((x) => x.key === key)!;
+      const course = builtinCourse(b, BUILTIN_POINTS[key]!, { id: key, gateWidthM: 30 });
+      const sim = simulateCourseDrive(course, 11, { circuit: true });
+      const states = run(course, sim.gps, sim.motion);
+      const laps = [...new Set(states.map((s) => s.lastLap?.lapNo).filter((n) => n !== undefined))];
+      const top = Math.max(...states.map((s) => s.speedKmh));
+      if (laps.join() !== '1' || top > 202) bad.push(`${b.name}: 랩 ${laps.join(',') || '없음'}, 최고 ${top.toFixed(0)}`);
+    }
+    expect(bad).toEqual([]);
+  }, 60_000);
+
   it('코스 선이 없으면 알기 쉬운 말로 거절한다', () => {
     const b = BUILTIN_COURSES[0]!;
     const course = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: 'x', gateWidthM: 30 });

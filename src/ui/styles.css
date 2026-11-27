@@ -3185,6 +3185,18 @@ button.map-gps:active {
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35);
 }
 
+/* 서킷 기본 코스 설명 (2026-11-27) */
+.course-desc {
+  margin: 0;
+  padding: 10px 14px 10px 28px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  color: var(--fg-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* 코스 탭 검색창 (2026-11-27 세영 "코스리스트에 코스 검색창") */
 .course-search {
   display: flex;

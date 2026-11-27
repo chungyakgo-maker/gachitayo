@@ -11,7 +11,12 @@ export const TAG_LABEL: Record<CourseTag, string> = { circuit: '서킷', coast: 
 export const TAGS: CourseTag[] = ['circuit', 'coast', 'mountain'];
 
 /** 산 길이 아닌 기본 코스의 처음 분류 (키 → 분류). 기본 코스 목록(courses/builtin.ts)을 여기서 불러오지 않으려고 따로 둔다 */
-const BUILTIN_TAGS: Record<string, CourseTag[]> = { 'inje-speedium': ['circuit'] };
+const BUILTIN_TAGS: Record<string, CourseTag[]> = {
+  'inje-speedium': ['circuit'],
+  'yeongam-kic-full': ['circuit'],
+  'yeongam-kic-national': ['circuit'],
+  'taebaek-speedway': ['circuit'],
+};
 
 export interface CoursePrefs {
   favorites: string[];
