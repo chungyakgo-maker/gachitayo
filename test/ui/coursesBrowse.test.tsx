@@ -62,6 +62,39 @@ describe('코스 목록', () => {
   });
 });
 
+// 2026-11-27 세영 "코스리스트에 코스 검색창, 서킷 카테고리, 코스별 컬러라벨" (시안 docs/mock/2026-11-27-course-search.jpg)
+describe('코스 검색·서킷·색 라벨', () => {
+  it('typing filters by name across mine and built-in, inside the chosen chip; clear brings all back', () => {
+    render(<CoursesScreen />);
+    const box = screen.getByRole('textbox', { name: '코스 검색' });
+    fireEvent.change(box, { target: { value: '남한' } });
+    expect(rows()).toEqual(['남한산성']);
+    expect(screen.getByText('검색 결과 1개')).toBeInTheDocument();
+    fireEvent.change(box, { target: { value: '길' } });
+    expect(rows()).toEqual(['내 길']);
+    fireEvent.click(screen.getByRole('button', { name: '기본 코스' }));
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    expect(screen.getByText('찾는 코스가 없어요')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '검색어 지우기' }));
+    expect(rows()).toEqual(['하오고개', '남한산성']);
+  });
+
+  it('rows carry coloured source and tag labels; circuit chip shows circuits', () => {
+    prefs.setTag(nam, 'circuit', true);
+    prefs.setTag(nam, 'mountain', false);
+    render(<CoursesScreen />);
+    const row = (name: string) => screen.getAllByRole('listitem').find((li) => li.querySelector('strong')!.textContent === name)!;
+    expect(within(row('내 길')).getByText('내 코스')).toHaveClass('course-tag', 'src-mine');
+    expect(within(row('하오고개')).getByText('기본 코스')).toHaveClass('src-builtin');
+    expect(within(row('하오고개')).getByText('산 길')).toHaveClass('tag-mountain');
+    expect(within(row('남한산성')).getByText('서킷')).toHaveClass('tag-circuit');
+    fireEvent.click(screen.getByRole('button', { name: '서킷' }));
+    expect(rows()).toEqual(['남한산성']);
+    prefs.setTag(nam, 'circuit', false);
+    prefs.setTag(nam, 'mountain', true);
+  });
+});
+
 describe('코스 상세: 즐겨찾기·분류', () => {
   it('toggles favorite and categories', () => {
     render(<CourseBrowseControls course={mine} />);

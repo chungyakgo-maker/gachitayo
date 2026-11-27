@@ -12,7 +12,7 @@ import { formatLapTime, formatLength } from '../format';
 import { useBestTimes } from './useBestTimes';
 import { CourseChips } from '../components/CourseChips';
 import { SharedCourseList } from '../components/SharedCourseList';
-import { filterCourses } from '../../app/courseFilter';
+import { courseSource, filterCourses, searchCourses } from '../../app/courseFilter';
 import { isFavorite, TAG_LABEL, tagsOf, toggleFavorite, useCoursePrefs } from '../../app/coursePrefs';
 import { usePopular } from '../../app/popular';
 import { updateSettings, useSettings } from '../../app/settings';
@@ -30,7 +30,12 @@ export function CoursesScreen() {
   const prefs = useCoursePrefs();
   const filter = settings.courseFilter;
   const popular = usePopular(settings.popularPeriod, filter === 'popular');
-  const filtered = filterCourses(courses, filter, { isFavorite: (c) => isFavorite(c, prefs), tagsOf: (c) => tagsOf(c, prefs) }, popular.rows);
+  const filtered0 = filterCourses(courses, filter, { isFavorite: (c) => isFavorite(c, prefs), tagsOf: (c) => tagsOf(c, prefs) }, popular.rows);
+  // 코스 검색 (2026-11-27 세영 "코스리스트에 코스 검색창", 시안 docs/mock/2026-11-27-course-search.jpg): 고른 칩 안에서 이름·어디서 어디로 글로 거른다.
+  // 검색어는 이 화면에만 (탭을 옮기면 비운다 — 다음에 들어왔을 때 목록이 비어 보이지 않게)
+  const [query, setQuery] = useState('');
+  const searching = query.trim() !== '';
+  const filtered = searchCourses(filtered0, query, (c) => builtinInfo(c)?.route);
   const file = useRef<HTMLInputElement>(null);
   const [gpx, setGpx] = useState<{ text: string; name: string; hasTime: boolean } | null>(null);
   const [gpxName, setGpxName] = useState('');
@@ -65,6 +70,24 @@ export function CoursesScreen() {
         <header className="page-head">
           <h1 className="big">코스</h1>
         </header>
+        <div className="course-search">
+          <span className="course-search-icon" aria-hidden="true">
+            ⌕
+          </span>
+          <input
+            type="text"
+            enterKeyHint="search"
+            aria-label="코스 검색"
+            placeholder="코스 이름·지역 검색"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {searching && (
+            <button type="button" className="course-search-clear" aria-label="검색어 지우기" onClick={() => setQuery('')}>
+              ✕
+            </button>
+          )}
+        </div>
         <CourseChips
           filter={filter}
           period={settings.popularPeriod}
@@ -86,7 +109,7 @@ export function CoursesScreen() {
         {filter === 'shared' ? (
           // 모두의 코스 (설계 2부, 시안 ⑦): 서버의 공개 코스 목록 (내 폰에 없는 것도)
           <section className="card-col" style={{ gap: 8 }} aria-label="모두의 코스">
-            <SharedCourseList sort={settings.sharedSort} />
+            <SharedCourseList sort={settings.sharedSort} query={query} />
           </section>
         ) : courses.length === 0 ? (
           <div className="empty">
@@ -94,13 +117,14 @@ export function CoursesScreen() {
             <br />
             주행을 시작하면 첫 주행으로 코스를 만들어요.
           </div>
-        ) : filter !== 'all' ? (
-          <section className="card-col" style={{ gap: 8 }} aria-label="고른 분류의 코스">
+        ) : filter !== 'all' || searching ? (
+          <section className="card-col" style={{ gap: 8 }} aria-label={searching ? '검색 결과' : '고른 분류의 코스'}>
+            {searching && filter === 'all' && filtered.length > 0 && <span className="label">검색 결과 {filtered.length}개</span>}
             {filter === 'popular' && popular.error && <div className="notice">{popular.error}</div>}
             {filter === 'popular' && !popular.rows && !popular.error ? (
               <span className="sub">불러오는 중…</span>
             ) : filtered.length === 0 ? (
-              <span className="sub">{filter === 'popular' ? '이 기간에 달린 기록이 아직 없어요' : '이 분류에 코스가 없어요'}</span>
+              <span className="sub">{searching ? '찾는 코스가 없어요' : filter === 'popular' ? '이 기간에 달린 기록이 아직 없어요' : '이 분류에 코스가 없어요'}</span>
             ) : (
               <ul className="rows">
                 {filtered.map(({ course: c, drivers }) => (
@@ -163,6 +187,8 @@ function CourseRow({ c, best, drivers }: { c: Course; best: number | null | unde
   const prefs = useCoursePrefs();
   const fav = isFavorite(c, prefs);
   const tags = tagsOf(c, prefs);
+  // 출처·분류 라벨은 분류마다 다른 색 (2026-11-27 세영 "코스별 컬러라벨을 다르게"), 칩 앞 점과 같은 색
+  const src = courseSource(c);
   return (
     <li className="course-li">
       <a className="row-card course-row" href={`#/course/${c.id}`}>
@@ -173,16 +199,15 @@ function CourseRow({ c, best, drivers }: { c: Course; best: number | null | unde
             {c.kind === 'loop' ? '랩' : '편도'} · {formatLength(c.lengthM)}
           </span>
           {route && <span className="sub course-row-route">{route}</span>}
-          {(tags.length > 0 || drivers !== undefined) && (
-            <span className="course-tags">
-              {drivers !== undefined && <span className="course-tag hot">{drivers}명</span>}
-              {tags.map((t) => (
-                <span key={t} className="course-tag">
-                  {TAG_LABEL[t]}
-                </span>
-              ))}
-            </span>
-          )}
+          <span className="course-tags">
+            {drivers !== undefined && <span className="course-tag hot">{drivers}명</span>}
+            <span className={`course-tag ${src.cls}`}>{src.label}</span>
+            {tags.map((t) => (
+              <span key={t} className={`course-tag tag-${t}`}>
+                {TAG_LABEL[t]}
+              </span>
+            ))}
+          </span>
         </span>
         <span className="right card-col" style={{ alignItems: 'flex-end' }}>
           <span className="label">내 베스트</span>
