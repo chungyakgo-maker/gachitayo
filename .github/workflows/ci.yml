@@ -27,6 +27,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # 세영이 올린 courses/ 폴더 → 기본 코스 파일 (틀린 파일이면 여기서 멈추고 무엇이 틀렸는지 알린다)
+      - name: 기본 코스 (courses/ 폴더)
+        run: node scripts/builtin-courses.mjs
       - run: npm run typecheck
       - run: npm test
 
@@ -43,6 +46,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: worker/package-lock.json
+      - name: 기본 코스 (courses/ 폴더 — 서버도 같은 목록을 내려준다)
+        working-directory: .
+        run: node scripts/builtin-courses.mjs
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -171,6 +177,9 @@ jobs:
         if: env.HAS_CLOUDFLARE == 'true'
         working-directory: worker
         run: npx wrangler d1 migrations apply gachitayo --remote
+      - name: 기본 코스 (courses/ 폴더)
+        if: env.HAS_CLOUDFLARE == 'true'
+        run: node scripts/builtin-courses.mjs
       - name: Worker 배포
         id: deploy
         if: env.HAS_CLOUDFLARE == 'true'

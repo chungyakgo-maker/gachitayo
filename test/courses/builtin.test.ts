@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_COURSES, builtinCourse, builtinInfo, missingBuiltins, renamedBuiltins, sortCourses } from '../../src/courses/builtin';
 import { BUILTIN_POINTS } from '../../src/courses/builtinData';
+// 코드에 적은 코스만 (courses/ 폴더 코스는 세영이 올릴 때마다 늘어서 이름·개수를 박아 두지 않는다)
+import { HAND_BUILTINS } from '../../src/courses/builtinMeta';
 import type { Course } from '../../src/types/course';
 
 const CIRCUITS = ['inje-speedium', 'yeongam-kic-full', 'yeongam-kic-national', 'taebaek-speedway'];
-const built = BUILTIN_COURSES.map((b) => builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: crypto.randomUUID(), gateWidthM: 30 }));
+const built = HAND_BUILTINS.map((b) => builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: crypto.randomUUID(), gateWidthM: 30 }));
 
 describe('기본 코스 (사양서 7.5)', () => {
   it('사용자가 준 GPX 스물두 개: 카카오맵 열여덟 개는 편도, 서킷 넷은 한 바퀴(랩)', () => {
-    expect(BUILTIN_COURSES.map((b) => b.name)).toEqual([
+    expect(HAND_BUILTINS.map((b) => b.name)).toEqual([
       '배후령',
       '미시령 옛길',
       '만항재',
@@ -32,15 +34,18 @@ describe('기본 코스 (사양서 7.5)', () => {
       '영암 KIC 상설코스',
       '태백 스피드웨이',
     ]);
-    for (const b of BUILTIN_COURSES) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(190);
+    for (const b of HAND_BUILTINS) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(190);
     // 서킷은 랩 코스, 나머지는 편도
     expect(built.filter((c) => c.kind === 'loop').map((c) => c.builtin)).toEqual(CIRCUITS);
     expect(new Set(BUILTIN_COURSES.map((b) => b.key)).size).toBe(BUILTIN_COURSES.length);
     expect(new Set(built.filter((c) => !CIRCUITS.includes(c.builtin!)).map((c) => c.kind))).toEqual(new Set(['point_to_point']));
     // 서킷은 설명이 있다 (2026-11-27 세영 "설명 각각 넣어")
-    expect(BUILTIN_COURSES.filter((b) => b.desc).map((b) => b.key)).toEqual(CIRCUITS);
+    expect(HAND_BUILTINS.filter((b) => b.desc).map((b) => b.key)).toEqual(CIRCUITS);
     expect(new Set(built.map((c) => c.source))).toEqual(new Set(['gpx']));
-    expect(built.map((c) => c.builtin)).toEqual(BUILTIN_COURSES.map((b) => b.key));
+    expect(built.map((c) => c.builtin)).toEqual(HAND_BUILTINS.map((b) => b.key));
+    // 전체 목록(코드 + courses/ 폴더)도 키가 겹치지 않고 점이 있다
+    expect(new Set(BUILTIN_COURSES.map((b) => b.key)).size).toBe(BUILTIN_COURSES.length);
+    for (const b of BUILTIN_COURSES) expect(BUILTIN_POINTS[b.key]!.length).toBeGreaterThan(19);
   });
 
   it('길이는 카카오맵 경로 길이와 같다 (±3%)', () => {
@@ -118,7 +123,7 @@ describe('기본 코스 (사양서 7.5)', () => {
     expect(missingBuiltins([mine]).map((b) => b.key)).toEqual(BUILTIN_COURSES.map((b) => b.key));
     // 나중에 추가된 기본 코스만 더 넣는다
     expect(missingBuiltins([mine, ...built.slice(0, 5)]).map((b) => b.key)).toEqual(BUILTIN_COURSES.slice(5).map((b) => b.key));
-    expect(missingBuiltins([mine, ...built.slice(0, 11)]).map((b) => b.key)).toEqual(['gunwi-namsan-chilgok-giseong', 'chilgok-yeonho-deoksan', 'hambaek-mungok', 'maebongsan-baramui-eondeok', 'jeoksangsan-observatory', 'sukam-bukpyeong', 'garakjae-neuratjae', ...CIRCUITS]);
+    expect(missingBuiltins([mine, ...built.slice(0, 11)]).map((b) => b.key).slice(0, 11)).toEqual(['gunwi-namsan-chilgok-giseong', 'chilgok-yeonho-deoksan', 'hambaek-mungok', 'maebongsan-baramui-eondeok', 'jeoksangsan-observatory', 'sukam-bukpyeong', 'garakjae-neuratjae', ...CIRCUITS]);
     const sorted = sortCourses([built[2]!, built[4]!, built[0]!, mine, built[1]!, built[3]!]);
     expect(sorted.map((c) => c.name)).toEqual(['내 코스', '배후령', '미시령 옛길', '만항재', '말티재', '구룡령']);
     expect(builtinInfo(built[1]!)?.route).toBe('인제 → 고성');

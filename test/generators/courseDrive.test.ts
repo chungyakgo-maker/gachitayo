@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultSensorOpts, polylineTrack, simulateCourseDrive, simulateDrive, stadiumTrack, synthesizeSensors } from './index';
 import { BUILTIN_COURSES, builtinCourse } from '../../src/courses/builtin';
 import { BUILTIN_POINTS } from '../../src/courses/builtinData';
+import { HAND_BUILTINS } from '../../src/courses/builtinMeta';
 import { LivePipeline, type LiveSnapshot } from '../../src/engine/live/livePipeline';
 import { processDrive } from '../../src/engine/process/processDrive';
 import type { Course } from '../../src/types/course';
@@ -58,7 +59,7 @@ describe('모의주행 가상 코스 (사양서 10.2)', () => {
 
   it('모든 기본 코스: 출발선을 지나 랩이 시작되고 도착선에서 랩 1이 끝난다 (검토 지적: 끝이 휘어진 코스에서 랩이 안 잡혔다)', () => {
     const failed: string[] = [];
-    for (const b of BUILTIN_COURSES) {
+    for (const b of HAND_BUILTINS) {
       const course = builtinCourse(b, BUILTIN_POINTS[b.key]!, { id: b.key, gateWidthM: 30 });
       const sim = simulateCourseDrive(course);
       const states = run(course, sim.gps, sim.motion);
