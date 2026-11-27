@@ -30,7 +30,7 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(plist).not.toMatch(/NSBluetooth/);
   });
 
-  it('Codemagic: 테스트 작업(위치 공유 켬, 1.1)과 정식 작업(위치 공유·간격 끔, 1.0.2 — 1.0.1 은 release-1.0.1 갈래, 2026-11-20 세영 "1.0.2에 넣게") 둘 (설계 2026-11-18 official-build, 세영 "정식·테스트 나눠야")', () => {
+  it('Codemagic: 테스트 작업(위치 공유 켬, 1.1)과 정식 작업(위치 공유·간격 끔, 1.0.3 — 1.0.2 승인 뒤 2026-11-27) 둘 (설계 2026-11-18 official-build, 세영 "정식·테스트 나눠야")', () => {
     const y = readFileSync(new URL('codemagic.yaml', root), 'utf8');
     const block = (id: string) => {
       const i = y.indexOf(`\n  ${id}:`);
@@ -48,7 +48,7 @@ describe('아이폰 앱 설정 (사양서 13.3)', () => {
     expect(release).toMatch(/name: 디고 아이폰 정식/);
     expect(release).toMatch(/VITE_LOCATION_SHARING: ['"]?off/);
     expect(release).toMatch(/VITE_LIVE_GAP: ['"]?off/);
-    expect(release).toMatch(/MARKETING_VERSION=1\.0\.2"/);
+    expect(release).toMatch(/MARKETING_VERSION=1\.0\.3"/);
     expect(release).toMatch(/VITE_API_URL: https:\/\/gachitayo-api\.chungyakgo\.workers\.dev/);
     expect(release).toMatch(/bundle_identifier: kr\.dgo\.app/);
   });
